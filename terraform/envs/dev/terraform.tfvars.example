@@ -1,0 +1,4 @@
+project_id = "your-gcp-project-id"
+
+# Optional override; default is europe-central2.
+# region = "europe-central2"
