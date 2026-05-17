@@ -1,0 +1,174 @@
+# =============================================================================
+# Terraform
+# =============================================================================
+
+# Local .terraform directories
+**/.terraform/*
+
+# State files
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Variable files — may contain non-secret config but never commit by default
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# Plan output
+*.tfplan
+*.tfplan.*
+
+# Crash logs
+crash.log
+crash.*.log
+
+# CLI configuration
+.terraformrc
+terraform.rc
+
+# Override files (local-only customisations)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# NOTE: .terraform.lock.hcl IS committed — it locks provider versions for
+# reproducibility. Do not add it here.
+
+# =============================================================================
+# Python
+# =============================================================================
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / build
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+!.env.example
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# Type checkers and linters
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.pyre/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# =============================================================================
+# Cloud / secrets
+# =============================================================================
+
+# GCP service account keys — never commit these
+*-credentials.json
+*-key.json
+*.sa.json
+sa-*.json
+service-account-*.json
+gcp-key*.json
+
+# Generic secret material
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+.secrets/
+
+# =============================================================================
+# Per-developer tooling configs (not shared via git)
+# =============================================================================
+
+.claude/
+CLAUDE.md
+
+# =============================================================================
+# IDE / editors
+# =============================================================================
+
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*~
+.project
+.settings/
+.classpath
+*.sublime-workspace
+*.sublime-project
+
+# =============================================================================
+# OS
+# =============================================================================
+
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# =============================================================================
+# Logs and temp
+# =============================================================================
+
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# =============================================================================
+# Project-specific
+# =============================================================================
+
+# Local scratch / experiments
+scratch/
+playground/
+*.scratch.*
+
+# Cloud Build local outputs
+cloudbuild-*.yaml.local

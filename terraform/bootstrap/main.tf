@@ -1,0 +1,131 @@
+provider "google" {
+  project = var.project_id
+  region  = var.region
+}
+
+locals {
+  # Project-wide labels applied to every resource that supports them.
+  labels = {
+    project    = "co-sentiment"
+    env        = var.env
+    owner      = "team-198019-198265-198223"
+    managed_by = "terraform"
+  }
+
+  # Curated role set for the long-lived Terraform runner SA. Each role is
+  # justified by a workload the SA must manage in later configurations.
+  # No roles/owner, no roles/editor — those are reserved for the human
+  # identity that applies this bootstrap and are revoked afterwards.
+  runner_roles = [
+    # GCS — raw archive bucket, Cloud Build artifacts bucket, lifecycle
+    # rules, and bucket-level IAM bindings.
+    "roles/storage.admin",
+
+    # IAM — create per-workload service accounts: collector-reddit,
+    # collector-youtube, publisher, dataflow-worker, cloud-build.
+    "roles/iam.serviceAccountAdmin",
+
+    # IAM — bind project-level roles to those workload SAs and to Google-
+    # managed service agents that need extra permissions.
+    "roles/resourcemanager.projectIamAdmin",
+
+    # IAM — actAs the workload SAs when attaching them to Cloud Run Jobs,
+    # Dataflow jobs, and Cloud Build. serviceAccountAdmin alone does not
+    # grant impersonation.
+    "roles/iam.serviceAccountUser",
+
+    # Secret Manager — create empty secret containers and grant
+    # secretAccessor to specific workload SAs.
+    "roles/secretmanager.admin",
+
+    # Artifact Registry — Docker repository plus reader/writer bindings.
+    "roles/artifactregistry.admin",
+
+    # BigQuery — analytics dataset, raw_staging and events tables,
+    # authorized views for Looker Studio.
+    "roles/bigquery.admin",
+
+    # Pub/Sub — events topic, ordered subscription, dead-letter topic.
+    "roles/pubsub.admin",
+
+    # Cloud Run — reddit-collector, youtube-collector, publisher
+    # Cloud Run Jobs.
+    "roles/run.admin",
+
+    # Dataflow — Flex Template registration and job submission.
+    "roles/dataflow.admin",
+
+    # Compute — VPC and subnet with Private Google Access.
+    "roles/compute.networkAdmin",
+
+    # Cloud Build — per-service triggers scoped by included_files.
+    "roles/cloudbuild.builds.editor",
+
+    # Service Usage — google_project_service resources enable APIs
+    # idempotently; without this, a re-apply on a fresh project would fail
+    # even after APIs were turned on by hand during bootstrap.
+    "roles/serviceusage.serviceUsageAdmin",
+  ]
+}
+
+# ----------------------------------------------------------------------------
+# Remote state bucket.
+#
+# Versioning is non-negotiable: state corruption recovery depends on it.
+# Uniform bucket-level access blocks legacy ACLs. Public access prevention is
+# enforced because state contains resource IDs and (in some providers) tokens.
+# No lifecycle rule — state is retained forever.
+# ----------------------------------------------------------------------------
+resource "google_storage_bucket" "tf_state" {
+  name     = "co-tf-state-${var.env}"
+  location = var.region
+  project  = var.project_id
+
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+  force_destroy               = false
+
+  versioning {
+    enabled = true
+  }
+
+  labels = local.labels
+}
+
+# ----------------------------------------------------------------------------
+# Long-lived Terraform runner service account.
+#
+# Cloud Build will impersonate this SA later via an
+# iam.serviceAccountTokenCreator binding (added when the cloud_build module
+# lands). The runner SA itself is created here so its identity is stable
+# across every later apply. google_service_account does not support labels
+# in provider v5.
+# ----------------------------------------------------------------------------
+resource "google_service_account" "tf_runner" {
+  project      = var.project_id
+  account_id   = "co-tf-runner-sa"
+  display_name = "Terraform runner (long-lived)"
+  description  = "Applies Terraform for every config except terraform/bootstrap. Impersonated by Cloud Build."
+}
+
+resource "google_project_iam_member" "tf_runner_roles" {
+  for_each = toset(local.runner_roles)
+
+  project = var.project_id
+  role    = each.value
+  member  = "serviceAccount:${google_service_account.tf_runner.email}"
+}
+
+# ----------------------------------------------------------------------------
+# Budgets live on the billing account, not the project. Granting
+# costsManager at billing-account level is the minimum needed to create
+# google_billing_budget resources. Skipped when billing_account_id is
+# empty; budgets must then be applied with a human identity.
+# ----------------------------------------------------------------------------
+resource "google_billing_account_iam_member" "tf_runner_billing" {
+  count = var.billing_account_id == "" ? 0 : 1
+
+  billing_account_id = var.billing_account_id
+  role               = "roles/billing.costsManager"
+  member             = "serviceAccount:${google_service_account.tf_runner.email}"
+}
