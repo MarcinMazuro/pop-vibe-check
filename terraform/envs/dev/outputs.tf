@@ -42,3 +42,8 @@ output "subnet_self_link" {
   description = "Self-link URL of the dev subnet."
   value       = module.network.subnet_self_link
 }
+
+output "analytics_dataset_id" {
+  description = "Short BigQuery dataset ID (e.g. 'co_analytics_dev') for the analytical events table and authorized views."
+  value       = module.bigquery.dataset_id
+}
