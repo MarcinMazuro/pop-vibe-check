@@ -3,9 +3,12 @@ locals {
 
   # Project-wide labels applied to every resource that supports them.
   # Kept here (not duplicated in each module call) so the composition root
-  # is the single source of truth for environment-wide tagging.
+  # is the single source of truth for environment-wide tagging. The
+  # `project` label is the umbrella initiative (repo name), intentionally
+  # release-agnostic — `name_prefix` differentiates Clair Obscur from a
+  # future Witcher 4 study.
   labels = {
-    project    = "co-sentiment"
+    project    = "pop-vibe-check"
     env        = local.env
     owner      = "team-198019-198265-198223"
     managed_by = "terraform"
