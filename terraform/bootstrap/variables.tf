@@ -3,14 +3,21 @@ variable "project_id" {
   type        = string
 }
 
-variable "env" {
-  description = "Environment name used in resource names and labels. Bootstrap is normally applied for 'dev' first."
+variable "name_prefix" {
+  description = <<-EOT
+    Short prefix for the universal Terraform-state bucket and runner SA.
+    These are *shared* infrastructure — one bucket and one SA serve every
+    environment and every case study in this repo, with state separated by
+    GCS object prefix (e.g. dev/, prod/, dev-w4/). Default 'pvc' is from
+    the repo name 'pop-vibe-check'; override if the bucket name turns out
+    to be globally taken in GCS (bucket names are GCP-wide unique).
+  EOT
   type        = string
-  default     = "dev"
+  default     = "pvc"
 
   validation {
-    condition     = contains(["dev", "prod"], var.env)
-    error_message = "env must be one of: dev, prod."
+    condition     = can(regex("^[a-z][a-z0-9-]*[a-z0-9]$", var.name_prefix)) && length(var.name_prefix) <= 12
+    error_message = "name_prefix must be 2-12 chars, lowercase alphanumeric or hyphen, start with a letter, end alphanumeric."
   }
 }
 
@@ -30,4 +37,17 @@ variable "billing_account_id" {
   EOT
   type        = string
   default     = ""
+}
+
+variable "force_destroy_state_bucket" {
+  description = <<-EOT
+    Escape hatch for destroying the state bucket when it still contains
+    objects (state files from envs/* compositions, including noncurrent
+    versions since versioning is on). Default false keeps the safety bar
+    in place — a non-empty bucket cannot be deleted, which protects
+    production state. Flip to true only via -var on a one-off
+    apply+destroy; do NOT leave true in committed code.
+  EOT
+  type        = bool
+  default     = false
 }

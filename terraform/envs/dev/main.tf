@@ -15,9 +15,10 @@ locals {
 module "storage" {
   source = "../../modules/storage"
 
-  env    = local.env
-  region = var.region
-  labels = local.labels
+  name_prefix = var.name_prefix
+  env         = local.env
+  region      = var.region
+  labels      = local.labels
 
   # Raw archive grows indefinitely in dev; flip to a positive number
   # before a tear-down if you want Terraform to clean up the bucket

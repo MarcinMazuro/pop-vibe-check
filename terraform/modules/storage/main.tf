@@ -9,7 +9,7 @@
 # IAM bindings managed in code.
 # ----------------------------------------------------------------------------
 resource "google_storage_bucket" "raw_archive" {
-  name     = "co-raw-archive-${var.env}"
+  name     = "${var.name_prefix}-raw-archive-${var.env}"
   location = var.region
 
   uniform_bucket_level_access = true
@@ -60,7 +60,7 @@ resource "google_storage_bucket" "raw_archive" {
 # grow unbounded between defenses.
 # ----------------------------------------------------------------------------
 resource "google_storage_bucket" "tf_artifacts" {
-  name     = "co-tf-artifacts-${var.env}"
+  name     = "${var.name_prefix}-tf-artifacts-${var.env}"
   location = var.region
 
   uniform_bucket_level_access = true

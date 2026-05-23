@@ -2,3 +2,8 @@ project_id = "your-gcp-project-id"
 
 # Optional override; default is europe-central2.
 # region = "europe-central2"
+
+# Short prefix for release-specific resource names. Default "co" is
+# Clair Obscur: Expedition 33. Switch (and use a separate Terraform
+# workspace / state) when analysing another release, e.g. "w4".
+# name_prefix = "co"

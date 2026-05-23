@@ -3,7 +3,7 @@
 Composition root for the **dev** GCP environment. Every Phase 0 and Phase 1
 module is wired in from this directory. State is stored remotely in the GCS
 bucket provisioned by `terraform/bootstrap`, and every apply impersonates the
-long-lived `co-tf-runner-sa` service account.
+long-lived `pvc-tf-runner-sa` service account.
 
 This directory ships as an **empty composition**: the backend and provider
 are configured, but no modules are wired up yet. A clean `terraform plan`
@@ -15,12 +15,22 @@ PRs.
 ## Prerequisites
 
 - `terraform/bootstrap` has been applied successfully against this project
-  (state bucket `co-tf-state-dev` and SA `co-tf-runner-sa` exist).
+  (state bucket `pvc-tf-state` and SA `pvc-tf-runner-sa` exist).
 - `gcloud` and `terraform` (`>= 1.6, < 2.0`) installed.
-- You have either `roles/owner` on the project, **or** the role
-  `roles/iam.serviceAccountTokenCreator` on the runner SA. The provider is
-  configured to impersonate the runner SA, and impersonation requires that
-  role on your user identity.
+- You hold `roles/iam.serviceAccountTokenCreator` on the runner SA. The
+  provider impersonates the SA on every apply, and impersonation requires
+  this role on your user identity. **`roles/owner` is not enough** — that
+  role intentionally excludes `iam.serviceAccounts.getAccessToken` so an
+  Owner cannot silently impersonate every SA in the project. Grant it
+  once per operator with:
+
+  ```bash
+  gcloud iam service-accounts add-iam-policy-binding \
+    pvc-tf-runner-sa@<PROJECT_ID>.iam.gserviceaccount.com \
+    --member="user:<your-email>" \
+    --role="roles/iam.serviceAccountTokenCreator" \
+    --project=<PROJECT_ID>
+  ```
 
 ### One-time auth
 
@@ -42,6 +52,28 @@ $EDITOR terraform.tfvars
 `terraform.tfvars` is excluded by the repository `.gitignore`; the
 `.tfvars.example` file is committed.
 
+### Case-study prefix (`name_prefix`)
+
+The composition takes an optional `name_prefix` variable (default `"co"`
+for Clair Obscur: Expedition 33). It is prepended to every
+release-specific resource name — buckets, datasets, topics, workload
+service accounts — so multiple case studies can live in the same GCP
+project without name collisions.
+
+The universal state bucket (`pvc-tf-state`) and runner SA
+(`pvc-tf-runner-sa`) created by `terraform/bootstrap` are **not** affected
+by `name_prefix` — they are shared infrastructure across every release and
+every environment. `name_prefix` only flows into release-scoped resources
+(buckets, datasets, topics, workload SAs).
+
+**If you want to analyse a different release** (e.g. `name_prefix = "w4"`
+for Witcher 4): use a separate Terraform state by either creating a
+sibling composition directory (e.g. `terraform/envs/dev-w4/` with its
+own `backend.tf` prefix) or by using `terraform workspace`. Re-running
+this directory with a different `name_prefix` against the **same** state
+would replace the existing resources, which is almost never what you
+want.
+
 ---
 
 ## Init
@@ -51,9 +83,9 @@ terraform init
 ```
 
 Initial init pulls the provider plugin and configures the GCS backend
-against `co-tf-state-dev` with prefix `dev/`. If the bucket does not yet
-exist, init will fail with a clear error — re-apply `terraform/bootstrap`
-first.
+against the universal state bucket `pvc-tf-state` with prefix `dev/`. If
+the bucket does not yet exist, init will fail with a clear error —
+re-apply `terraform/bootstrap` first.
 
 ---
 

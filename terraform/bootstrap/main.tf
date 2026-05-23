@@ -4,10 +4,12 @@ provider "google" {
 }
 
 locals {
-  # Project-wide labels applied to every resource that supports them.
+  # Labels applied to every bootstrap resource that supports them.
+  # env = "shared" because the state bucket and runner SA are universal
+  # across dev/prod and across case studies (they are not release-scoped).
   labels = {
     project    = "co-sentiment"
-    env        = var.env
+    env        = "shared"
     owner      = "team-198019-198265-198223"
     managed_by = "terraform"
   }
@@ -69,7 +71,12 @@ locals {
 }
 
 # ----------------------------------------------------------------------------
-# Remote state bucket.
+# Universal remote state bucket.
+#
+# One bucket holds Terraform state for every environment and every case
+# study in this repo. Separation happens via GCS object prefix in the
+# backend block of each composition (envs/dev/ uses prefix "dev/", a
+# future envs/dev-w4/ would use "dev-w4/", and so on).
 #
 # Versioning is non-negotiable: state corruption recovery depends on it.
 # Uniform bucket-level access blocks legacy ACLs. Public access prevention is
@@ -77,13 +84,13 @@ locals {
 # No lifecycle rule — state is retained forever.
 # ----------------------------------------------------------------------------
 resource "google_storage_bucket" "tf_state" {
-  name     = "co-tf-state-${var.env}"
+  name     = "${var.name_prefix}-tf-state"
   location = var.region
   project  = var.project_id
 
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
-  force_destroy               = false
+  force_destroy               = var.force_destroy_state_bucket
 
   versioning {
     enabled = true
@@ -95,15 +102,16 @@ resource "google_storage_bucket" "tf_state" {
 # ----------------------------------------------------------------------------
 # Long-lived Terraform runner service account.
 #
-# Cloud Build will impersonate this SA later via an
-# iam.serviceAccountTokenCreator binding (added when the cloud_build module
-# lands). The runner SA itself is created here so its identity is stable
-# across every later apply. google_service_account does not support labels
-# in provider v5.
+# Shared across every environment and every case study, paired with the
+# universal state bucket above. Cloud Build will impersonate this SA later
+# via an iam.serviceAccountTokenCreator binding (added when the cloud_build
+# module lands). The runner SA itself is created here so its identity is
+# stable across every later apply. google_service_account does not support
+# labels in provider v5.
 # ----------------------------------------------------------------------------
 resource "google_service_account" "tf_runner" {
   project      = var.project_id
-  account_id   = "co-tf-runner-sa"
+  account_id   = "${var.name_prefix}-tf-runner-sa"
   display_name = "Terraform runner (long-lived)"
   description  = "Applies Terraform for every config except terraform/bootstrap. Impersonated by Cloud Build."
 }

@@ -4,15 +4,16 @@ Provisions the project's GCS buckets.
 
 ## What this creates
 
-- **`co-raw-archive-{env}`** — regional, immutable raw archive that collectors write JSONL into. Standard → Coldline transition at 30 days. Versioning is off (data is append-only by convention). Uniform bucket-level access, public access prevention enforced.
-- **`co-tf-artifacts-{env}`** — regional, disposable bucket for Cloud Build logs and Dataflow Flex Template payloads. Hard-deletes objects at 30 days.
+- **`{name_prefix}-raw-archive-{env}`** — regional, immutable raw archive that collectors write JSONL into. Standard → Coldline transition at 30 days. Versioning is off (data is append-only by convention). Uniform bucket-level access, public access prevention enforced.
+- **`{name_prefix}-tf-artifacts-{env}`** — regional, disposable bucket for Cloud Build logs and Dataflow Flex Template payloads. Hard-deletes objects at 30 days.
 
-Both buckets sit in the region passed via `var.region`. Project standard is `europe-central2`.
+Both buckets sit in the region passed via `var.region`. Project standard is `europe-central2`. `name_prefix` is short (≤ 8 chars) and identifies the case study — e.g. `co` for Clair Obscur, `w4` for Witcher 4 — so multiple releases can coexist in one GCP project.
 
 ## Inputs
 
 | Name | Type | Required | Default | Description |
 |---|---|---|---|---|
+| `name_prefix` | string | yes | — | Short prefix prepended to bucket names. Lowercase alphanumeric / hyphen, 2-8 chars. |
 | `env` | string | yes | — | Environment name (e.g. `dev`, `prod`) — suffixed into bucket names |
 | `region` | string | yes | — | GCP region for both buckets |
 | `labels` | map(string) | yes | — | Labels attached to every bucket |
