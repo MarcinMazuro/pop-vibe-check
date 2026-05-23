@@ -66,3 +66,16 @@ module "artifact_registry" {
     # when the iam module gains those workloads.
   ]
 }
+
+module "network" {
+  source = "../../modules/network"
+
+  project_id  = var.project_id
+  name_prefix = var.name_prefix
+  env         = local.env
+  region      = var.region
+
+  # Default /24 is plenty; override only if a workload needs more IPs
+  # than ~250.
+  # subnet_cidr = "10.10.0.0/24"
+}

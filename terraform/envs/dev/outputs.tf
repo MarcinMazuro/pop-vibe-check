@@ -32,3 +32,13 @@ output "image_repository_url" {
   description = "Image-URI prefix for the Artifact Registry repository. Append '/IMAGE:TAG' to address a specific image (e.g. for Cloud Run Job image config)."
   value       = module.artifact_registry.repository_url
 }
+
+output "network_self_link" {
+  description = "Self-link URL of the dev VPC. Used by Dataflow's network field and Cloud Run Direct VPC egress."
+  value       = module.network.network_self_link
+}
+
+output "subnet_self_link" {
+  description = "Self-link URL of the dev subnet."
+  value       = module.network.subnet_self_link
+}
