@@ -162,6 +162,25 @@ resource "google_project_iam_member" "tf_runner_roles" {
 }
 
 # ----------------------------------------------------------------------------
+# Operator impersonation grants.
+#
+# Lets each listed human identity impersonate the runner SA so envs/*/
+# applies can use provider-level impersonation without a per-operator
+# manual gcloud add-iam-policy-binding. Owner does NOT cover this — GCP
+# intentionally excludes iam.serviceAccounts.getAccessToken from
+# roles/owner so an Owner cannot silently impersonate every SA. Empty
+# operator_emails skips the resources entirely; falls back to manual
+# grants documented in the README.
+# ----------------------------------------------------------------------------
+resource "google_service_account_iam_member" "operator_token_creator" {
+  for_each = toset(var.operator_emails)
+
+  service_account_id = google_service_account.tf_runner.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "user:${each.value}"
+}
+
+# ----------------------------------------------------------------------------
 # Budgets live on the billing account, not the project. Granting
 # costsManager at billing-account level is the minimum needed to create
 # google_billing_budget resources. Skipped when billing_account_id is
