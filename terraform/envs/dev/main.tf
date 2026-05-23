@@ -25,3 +25,11 @@ module "storage" {
   # contents on the next apply.
   raw_archive_autodelete_days = 0
 }
+
+module "iam" {
+  source = "../../modules/iam"
+
+  project_id  = var.project_id
+  name_prefix = var.name_prefix
+  env         = local.env
+}
