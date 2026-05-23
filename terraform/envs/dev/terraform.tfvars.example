@@ -7,3 +7,18 @@ project_id = "your-gcp-project-id"
 # Clair Obscur: Expedition 33. Switch (and use a separate Terraform
 # workspace / state) when analysing another release, e.g. "w4".
 # name_prefix = "co"
+
+# Required by the budgets module. Same billing account passed to
+# terraform/bootstrap. Find with: gcloud billing accounts list
+billing_account_id = "XXXXXX-YYYYYY-ZZZZZZ"
+
+# Monthly spend cap for THIS env in the billing account's default
+# currency (PLN for accounts billed in Poland). Alerts fire at
+# 50% / 90% / 100% / 120%. Set per developer.
+monthly_budget_amount = 50
+
+# Emails that receive budget alerts. Each gets a one-time verification
+# email from GCP that must be clicked before delivery actually starts.
+notification_emails = [
+  # "you@example.com",
+]

@@ -89,3 +89,15 @@ module "bigquery" {
   region      = var.region
   labels      = local.labels
 }
+
+module "budgets" {
+  source = "../../modules/budgets"
+
+  project_id         = var.project_id
+  name_prefix        = var.name_prefix
+  env                = local.env
+  billing_account_id = var.billing_account_id
+
+  monthly_amount      = var.monthly_budget_amount
+  notification_emails = var.notification_emails
+}
