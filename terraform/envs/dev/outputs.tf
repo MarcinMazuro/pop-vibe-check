@@ -27,3 +27,8 @@ output "secret_names" {
   description = "Map of short purpose name → actual secret_id. Use these in 'gcloud secrets versions add' to populate values."
   value       = module.secrets.secret_names
 }
+
+output "image_repository_url" {
+  description = "Image-URI prefix for the Artifact Registry repository. Append '/IMAGE:TAG' to address a specific image (e.g. for Cloud Run Job image config)."
+  value       = module.artifact_registry.repository_url
+}

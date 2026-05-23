@@ -45,3 +45,24 @@ module "secrets" {
   collector_reddit_sa_email  = module.iam.collector_reddit_sa_email
   collector_youtube_sa_email = module.iam.collector_youtube_sa_email
 }
+
+module "artifact_registry" {
+  source = "../../modules/artifact_registry"
+
+  project_id  = var.project_id
+  name_prefix = var.name_prefix
+  env         = local.env
+  region      = var.region
+  labels      = local.labels
+
+  writer_sa_emails = [
+    module.iam.cloud_build_sa_email,
+  ]
+
+  reader_sa_emails = [
+    module.iam.collector_reddit_sa_email,
+    module.iam.collector_youtube_sa_email,
+    # publisher_sa and dataflow_worker_sa land in Phase 1; add them here
+    # when the iam module gains those workloads.
+  ]
+}
