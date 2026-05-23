@@ -86,6 +86,12 @@ locals {
     # Cloud Build — per-service triggers scoped by included_files.
     "roles/cloudbuild.builds.editor",
 
+    # Cloud Monitoring — notification channels for budget alerts, plus
+    # any future alert policies / uptime checks. Editor (not admin)
+    # covers create/update/delete on channels and policies without
+    # granting access to enable destructive admin-only ops.
+    "roles/monitoring.editor",
+
     # Service Usage — google_project_service resources enable APIs
     # idempotently; without this, a re-apply on a fresh project would fail
     # even after APIs were turned on by hand during bootstrap.
