@@ -92,6 +92,7 @@ default.
 | `billing_account_id` | no | `""` | `XXXXXX-YYYYYY-ZZZZZZ`. When set, the runner SA is granted `roles/billing.costsManager` so budget alerts can be created later. Find with `gcloud billing accounts list`. |
 | `name_prefix` | no | `pvc` | Short prefix for the state bucket and runner SA. Override if `pvc-tf-state` turns out to be globally taken in GCS. |
 | `region` | no | `europe-central2` | Region for the state bucket. |
+| `operator_emails` | no | `[]` | Emails granted `serviceAccountTokenCreator` on the runner SA so they can impersonate it from `envs/*`. Empty list = manual `gcloud` grant required per operator. |
 | `force_destroy_state_bucket` | no | `false` | One-off escape hatch for `terraform destroy` when the state bucket still has objects. See "Tearing down" below. |
 | `enabled_services` | no | full Phase 0+1 set | Set of GCP APIs Terraform keeps enabled on the project. Defaults cover everything the planned modules need; override only to add a service. |
 
@@ -140,14 +141,15 @@ terraform plan          # review the plan; see expected resources below
 terraform apply
 ```
 
-A clean `plan` with `billing_account_id` set should show **29 resources to
-add** on a fresh project:
+A clean `plan` on a fresh project with `billing_account_id` set and one
+entry in `operator_emails` should show **31 resources to add**:
 
-- 14 × `google_project_service` (one per entry in `var.enabled_services`)
+- 15 × `google_project_service` (one per entry in `var.enabled_services` — includes `monitoring.googleapis.com` since the budgets module landed)
 - 1 × `google_storage_bucket` (the state bucket)
 - 1 × `google_service_account` (the runner SA)
-- 13 × `google_project_iam_member` (one per curated role)
+- 13 × `google_project_iam_member` (one per curated role on the project, including `monitoring.editor`)
 - 1 × `google_billing_account_iam_member` (only if `billing_account_id` is set)
+- N × `google_service_account_iam_member` (one per operator email)
 
 On a re-apply, `google_project_service` resources are noops unless an API
 was disabled out-of-band — in which case the apply re-enables it.
@@ -188,7 +190,21 @@ can yet impersonate it**. Every operator who will run `terraform` against
 runner SA. `roles/owner` does **not** satisfy this — Owner intentionally
 excludes `iam.serviceAccounts.getAccessToken`.
 
-Grant once per operator:
+**Recommended:** declare the operator list in `terraform.tfvars` so the
+grants are tracked by Terraform:
+
+```hcl
+operator_emails = [
+  "you@example.com",
+  "teammate@example.com",
+]
+```
+
+A re-apply of bootstrap then creates one
+`google_service_account_iam_member` per email, granting the required
+role. Adding or removing operators later = edit the list, re-apply.
+
+**Manual fallback** (if you prefer not to track the list in Terraform):
 
 ```bash
 gcloud iam service-accounts add-iam-policy-binding \
@@ -198,9 +214,9 @@ gcloud iam service-accounts add-iam-policy-binding \
   --project=<PROJECT_ID>
 ```
 
-Move into Terraform as a follow-up once the operator list stabilises:
-add a `var.operator_emails` to this module and a
-`google_service_account_iam_member` for each.
+The Terraform-managed grants and manual grants do not conflict (the
+binding is keyed by member, not exclusive) — but mixing them is a
+maintenance trap. Pick one approach per project.
 
 ---
 

@@ -73,6 +73,27 @@ variable "enabled_services" {
   ]
 }
 
+variable "operator_emails" {
+  description = <<-EOT
+    Emails granted roles/iam.serviceAccountTokenCreator on the runner SA
+    so they can impersonate it from envs/*/providers.tf without a manual
+    gcloud add-iam-policy-binding per operator. Empty list (default)
+    skips this automation — each operator must then run the gcloud
+    command from the bootstrap README by hand.
+
+    Owner alone does NOT satisfy this — GCP intentionally excludes
+    iam.serviceAccounts.getAccessToken from the Owner role so an Owner
+    cannot silently impersonate every SA in the project.
+  EOT
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for e in var.operator_emails : can(regex("^[^@]+@[^@]+\\.[^@]+$", e))])
+    error_message = "operator_emails must all look like valid email addresses."
+  }
+}
+
 variable "force_destroy_state_bucket" {
   description = <<-EOT
     Escape hatch for destroying the state bucket when it still contains

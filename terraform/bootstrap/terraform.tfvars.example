@@ -1,0 +1,24 @@
+# Required.
+project_id = "your-gcp-project-id"
+
+# Optional but recommended — when set, the runner SA gets
+# roles/billing.costsManager on the billing account so the budgets module
+# can later create budget alerts without a second bootstrap apply.
+# Find with: gcloud billing accounts list
+billing_account_id = "XXXXXX-YYYYYY-ZZZZZZ"
+
+# Emails granted roles/iam.serviceAccountTokenCreator on the runner SA so
+# they can impersonate it from terraform/envs/* compositions. Leave empty
+# to skip — each operator must then run the gcloud add-iam-policy-binding
+# command from the README manually.
+operator_emails = [
+  # "you@example.com",
+]
+
+# Optional overrides — defaults are usually fine.
+# name_prefix = "pvc"                  # State bucket + runner SA prefix
+# region      = "europe-central2"      # State bucket region
+
+# Escape hatch for tearing down a non-empty state bucket. Default false
+# protects production state; only set true on one-off teardowns.
+# force_destroy_state_bucket = false
