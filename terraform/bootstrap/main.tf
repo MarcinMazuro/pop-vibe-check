@@ -30,8 +30,11 @@ locals {
   # Labels applied to every bootstrap resource that supports them.
   # env = "shared" because the state bucket and runner SA are universal
   # across dev/prod and across case studies (they are not release-scoped).
+  # project label matches the repository name and is intentionally
+  # release-agnostic — name_prefix differentiates releases, the project
+  # label keeps the umbrella initiative identifiable.
   labels = {
-    project    = "co-sentiment"
+    project    = "pop-vibe-check"
     env        = "shared"
     owner      = "team-198019-198265-198223"
     managed_by = "terraform"
