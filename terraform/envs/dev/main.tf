@@ -33,3 +33,15 @@ module "iam" {
   name_prefix = var.name_prefix
   env         = local.env
 }
+
+module "secrets" {
+  source = "../../modules/secrets"
+
+  project_id  = var.project_id
+  name_prefix = var.name_prefix
+  env         = local.env
+  labels      = local.labels
+
+  collector_reddit_sa_email  = module.iam.collector_reddit_sa_email
+  collector_youtube_sa_email = module.iam.collector_youtube_sa_email
+}
