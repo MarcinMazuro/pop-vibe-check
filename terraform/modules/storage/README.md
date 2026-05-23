@@ -18,6 +18,8 @@ Both buckets sit in the region passed via `var.region`. Project standard is `eur
 | `region` | string | yes | — | GCP region for both buckets |
 | `labels` | map(string) | yes | — | Labels attached to every bucket |
 | `raw_archive_autodelete_days` | number | no | `0` | If > 0, raw archive objects are deleted after this many days. `0` disables hard-delete and lets the archive grow indefinitely. |
+| `force_destroy_raw_archive` | bool | no | `false` | One-off escape hatch for `terraform destroy` when the raw archive bucket still has objects. See "Tearing down" below. |
+| `force_destroy_artifacts` | bool | no | `false` | Same escape hatch for the artifacts bucket. |
 
 ## Outputs
 
@@ -27,6 +29,19 @@ Both buckets sit in the region passed via `var.region`. Project standard is `eur
 | `raw_archive_bucket_url` | `gs://` URL of the raw archive bucket |
 | `tf_artifacts_bucket_name` | Name of the artifacts bucket |
 | `tf_artifacts_bucket_url` | `gs://` URL of the artifacts bucket |
+
+## Tearing down
+
+`force_destroy = false` is the default on both buckets — GCS will refuse to delete a bucket that still has objects. That is a deliberate barrier; the raw archive especially is the only re-runnable source of truth for collector data, accidental deletion is unrecoverable.
+
+When you genuinely want to recreate a bucket, set the override on the CLI for both the apply that lifts the barrier and the destroy itself, same pattern as the bootstrap state bucket:
+
+```bash
+terraform apply  -var="force_destroy_raw_archive=true" -auto-approve
+terraform destroy -var="force_destroy_raw_archive=true" -auto-approve
+```
+
+Or `force_destroy_artifacts=true` for the artifacts bucket. The defaults flip back to `false` on the next normal apply — no code edit, no risk of leaving a bucket unprotected.
 
 ## Notes
 

@@ -14,7 +14,7 @@ resource "google_storage_bucket" "raw_archive" {
 
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
-  force_destroy               = false
+  force_destroy               = var.force_destroy_raw_archive
 
   versioning {
     enabled = false
@@ -65,7 +65,7 @@ resource "google_storage_bucket" "tf_artifacts" {
 
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
-  force_destroy               = false
+  force_destroy               = var.force_destroy_artifacts
 
   lifecycle_rule {
     condition {

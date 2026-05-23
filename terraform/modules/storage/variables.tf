@@ -38,3 +38,27 @@ variable "raw_archive_autodelete_days" {
     error_message = "raw_archive_autodelete_days must be >= 0."
   }
 }
+
+variable "force_destroy_raw_archive" {
+  description = <<-EOT
+    Escape hatch for destroying the raw archive bucket when it still
+    contains objects. Default false keeps the safety bar in place — the
+    archive is the only re-runnable source of truth for collector data,
+    accidental deletion is unrecoverable. Flip to true via -var on a
+    one-off teardown; do NOT leave true in committed code.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "force_destroy_artifacts" {
+  description = <<-EOT
+    Escape hatch for destroying the Cloud Build / Terraform artifacts
+    bucket when it still contains objects. Default false — the contents
+    are disposable build logs and Flex Template payloads, so the bar is
+    less critical than for raw archive, but still gated to avoid
+    surprise destroys. Flip to true via -var on a one-off teardown.
+  EOT
+  type        = bool
+  default     = false
+}
