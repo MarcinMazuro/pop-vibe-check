@@ -20,3 +20,19 @@ variable "name_prefix" {
   type        = string
   default     = "co"
 }
+
+variable "billing_account_id" {
+  description = "Billing account ID ('XXXXXX-YYYYYY-ZZZZZZ') the budget module hangs off. Same value passed to terraform/bootstrap; duplicated here so envs/dev is self-contained."
+  type        = string
+}
+
+variable "monthly_budget_amount" {
+  description = "Monthly budget cap for this env in the billing account's default currency (PLN for Poland-billed accounts). Set this to your personal monthly spend limit — alerts fire at percentages of this number."
+  type        = number
+}
+
+variable "notification_emails" {
+  description = "Emails that receive budget alerts. Each becomes a Cloud Monitoring email channel; recipient must click a verification link from GCP before delivery actually starts."
+  type        = list(string)
+  default     = []
+}
