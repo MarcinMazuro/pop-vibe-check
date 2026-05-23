@@ -3,6 +3,29 @@ provider "google" {
   region  = var.region
 }
 
+# ----------------------------------------------------------------------------
+# Project-level GCP API enablements.
+#
+# Without this, APIs that get auto-disabled by GCP after periods of inactivity
+# silently break the next `terraform apply`. Keeping the list declarative
+# means any future apply re-enables whatever lapsed.
+#
+# disable_on_destroy = false   — never turn an API off on a `terraform destroy`
+#                                of this config; workload resources elsewhere
+#                                may still depend on the API.
+# disable_dependent_services = false — guards against an unintended cascade
+#                                if a service ever does get disabled.
+# ----------------------------------------------------------------------------
+resource "google_project_service" "enabled" {
+  for_each = var.enabled_services
+
+  project = var.project_id
+  service = each.value
+
+  disable_on_destroy         = false
+  disable_dependent_services = false
+}
+
 locals {
   # Labels applied to every bootstrap resource that supports them.
   # env = "shared" because the state bucket and runner SA are universal
@@ -88,6 +111,10 @@ resource "google_storage_bucket" "tf_state" {
   location = var.region
   project  = var.project_id
 
+  # Without storage.googleapis.com enabled, this resource cannot be
+  # created. Terraform's graph cannot infer this dependency.
+  depends_on = [google_project_service.enabled]
+
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
   force_destroy               = var.force_destroy_state_bucket
@@ -114,6 +141,10 @@ resource "google_service_account" "tf_runner" {
   account_id   = "${var.name_prefix}-tf-runner-sa"
   display_name = "Terraform runner (long-lived)"
   description  = "Applies Terraform for every config except terraform/bootstrap. Impersonated by Cloud Build."
+
+  # Wait for the IAM API to be enabled before attempting SA creation.
+  # Terraform's dependency graph cannot infer this automatically.
+  depends_on = [google_project_service.enabled]
 }
 
 resource "google_project_iam_member" "tf_runner_roles" {
