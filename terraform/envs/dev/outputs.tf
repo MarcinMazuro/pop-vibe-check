@@ -47,3 +47,13 @@ output "analytics_dataset_id" {
   description = "Short BigQuery dataset ID (e.g. 'co_analytics_dev') for the analytical events table and authorized views."
   value       = module.bigquery.dataset_id
 }
+
+output "reddit_collector_job_name" {
+  description = "Short name of the Reddit collector Cloud Run Job. Use in 'gcloud run jobs execute'."
+  value       = module.cloud_run_jobs.reddit_job_name
+}
+
+output "youtube_collector_job_name" {
+  description = "Short name of the YouTube collector Cloud Run Job."
+  value       = module.cloud_run_jobs.youtube_job_name
+}

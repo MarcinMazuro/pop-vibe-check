@@ -101,3 +101,24 @@ module "budgets" {
   monthly_amount      = var.monthly_budget_amount
   notification_emails = var.notification_emails
 }
+
+module "cloud_run_jobs" {
+  source = "../../modules/cloud_run_jobs"
+
+  project_id  = var.project_id
+  name_prefix = var.name_prefix
+  env         = local.env
+  region      = var.region
+  labels      = local.labels
+
+  raw_archive_bucket_name    = module.storage.raw_archive_bucket_name
+  reddit_collector_sa_email  = module.iam.collector_reddit_sa_email
+  youtube_collector_sa_email = module.iam.collector_youtube_sa_email
+  secret_names               = module.secrets.secret_names
+
+  # Both images default to the public 'pause' placeholder. Switch to
+  # Artifact Registry URIs once the collector containers are built and
+  # pushed — e.g.:
+  #   reddit_image_uri  = "${module.artifact_registry.repository_url}/reddit-collector:<sha>"
+  #   youtube_image_uri = "${module.artifact_registry.repository_url}/youtube-collector:<sha>"
+}
