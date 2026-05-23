@@ -39,6 +39,39 @@ variable "billing_account_id" {
   default     = ""
 }
 
+variable "enabled_services" {
+  description = <<-EOT
+    Set of GCP APIs that bootstrap keeps enabled on the project. Default
+    covers every service needed by Phase 0 + Phase 1 modules. Listed here
+    so 'gcloud services enable' is no longer a manual prerequisite once
+    bootstrap has been applied — Terraform re-enables anything GCP turns
+    off (e.g. after periods of inactivity).
+
+    Note: the *first ever* apply of bootstrap on a brand-new project still
+    requires the trio (cloudresourcemanager, iam, serviceusage) enabled by
+    hand via gcloud; bootstrap cannot enable them via Terraform if it
+    cannot reach the APIs needed to enable them. After the first apply
+    this list takes over.
+  EOT
+  type        = set(string)
+  default = [
+    "artifactregistry.googleapis.com",
+    "bigquery.googleapis.com",
+    "billingbudgets.googleapis.com",
+    "cloudbuild.googleapis.com",
+    "cloudresourcemanager.googleapis.com",
+    "compute.googleapis.com",
+    "dataflow.googleapis.com",
+    "iam.googleapis.com",
+    "iamcredentials.googleapis.com",
+    "pubsub.googleapis.com",
+    "run.googleapis.com",
+    "secretmanager.googleapis.com",
+    "serviceusage.googleapis.com",
+    "storage.googleapis.com",
+  ]
+}
+
 variable "force_destroy_state_bucket" {
   description = <<-EOT
     Escape hatch for destroying the state bucket when it still contains

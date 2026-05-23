@@ -55,28 +55,26 @@ export GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/bootstrap-sa.json
 
 Application Default Credentials are what Terraform actually reads.
 
-### 3. Enable the required APIs
+### 3. Enable the bootstrap-prerequisite APIs
 
-Terraform's `google_project_iam_member` resources depend on IAM and Service
-Usage already being on, so the APIs must be enabled manually before the
-first apply:
+Terraform cannot enable an API it cannot call. Three APIs must be on **by
+hand** before the first ever apply against a brand-new project:
 
 ```bash
 gcloud services enable \
   cloudresourcemanager.googleapis.com \
   iam.googleapis.com \
-  serviceusage.googleapis.com \
-  compute.googleapis.com \
-  run.googleapis.com \
-  cloudbuild.googleapis.com \
-  artifactregistry.googleapis.com \
-  pubsub.googleapis.com \
-  dataflow.googleapis.com \
-  bigquery.googleapis.com \
-  storage.googleapis.com \
-  secretmanager.googleapis.com \
-  billingbudgets.googleapis.com
+  serviceusage.googleapis.com
 ```
+
+Once bootstrap is applied, the full set of services this project needs
+(`iamcredentials`, `storage`, `bigquery`, `run`, `cloudbuild`,
+`artifactregistry`, `pubsub`, `dataflow`, `secretmanager`, `compute`,
+`billingbudgets`, plus the three above) is managed declaratively by
+`google_project_service` resources in this module and survives the GCP
+"unused API auto-disable" sweep — any future `terraform apply` re-enables
+whatever lapsed. The full list lives in `var.enabled_services` if you ever
+need to add or remove one.
 
 API enablement can take a minute or two to propagate after the command
 returns.
@@ -95,6 +93,7 @@ default.
 | `name_prefix` | no | `pvc` | Short prefix for the state bucket and runner SA. Override if `pvc-tf-state` turns out to be globally taken in GCS. |
 | `region` | no | `europe-central2` | Region for the state bucket. |
 | `force_destroy_state_bucket` | no | `false` | One-off escape hatch for `terraform destroy` when the state bucket still has objects. See "Tearing down" below. |
+| `enabled_services` | no | full Phase 0+1 set | Set of GCP APIs Terraform keeps enabled on the project. Defaults cover everything the planned modules need; override only to add a service. |
 
 If `billing_account_id` is empty, the runner SA does **not** receive
 billing-account-level permissions. That is fine for the very first apply, but
@@ -141,13 +140,17 @@ terraform plan          # review the plan; see expected resources below
 terraform apply
 ```
 
-A clean `plan` with `billing_account_id` set should show **15 resources to
-add**:
+A clean `plan` with `billing_account_id` set should show **29 resources to
+add** on a fresh project:
 
+- 14 × `google_project_service` (one per entry in `var.enabled_services`)
 - 1 × `google_storage_bucket` (the state bucket)
 - 1 × `google_service_account` (the runner SA)
 - 13 × `google_project_iam_member` (one per curated role)
 - 1 × `google_billing_account_iam_member` (only if `billing_account_id` is set)
+
+On a re-apply, `google_project_service` resources are noops unless an API
+was disabled out-of-band — in which case the apply re-enables it.
 
 Record the values printed by `terraform output` — the next configuration
 under `terraform/envs/dev/` will reference `state_bucket_name` in its
