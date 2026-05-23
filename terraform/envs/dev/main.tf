@@ -79,3 +79,13 @@ module "network" {
   # than ~250.
   # subnet_cidr = "10.10.0.0/24"
 }
+
+module "bigquery" {
+  source = "../../modules/bigquery"
+
+  project_id  = var.project_id
+  name_prefix = var.name_prefix
+  env         = local.env
+  region      = var.region
+  labels      = local.labels
+}
