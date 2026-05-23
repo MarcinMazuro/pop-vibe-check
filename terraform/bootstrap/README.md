@@ -1,11 +1,18 @@
 # terraform/bootstrap
 
-One-time, manually-applied Terraform configuration. Creates the two things
-every other Terraform run in this repo depends on:
+One-time, manually-applied Terraform configuration. Creates the two pieces
+of shared infrastructure that every other Terraform run in this repo
+depends on:
 
-1. The GCS bucket that hosts Terraform remote state (`co-tf-state-dev`).
-2. The long-lived service account (`co-tf-runner-sa`) that every later
-   `terraform apply` uses.
+1. **One** GCS bucket that hosts Terraform remote state for every
+   environment and every case study (`pvc-tf-state` by default). State is
+   separated by object prefix inside the bucket — `dev/`, `prod/`,
+   `dev-w4/`, etc.
+2. **One** long-lived service account (`pvc-tf-runner-sa`) that every later
+   `terraform apply` impersonates, regardless of which environment or
+   release it operates on.
+
+Bootstrap is run **once per GCP project**, not once per environment.
 
 This is the **only** configuration in the repo that uses a **local** Terraform
 backend, because nothing else exists yet to store remote state in. After this
@@ -78,20 +85,26 @@ returns.
 
 ## Configure variables
 
-Two values matter on the first run; `env` defaults to `dev` and `region` to
-`europe-central2`, which is correct for the standard case.
+Only `project_id` is required on a fresh run; everything else has a sensible
+default.
 
-| Variable | Required | Value | How to find it |
+| Variable | Required | Default | Description |
 |---|---|---|---|
-| `project_id` | yes | GCP project ID (a string, not the project number) | `gcloud config get-value project` |
-| `billing_account_id` | optional | `XXXXXX-YYYYYY-ZZZZZZ` | `gcloud billing accounts list` |
-| `env` | no | `dev` or `prod` (default `dev`) | — |
-| `region` | no | default `europe-central2` | — |
+| `project_id` | yes | — | GCP project ID. `gcloud config get-value project` to find. |
+| `billing_account_id` | no | `""` | `XXXXXX-YYYYYY-ZZZZZZ`. When set, the runner SA is granted `roles/billing.costsManager` so budget alerts can be created later. Find with `gcloud billing accounts list`. |
+| `name_prefix` | no | `pvc` | Short prefix for the state bucket and runner SA. Override if `pvc-tf-state` turns out to be globally taken in GCS. |
+| `region` | no | `europe-central2` | Region for the state bucket. |
+| `force_destroy_state_bucket` | no | `false` | One-off escape hatch for `terraform destroy` when the state bucket still has objects. See "Tearing down" below. |
 
 If `billing_account_id` is empty, the runner SA does **not** receive
 billing-account-level permissions. That is fine for the very first apply, but
 later modules that create budget alerts will need a human to fill this in
 and re-apply bootstrap to grant the missing role.
+
+**`name_prefix` is also referenced in `terraform/envs/*/backend.tf` and
+`providers.tf` as a literal.** If you override the default here, you must
+also update those files (the GCS backend block does not accept variable
+interpolation).
 
 The repository's `.gitignore` excludes `*.tfvars`, so the idiomatic place to
 put these values is a local `terraform.tfvars` file in this directory:
@@ -143,9 +156,57 @@ impersonation.
 
 ---
 
+## Tearing down
+
+`force_destroy = false` is the default on the state bucket — GCS will refuse
+to delete a bucket that still has objects in it (including noncurrent
+versions, since versioning is on). That is a deliberate barrier against
+accidentally nuking production state.
+
+When you genuinely want to recreate the bucket (e.g. renaming, migrating
+to a different prefix, blowing away a dev project), set the override on
+the CLI for both the apply that lifts the barrier and the destroy itself:
+
+```bash
+terraform apply  -var="force_destroy_state_bucket=true" -auto-approve
+terraform destroy -var="force_destroy_state_bucket=true" -auto-approve
+```
+
+The default flips back to `false` automatically on the next normal apply —
+no code edit required, no risk of leaving the bucket unprotected.
+
+---
+
+## Grant operators impersonation rights
+
+Once bootstrap is applied, the long-lived runner SA exists but **no human
+can yet impersonate it**. Every operator who will run `terraform` against
+`envs/*` needs the role `roles/iam.serviceAccountTokenCreator` on the
+runner SA. `roles/owner` does **not** satisfy this — Owner intentionally
+excludes `iam.serviceAccounts.getAccessToken`.
+
+Grant once per operator:
+
+```bash
+gcloud iam service-accounts add-iam-policy-binding \
+  pvc-tf-runner-sa@<PROJECT_ID>.iam.gserviceaccount.com \
+  --member="user:<operator-email>" \
+  --role="roles/iam.serviceAccountTokenCreator" \
+  --project=<PROJECT_ID>
+```
+
+Move into Terraform as a follow-up once the operator list stabilises:
+add a `var.operator_emails` to this module and a
+`google_service_account_iam_member` for each.
+
+---
+
 ## After apply (cleanup)
 
-Bootstrap is meant to be applied once per environment and then left alone.
+Bootstrap is meant to be applied **once per GCP project** and then left
+alone. Every later environment or case study shares the same state bucket
+and runner SA — re-applying bootstrap is for adding roles to the runner SA
+or recovering from a destroy, not for onboarding new envs.
 
 1. **Delete the bootstrap SA key** if you used one:
 
@@ -167,12 +228,15 @@ Bootstrap is meant to be applied once per environment and then left alone.
    `gcloud` cleanup.
 
 3. **Do not re-apply bootstrap on every change.** From here on, infrastructure
-   work happens under `terraform/envs/dev/` using the remote state bucket
+   work happens under `terraform/envs/<env>/` using the remote state bucket
    this run created. Come back to `terraform/bootstrap/` only to:
    - add a role to the runner SA's curated list,
-   - rotate the runner SA,
-   - bootstrap a new environment (e.g. `prod`), or
+   - rotate the runner SA, or
    - recover from a destroy.
+
+   Onboarding a new environment (`prod`) or a new case study (e.g.
+   `dev-w4/`) does **not** require re-applying bootstrap — they just use a
+   different `prefix` in their backend block, against the same bucket.
 
 ---
 

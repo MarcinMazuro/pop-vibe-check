@@ -1,0 +1,40 @@
+variable "name_prefix" {
+  description = "Short prefix prepended to every bucket name (e.g. 'co' for Clair Obscur, 'w4' for Witcher 4). Lets multiple case studies coexist in one GCP project."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]*[a-z0-9]$", var.name_prefix)) && length(var.name_prefix) <= 8
+    error_message = "name_prefix must be 2-8 chars, lowercase alphanumeric or hyphen, start with a letter, end alphanumeric."
+  }
+}
+
+variable "env" {
+  description = "Environment name (e.g. 'dev', 'prod'). Suffixed into bucket names."
+  type        = string
+}
+
+variable "region" {
+  description = "GCP region for the buckets. Project standard is europe-central2."
+  type        = string
+}
+
+variable "labels" {
+  description = "Labels applied to every bucket created by this module."
+  type        = map(string)
+}
+
+variable "raw_archive_autodelete_days" {
+  description = <<-EOT
+    If greater than 0, raw archive objects are hard-deleted after this many
+    days. 0 (default) disables auto-delete and the raw archive grows
+    indefinitely. The Standard → Coldline transition at 30 days is always
+    enabled regardless of this value.
+  EOT
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.raw_archive_autodelete_days >= 0
+    error_message = "raw_archive_autodelete_days must be >= 0."
+  }
+}

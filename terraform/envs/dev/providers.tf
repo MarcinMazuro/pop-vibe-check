@@ -1,10 +1,13 @@
 locals {
-  # Long-lived runner service account provisioned by terraform/bootstrap.
-  # Every apply against this environment impersonates this identity so that
-  # the human operator's standing project permissions are not what actually
-  # creates the resources. Same flow is used by Cloud Build once that wiring
-  # is added.
-  terraform_runner_sa_email = "co-tf-runner-sa@${var.project_id}.iam.gserviceaccount.com"
+  # Universal Terraform runner SA provisioned by terraform/bootstrap — one
+  # SA shared across every environment and every case study. Every apply
+  # against this composition impersonates this identity so that the human
+  # operator's standing project permissions are not what actually creates
+  # the resources. Same flow is used by Cloud Build once that wiring lands.
+  #
+  # The 'pvc-' prefix is the bootstrap name_prefix default; if bootstrap
+  # was applied with a different value, edit this string to match.
+  terraform_runner_sa_email = "pvc-tf-runner-sa@${var.project_id}.iam.gserviceaccount.com"
 }
 
 provider "google" {
