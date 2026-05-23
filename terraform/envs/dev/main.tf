@@ -12,7 +12,15 @@ locals {
   }
 }
 
-# Application modules are composed here as Phase 0 and Phase 1 work lands.
-# The initial composition is intentionally empty: this configuration is
-# committed to validate that the remote state backend and runner SA
-# impersonation work end-to-end before any resources are created.
+module "storage" {
+  source = "../../modules/storage"
+
+  env    = local.env
+  region = var.region
+  labels = local.labels
+
+  # Raw archive grows indefinitely in dev; flip to a positive number
+  # before a tear-down if you want Terraform to clean up the bucket
+  # contents on the next apply.
+  raw_archive_autodelete_days = 0
+}
