@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pop-vibe-check-collectors"
+version = "0.1.0"
+description = "Reddit and YouTube collectors for the pop-vibe-check sentiment pipeline."
+requires-python = ">=3.12"
+readme = "README.md"
+
+[tool.setuptools]
+packages = ["collectors", "collectors.common", "collectors.reddit", "collectors.youtube"]
+
+# ---------------------------------------------------------------------------
+# Formatting
+# ---------------------------------------------------------------------------
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+# ---------------------------------------------------------------------------
+# Linting (PEP 8 + docstrings)
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+src = ["collectors"]
+
+[tool.ruff.lint]
+# E/W: pycodestyle (PEP 8), F: pyflakes, I: isort, D: pydocstyle (docstrings),
+# UP: pyupgrade, B: bugbear, ANN: missing type annotations.
+select = ["E", "W", "F", "I", "D", "UP", "B", "ANN"]
+ignore = [
+    "D203",   # one-blank-line-before-class (conflicts with D211)
+    "D213",   # multi-line-summary-second-line (conflicts with D212)
+    "ANN401", # Any is unavoidable at the PRAW / google-api-client boundary
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Tests do not need full annotations or module/class docstrings.
+"collectors/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104"]
+
+# ---------------------------------------------------------------------------
+# Static typing
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+files = ["collectors"]
+
+[[tool.mypy.overrides]]
+# Tests use pytest fixtures and assert-style bodies; full annotations add noise.
+module = "collectors.tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["collectors/tests"]
+pythonpath = ["."]

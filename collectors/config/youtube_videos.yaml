@@ -1,0 +1,35 @@
+# Clair Obscur: Expedition 33 - curated YouTube videos per event.
+#
+# Consumed by the YouTube collector. Each entry maps a canonical video to the
+# lifecycle events it is relevant to (event_ids must match ids in events.yaml).
+#
+# IMPORTANT: the `id` fields below are PLACEHOLDERS. Replace each with the real
+# 11-character YouTube video id (the `v=` parameter of the watch URL) before
+# running the collector. Start with official trailers, the highest-comment-count
+# launch reactions, and the major outlet reviews (IGN, GameSpot), then grow the
+# list over time. Entries are flagged "# REPLACE" until verified.
+
+videos:
+  - id: REPLACE_reveal_0 # REPLACE
+    title: Clair Obscur Expedition 33 - Xbox Games Showcase reveal trailer
+    event_ids: [xbox_showcase_reveal]
+
+  - id: REPLACE_flying_0 # REPLACE
+    title: Clair Obscur Expedition 33 - Flying Waters gameplay trailer
+    event_ids: [gameplay_trailer_flying_waters]
+
+  - id: REPLACE_launch0 # REPLACE
+    title: Clair Obscur Expedition 33 - launch trailer
+    event_ids: [launch]
+
+  - id: REPLACE_ign_rev # REPLACE
+    title: Clair Obscur Expedition 33 - IGN review
+    event_ids: [launch, critical_acclaim_wave]
+
+  - id: REPLACE_gs_revi # REPLACE
+    title: Clair Obscur Expedition 33 - GameSpot review
+    event_ids: [launch, critical_acclaim_wave]
+
+  - id: REPLACE_ai_text # REPLACE
+    title: Clair Obscur Expedition 33 - AI textures controversy discussion
+    event_ids: [ai_textures_controversy]

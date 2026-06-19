@@ -91,6 +91,10 @@ coverage.xml
 .pytype/
 .pyre/
 
+# uv — runtime deps live in the per-service requirements.txt files, so the
+# project-level lock is empty/misleading and is not committed.
+uv.lock
+
 # Jupyter
 .ipynb_checkpoints/
 
