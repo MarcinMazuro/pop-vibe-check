@@ -1,0 +1,71 @@
+# Clair Obscur: Expedition 33 - lifecycle events.
+#
+# Consumed by collectors.common.events_config. Each entry maps an event id (used
+# as the EVENT_ID env var and as the GCS output path segment) to its name, type,
+# and date.
+#
+# IMPORTANT: dates are best-effort and MUST be verified against public sources
+# before merge (README "events.yaml" note). Entries flagged "# VERIFY" are
+# anchored on memory/press coverage rather than a confirmed primary source.
+# The two anchor dates (reveal, flying_waters) come from the project README.
+
+events:
+  - id: xbox_showcase_reveal
+    name: Xbox Games Showcase reveal
+    type: reveal
+    date_utc: 2024-06-09
+
+  - id: gameplay_trailer_flying_waters
+    name: Flying Waters gameplay trailer
+    type: trailer
+    date_utc: 2024-08-27
+
+  - id: gamescom_2024_showing
+    name: Gamescom 2024 Opening Night Live showing
+    type: trailer
+    date_utc: 2024-08-20 # VERIFY
+
+  - id: tga_2024_most_anticipated_nominee
+    name: The Game Awards 2024 - Most Anticipated nominee
+    type: award_nomination
+    date_utc: 2024-12-12 # VERIFY
+
+  - id: state_of_play_deep_dive
+    name: Combat and story deep-dive showcase
+    type: trailer
+    date_utc: 2025-02-13 # VERIFY
+
+  - id: demo_release
+    name: Playable demo release
+    type: demo
+    date_utc: 2025-04-23 # VERIFY
+
+  - id: launch
+    name: Worldwide launch
+    type: launch
+    date_utc: 2025-04-24
+
+  - id: ai_textures_controversy
+    name: AI-generated textures controversy
+    type: controversy
+    date_utc: 2025-04-26 # VERIFY
+
+  - id: one_million_sales_milestone
+    name: One million copies sold milestone
+    type: milestone
+    date_utc: 2025-04-28 # VERIFY
+
+  - id: critical_acclaim_wave
+    name: Post-launch critical acclaim and industry praise
+    type: reception
+    date_utc: 2025-05-12 # VERIFY
+
+  - id: tga_2025_sweep
+    name: The Game Awards 2025 sweep
+    type: award
+    date_utc: 2025-12-11 # VERIFY
+
+  - id: anniversary_update_2026
+    name: First anniversary update
+    type: update
+    date_utc: 2026-04-24 # VERIFY

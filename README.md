@@ -2,7 +2,7 @@
 
 Streaming sentiment analysis around pop-culture releases, on GCP with an MLOps pipeline. Engineering thesis project at Gdańsk University of Technology, Department of Computer Systems Architecture.
 
-> **Status:** infrastructure complete for Phase 0; collector application code is the next chunk to build (see [§ Next: collectors](#next-collectors)).
+> **Status:** Phase 0 infrastructure and collector code complete. The **YouTube collector is live and has produced its first real dataset** (4228 comments across 4 lifecycle events — see [docs/phase-0-youtube-first-collection.md](docs/phase-0-youtube-first-collection.md)). The Reddit collector is written but blocked on Reddit API credentials.
 
 ---
 
@@ -92,8 +92,10 @@ Supervisor: mgr inż. Szymon Olewniczak.
 | BigQuery (dataset only — tables in Phase 1) | ✓ Applied | [`terraform/modules/bigquery/`](terraform/modules/bigquery/) |
 | Budgets (monthly cap + email alerts) | ✓ Applied | [`terraform/modules/budgets/`](terraform/modules/budgets/) |
 | Cloud Run Jobs (collector jobs with placeholder image) | ✓ Applied | [`terraform/modules/cloud_run_jobs/`](terraform/modules/cloud_run_jobs/) |
-| **Collector application code** | ✗ **NOT STARTED — next chunk** | `collectors/` |
-| Real values in secret containers | ✗ Placeholders only | Secret Manager |
+| Collector application code (common, reddit, youtube + tests) | ✓ Done | [`collectors/`](collectors/) |
+| YouTube collector: image, job wiring, first collection runs | ✓ Done — 4228 records ([details](docs/phase-0-youtube-first-collection.md)) | GCS `co-raw-archive-dev/youtube/` |
+| Reddit collector: image + smoke test | ✗ **Blocked on Reddit API credentials** | `collectors/reddit/` |
+| Real values in secret containers | YouTube key + salt ✓ real; Reddit ✗ placeholders | Secret Manager |
 | Pub/Sub, Dataflow, BigQuery tables, publisher, Cloud Build module | ✗ Phase 1 | Not yet |
 | NLP model | ✗ Phase 1 (stub first, real model via MLflow later) | Not yet |
 
@@ -101,16 +103,16 @@ Supervisor: mgr inż. Szymon Olewniczak.
 
 After all merged PRs and applies:
 
-- **GCS:** `pvc-tf-state` (shared remote state), `co-raw-archive-dev`, `co-tf-artifacts-dev`
+- **GCS:** `pvc-tf-state` (shared remote state), `co-raw-archive-dev` (**contains the first real dataset**: `youtube/<event>/...jsonl.gz`, 4228 records), `co-tf-artifacts-dev`
 - **Service accounts:** `pvc-tf-runner-sa`, `co-collector-reddit-sa-dev`, `co-collector-youtube-sa-dev`, `co-cloud-build-sa-dev`
-- **Secret containers** (with placeholder values — needs real credentials): `co-reddit-client-id-dev`, `co-reddit-client-secret-dev`, `co-reddit-user-agent-dev`, `co-youtube-api-key-dev`, `co-author-hash-salt-dev`
-- **Artifact Registry:** `co-images-dev`
+- **Secret containers:** `co-youtube-api-key-dev` (✓ real key, restricted to YouTube Data API; the invalid v1 is disabled) and `co-author-hash-salt-dev` (✓ real salt) — the three `co-reddit-*-dev` secrets still hold placeholders
+- **Artifact Registry:** `co-images-dev` with `youtube-collector:729b1fd...` (built 2026-07-05)
 - **VPC:** `co-vpc-dev` with subnet `co-subnet-dev` in europe-central2
 - **BigQuery:** `co_analytics_dev` dataset (no tables yet)
-- **Cloud Run Jobs:** `co-reddit-collector-dev`, `co-youtube-collector-dev` (pointing at `gcr.io/google-containers/pause` — placeholder, executes nothing useful)
+- **Cloud Run Jobs:** `co-youtube-collector-dev` (✓ runs the real collector image), `co-reddit-collector-dev` (still on the `pause` placeholder)
 - **Budget:** monthly alert at 50/90/100/120% of configured cap
 
-Both collector jobs are **deployed but cannot do useful work yet** — the image they run is a public `pause` container. Building real images is what comes next.
+The YouTube job is fully operational — executing it with `EVENT_ID`/`WINDOW_FROM`/`WINDOW_TO` collects real comments into the raw archive. The Reddit job stays on the placeholder image until Reddit API credentials exist.
 
 ---
 
@@ -121,8 +123,11 @@ Foundation needed to run one collector pull from Reddit/YouTube → write raw JS
 
 ✓ All Terraform modules listed above are applied.
 
-### Phase 0 — Collector application code (in progress)
-The Python code that runs inside the collector containers. See [§ Next: collectors](#next-collectors).
+### Phase 0 — Collector application code (done)
+The Python code that runs inside the collector containers — `collectors/` with shared `common/`, both entry points, tests, Dockerfiles. See [docs/phase-0-collectors.md](docs/phase-0-collectors.md).
+
+### Phase 0 — First real collection (YouTube done, Reddit blocked)
+YouTube: image built and pushed, job wired, API key fixed, four events collected (4228 records) — see [docs/phase-0-youtube-first-collection.md](docs/phase-0-youtube-first-collection.md). Remaining: Reddit credentials + smoke test, the `ai_textures_controversy` video decision, and the `# VERIFY` event dates in `events.yaml`.
 
 ### Phase 1 — Stream simulation + NLP + analytics
 After collectors produce raw JSONL reliably:
@@ -145,7 +150,12 @@ After collectors produce raw JSONL reliably:
 
 ## Next: collectors
 
-This section is the **work plan for the next contribution**, suitable for delegation.
+> **Update 2026-07-05:** this plan is **largely executed** — `collectors/` is
+> implemented ([docs/phase-0-collectors.md](docs/phase-0-collectors.md)) and the
+> YouTube path runs end-to-end in GCP
+> ([docs/phase-0-youtube-first-collection.md](docs/phase-0-youtube-first-collection.md)).
+> It remains the reference spec for the **Reddit half**, which is blocked on
+> Reddit API credentials (see [§ Real credentials](#real-credentials)).
 
 ### Goal
 
@@ -307,15 +317,15 @@ Start with 5-10 entries (the official trailers, the launch reaction videos with 
 
 Before opening the PR for collector code, verify:
 
-- [ ] `collectors/common/` has author hashing, GCS writer, retry, event loader — with unit tests for at least the hash function (deterministic, salt-sensitive)
-- [ ] `collectors/reddit/` and `collectors/youtube/` build into Docker images locally (`docker build .`)
-- [ ] `collectors/config/events.yaml` populated with all 12 events
-- [ ] `collectors/config/youtube_videos.yaml` populated with ≥5 canonical videos
-- [ ] At least one smoke test against the real APIs with a small window (you'll need real Reddit / YouTube credentials — see "Real credentials" below)
-- [ ] Images built and pushed manually to Artifact Registry: `gcloud builds submit --tag europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/reddit-collector:<some-tag> collectors/reddit/`
-- [ ] A `terraform apply` from `terraform/envs/dev/` with the image URI overrides updates the Cloud Run Jobs to point at the real images (one-line override per job in `terraform/envs/dev/main.tf`)
-- [ ] One `gcloud run jobs execute …` produces a valid `.jsonl.gz` file in `gs://co-raw-archive-dev/reddit/<event>/…` — verify the contents match the schema
-- [ ] README per collector with setup + local-run + execute commands
+- [x] `collectors/common/` has author hashing, GCS writer, retry, event loader — with unit tests for at least the hash function (deterministic, salt-sensitive)
+- [x] `collectors/reddit/` and `collectors/youtube/` build into Docker images locally (`docker build .`) — YouTube built and pushed; Reddit Dockerfile written, build pending
+- [x] `collectors/config/events.yaml` populated with all 12 events (dates flagged `# VERIFY` still need confirmation)
+- [x] `collectors/config/youtube_videos.yaml` populated with ≥5 canonical videos — 9 API-verified ids
+- [x] At least one smoke test against the real APIs with a small window — **YouTube done** (4 real runs); **Reddit pending credentials**
+- [x] Images built and pushed manually to Artifact Registry — **YouTube done** (note: build context is the repo root, `docker build -f collectors/<svc>/Dockerfile .`, not `collectors/<svc>/`); **Reddit pending**
+- [x] Cloud Run Job points at the real image — **YouTube done** (`youtube_image_uri` in `terraform/envs/dev/main.tf` + in-place `gcloud run jobs update`); **Reddit pending**
+- [x] One `gcloud run jobs execute …` produces a valid `.jsonl.gz` — **YouTube done**, contents verified against the schema; **Reddit pending**
+- [x] README per collector with setup + local-run + execute commands
 
 ### Real credentials
 
@@ -326,29 +336,23 @@ The secret containers currently hold placeholder strings. Before the collector c
   printf '%s' "$REDDIT_CLIENT_ID" | gcloud secrets versions add co-reddit-client-id-dev --project=pop-vibe-check --data-file=-
   # same for client_secret and user_agent
   ```
-- **YouTube**: go to GCP console → APIs & Services → Credentials → Create credentials → API key → restrict to YouTube Data API v3. Push to Secret Manager:
-  ```bash
-  printf '%s' "$YOUTUBE_API_KEY" | gcloud secrets versions add co-youtube-api-key-dev --project=pop-vibe-check --data-file=-
-  ```
-- **Author-hash salt**: generate once, never rotate (rotation invalidates author continuity across the dataset):
-  ```bash
-  openssl rand -hex 32 | gcloud secrets versions add co-author-hash-salt-dev --project=pop-vibe-check --data-file=-
-  ```
+- **YouTube**: ✓ done — a real key (restricted to YouTube Data API v3) is stored as version 2 of `co-youtube-api-key-dev`; the invalid version 1 is disabled.
+- **Author-hash salt**: ✓ done — version 1 of `co-author-hash-salt-dev` is real. Never rotate it (rotation invalidates author continuity across the dataset).
 
 The Reddit and YouTube credentials are operator-personal — each contributor uses their own. The salt is project-shared.
 
 ### How to run
 
-After the image is built and the Terraform image URI is updated:
+Works today for YouTube (Reddit once its image is wired up):
 
 ```bash
-gcloud run jobs execute co-reddit-collector-dev \
+gcloud run jobs execute co-youtube-collector-dev \
   --region=europe-central2 \
   --update-env-vars="EVENT_ID=launch,WINDOW_FROM=2025-04-24T00:00:00Z,WINDOW_TO=2025-04-26T00:00:00Z" \
   --wait
 ```
 
-`--wait` blocks until the task finishes. Logs are in Cloud Logging filtered by the job name. Output JSONL ends up under `gs://co-raw-archive-dev/reddit/launch/2025/04/24/…`.
+`--wait` blocks until the task finishes. Logs are in Cloud Logging filtered by the job name. Output JSONL ends up under `gs://co-raw-archive-dev/youtube/launch/…` (path uses collection date, not window date). Re-running with a different window only appends new batch files — dedupe by record `id` happens in Phase 1.
 
 ### Suggested split between contributors
 
@@ -380,11 +384,13 @@ A and (B or C) can start in parallel; the other waits a day for A's common libra
 │       ├── network/
 │       ├── secrets/
 │       └── storage/
-└── collectors/                            # not yet implemented — your contribution
-    ├── common/
-    ├── reddit/
-    ├── youtube/
-    └── config/
+├── collectors/                            # implemented — shared lib + both collectors
+│   ├── common/                            # author hashing, GCS writer, retry, event loader
+│   ├── reddit/                            # written; blocked on Reddit API credentials
+│   ├── youtube/                           # live — collecting real data in GCP
+│   ├── config/                            # events.yaml + youtube_videos.yaml (API-verified ids)
+│   └── tests/
+└── docs/                                  # phase write-ups (collector code, first collection)
 ```
 
 Future directories that will appear in Phase 1: `publisher/`, `dataflow/`, `nlp/`, and more `terraform/modules/` (`pubsub/`, `dataflow/`, `cloud_build/`).

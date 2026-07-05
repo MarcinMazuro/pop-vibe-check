@@ -1,0 +1,6 @@
+# YouTube collector runtime dependencies. Pinned for reproducible image builds.
+google-api-python-client==2.157.0
+google-cloud-storage==2.19.0
+PyYAML==6.0.2
+langdetect==1.0.9
+tenacity==9.0.0

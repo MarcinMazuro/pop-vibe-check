@@ -119,9 +119,8 @@ module "cloud_run_jobs" {
   youtube_collector_sa_email = module.iam.collector_youtube_sa_email
   secret_names               = module.secrets.secret_names
 
-  # Both images default to the public 'pause' placeholder. Switch to
-  # Artifact Registry URIs once the collector containers are built and
-  # pushed — e.g.:
-  #   reddit_image_uri  = "${module.artifact_registry.repository_url}/reddit-collector:<sha>"
-  #   youtube_image_uri = "${module.artifact_registry.repository_url}/youtube-collector:<sha>"
+  # reddit_image_uri stays on the public 'pause' placeholder until the
+  # Reddit container is built and pushed — e.g.:
+  #   reddit_image_uri = "${module.artifact_registry.repository_url}/reddit-collector:<sha>"
+  youtube_image_uri = "europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/youtube-collector:729b1fdc5d8250915d0a59fa68d2408489b0a1f4"
 }
