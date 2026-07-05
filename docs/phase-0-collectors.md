@@ -121,6 +121,10 @@ follow-up steps below.
 
 ## Follow-up (not done here — needs Docker and/or real credentials)
 
+> **Update 2026-07-05:** the YouTube half of this list is complete — see
+> [phase-0-youtube-first-collection.md](phase-0-youtube-first-collection.md).
+> The steps below remain current only for the Reddit collector.
+
 1. **Verify the data placeholders.**
    - Confirm the 12 event dates in `events.yaml` against public sources and
      remove the `# VERIFY` flags.
