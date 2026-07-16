@@ -143,5 +143,5 @@ module "cloud_run_jobs" {
   # Reddit container is built and pushed — e.g.:
   #   reddit_image_uri = "${module.artifact_registry.repository_url}/reddit-collector:<sha>"
   youtube_image_uri   = "europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/youtube-collector:729b1fdc5d8250915d0a59fa68d2408489b0a1f4"
-  publisher_image_uri = "europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/publisher:f70a08b6b333c615dca3c4898f5e327a9e9d3f74"
+  publisher_image_uri = "europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/publisher:2e209f7c654dca317b49a4afeb4d2b402193846e"
 }
