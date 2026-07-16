@@ -1,0 +1,28 @@
+# Cloud Build config for the replay publisher image.
+#
+# Build context is the repository root so the shared collectors.common package
+# is included. Submit from the repo root:
+#
+#   gcloud builds submit --config publisher/cloudbuild.yaml .
+#
+# The image is pushed to Artifact Registry tagged with the commit SHA.
+substitutions:
+  _REGION: europe-central2
+  _REPO: co-images-dev
+  _IMAGE: publisher
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - publisher/Dockerfile
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:$COMMIT_SHA
+      - .
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:$COMMIT_SHA
+
+options:
+  logging: CLOUD_LOGGING_ONLY
