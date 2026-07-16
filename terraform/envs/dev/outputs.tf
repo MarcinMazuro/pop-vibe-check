@@ -18,6 +18,11 @@ output "collector_youtube_sa_email" {
   value       = module.iam.collector_youtube_sa_email
 }
 
+output "publisher_sa_email" {
+  description = "Email of the replay publisher workload SA."
+  value       = module.iam.publisher_sa_email
+}
+
 output "cloud_build_sa_email" {
   description = "Email of the Cloud Build runner SA for this env."
   value       = module.iam.cloud_build_sa_email
@@ -56,4 +61,19 @@ output "reddit_collector_job_name" {
 output "youtube_collector_job_name" {
   description = "Short name of the YouTube collector Cloud Run Job."
   value       = module.cloud_run_jobs.youtube_job_name
+}
+
+output "publisher_job_name" {
+  description = "Short name of the replay publisher Cloud Run Job."
+  value       = module.cloud_run_jobs.publisher_job_name
+}
+
+output "events_topic_name" {
+  description = "Short name of the Pub/Sub events topic the publisher replays into."
+  value       = module.pubsub.events_topic_name
+}
+
+output "events_verify_subscription_name" {
+  description = "Short name of the manual verification subscription. Use in 'gcloud pubsub subscriptions pull'."
+  value       = module.pubsub.verify_subscription_name
 }

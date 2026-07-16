@@ -18,6 +18,7 @@
 # Plan output
 *.tfplan
 *.tfplan.*
+tfplan
 
 # Crash logs
 crash.log

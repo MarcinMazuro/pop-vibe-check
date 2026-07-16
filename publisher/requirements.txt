@@ -1,0 +1,4 @@
+# Replay publisher runtime dependencies. Pinned for reproducible image builds.
+google-cloud-bigquery==3.42.2
+google-cloud-pubsub==2.39.0
+PyYAML==6.0.2

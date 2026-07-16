@@ -2,7 +2,7 @@
 
 Streaming sentiment analysis around pop-culture releases, on GCP with an MLOps pipeline. Engineering thesis project at Gdańsk University of Technology, Department of Computer Systems Architecture.
 
-> **Status:** Phase 0 infrastructure and collector code complete. The **YouTube collector is live and has produced its first real dataset** (4228 comments across 4 lifecycle events — see [docs/phase-0-youtube-first-collection.md](docs/phase-0-youtube-first-collection.md)). The Reddit collector is written but blocked on Reddit API credentials.
+> **Status:** Phase 0 complete; Phase 1 stream simulation **live**. The YouTube collector has produced the first real dataset (4228 comments across 4 lifecycle events — see [docs/phase-0-youtube-first-collection.md](docs/phase-0-youtube-first-collection.md)), and the **replay publisher now streams it from BigQuery staging to Pub/Sub in chronological order with time compression** (see [docs/phase-1-publisher.md](docs/phase-1-publisher.md)). The Reddit collector is written but blocked on Reddit API credentials.
 
 ---
 
@@ -89,14 +89,16 @@ Supervisor: mgr inż. Szymon Olewniczak.
 | Secrets module (5 empty containers + accessor bindings) | ✓ Applied | [`terraform/modules/secrets/`](terraform/modules/secrets/) |
 | Artifact Registry (Docker repo) | ✓ Applied | [`terraform/modules/artifact_registry/`](terraform/modules/artifact_registry/) |
 | Network (VPC + subnet, Private Google Access) | ✓ Applied | [`terraform/modules/network/`](terraform/modules/network/) |
-| BigQuery (dataset only — tables in Phase 1) | ✓ Applied | [`terraform/modules/bigquery/`](terraform/modules/bigquery/) |
+| BigQuery (dataset + `raw_landing` / `raw_staging`; `events` table in the Dataflow PR) | ✓ Applied | [`terraform/modules/bigquery/`](terraform/modules/bigquery/) |
 | Budgets (monthly cap + email alerts) | ✓ Applied | [`terraform/modules/budgets/`](terraform/modules/budgets/) |
-| Cloud Run Jobs (collector jobs with placeholder image) | ✓ Applied | [`terraform/modules/cloud_run_jobs/`](terraform/modules/cloud_run_jobs/) |
+| Cloud Run Jobs (collector jobs + replay publisher job) | ✓ Applied | [`terraform/modules/cloud_run_jobs/`](terraform/modules/cloud_run_jobs/) |
+| Pub/Sub (events topic + ordered verify subscription; DLQ in the Dataflow PR) | ✓ Applied | [`terraform/modules/pubsub/`](terraform/modules/pubsub/) |
 | Collector application code (common, reddit, youtube + tests) | ✓ Done | [`collectors/`](collectors/) |
 | YouTube collector: image, job wiring, first collection runs | ✓ Done — 4228 records ([details](docs/phase-0-youtube-first-collection.md)) | GCS `co-raw-archive-dev/youtube/` |
 | Reddit collector: image + smoke test | ✗ **Blocked on Reddit API credentials** | `collectors/reddit/` |
 | Real values in secret containers | YouTube key + salt ✓ real; Reddit ✗ placeholders | Secret Manager |
-| Pub/Sub, Dataflow, BigQuery tables, publisher, Cloud Build module | ✗ Phase 1 | Not yet |
+| Replay publisher: code, image, job, first replay to Pub/Sub | ✓ Done — 4228 records replayed in order ([details](docs/phase-1-publisher.md)) | [`publisher/`](publisher/) |
+| Dataflow module, `events` table, Cloud Build module | ✗ Phase 1 (remaining) | Not yet |
 | NLP model | ✗ Phase 1 (stub first, real model via MLflow later) | Not yet |
 
 ### What's actually live in the `pop-vibe-check` GCP project
@@ -104,15 +106,16 @@ Supervisor: mgr inż. Szymon Olewniczak.
 After all merged PRs and applies:
 
 - **GCS:** `pvc-tf-state` (shared remote state), `co-raw-archive-dev` (**contains the first real dataset**: `youtube/<event>/...jsonl.gz`, 4228 records), `co-tf-artifacts-dev`
-- **Service accounts:** `pvc-tf-runner-sa`, `co-collector-reddit-sa-dev`, `co-collector-youtube-sa-dev`, `co-cloud-build-sa-dev`
+- **Service accounts:** `pvc-tf-runner-sa`, `co-collector-reddit-sa-dev`, `co-collector-youtube-sa-dev`, `co-publisher-sa-dev`, `co-cloud-build-sa-dev`
 - **Secret containers:** `co-youtube-api-key-dev` (✓ real key, restricted to YouTube Data API; the invalid v1 is disabled) and `co-author-hash-salt-dev` (✓ real salt) — the three `co-reddit-*-dev` secrets still hold placeholders
-- **Artifact Registry:** `co-images-dev` with `youtube-collector:729b1fd...` (built 2026-07-05)
+- **Artifact Registry:** `co-images-dev` with `youtube-collector:729b1fd...` (built 2026-07-05) and `publisher:2e209f7...` (built 2026-07-16)
 - **VPC:** `co-vpc-dev` with subnet `co-subnet-dev` in europe-central2
-- **BigQuery:** `co_analytics_dev` dataset (no tables yet)
-- **Cloud Run Jobs:** `co-youtube-collector-dev` (✓ runs the real collector image), `co-reddit-collector-dev` (still on the `pause` placeholder)
+- **BigQuery:** `co_analytics_dev` dataset with `raw_landing` (truncate-and-load target) and `raw_staging` (deduplicated, DAY-partitioned on `created_utc`, clustered by `source, event_tag`) — both hold the 4228-record dataset
+- **Pub/Sub:** `co-events-topic-dev` + `co-events-verify-sub-dev` (ordered pull subscription for manual verification)
+- **Cloud Run Jobs:** `co-youtube-collector-dev` (✓ real collector image), `co-publisher-dev` (✓ real publisher image, first replay done), `co-reddit-collector-dev` (still on the `pause` placeholder)
 - **Budget:** monthly alert at 50/90/100/120% of configured cap
 
-The YouTube job is fully operational — executing it with `EVENT_ID`/`WINDOW_FROM`/`WINDOW_TO` collects real comments into the raw archive. The Reddit job stays on the placeholder image until Reddit API credentials exist.
+The YouTube job is fully operational — executing it with `EVENT_ID`/`WINDOW_FROM`/`WINDOW_TO` collects real comments into the raw archive. The publisher job loads the archive into staging (`RUN_LOAD=only`) and replays it to Pub/Sub with time compression (see [publisher/README.md](publisher/README.md)). The Reddit job stays on the placeholder image until Reddit API credentials exist.
 
 ---
 
@@ -132,13 +135,23 @@ YouTube: image built and pushed, job wired, API key fixed, four events collected
 ### Phase 1 — Stream simulation + NLP + analytics
 After collectors produce raw JSONL reliably:
 
-1. `pubsub/` module — events topic, ordered subscription, dead-letter topic
-2. `bigquery/` extension — `raw_staging` and `events` tables, authorised views for Looker
-3. `iam/` extension — publisher + Dataflow worker service accounts
+1. ✓ `pubsub/` module — events topic + ordered verify subscription (dead-letter topic deferred to the Dataflow PR, where the first nacking consumer appears)
+2. ✓ (partial) `bigquery/` extension — `raw_landing` + `raw_staging` tables done; `events` table + authorised views land with the Dataflow PR
+3. ✓ (partial) `iam/` extension — publisher SA done; Dataflow worker SA with its module
 4. `dataflow/` module — Beam Flex Template, worker SA wiring
-5. `cloud_run_jobs/` extension — publisher job (BigQuery → Pub/Sub bridge with time compression)
+5. ✓ `cloud_run_jobs/` extension — publisher job (BigQuery → Pub/Sub bridge with time compression), deployed and verified ([docs/phase-1-publisher.md](docs/phase-1-publisher.md))
 6. `cloud_build/` module — per-service triggers, workload-identity for runner SA impersonation (closes the bootstrap chicken-and-egg)
-7. Application: `publisher/`, `dataflow/` Beam pipeline, `nlp/stub/`, then `nlp/registry/` with MLflow
+7. Application: ✓ `publisher/`; remaining: `dataflow/` Beam pipeline, `nlp/stub/`, then `nlp/registry/` with MLflow
+
+**Where to pick up next.** The frontier is the **Dataflow bridge** (items 4 + 7): a
+`dataflow/` Terraform module (Beam Flex Template, worker SA, and the dead-letter
+topic deferred from the pubsub module) plus a Beam pipeline that consumes
+`co-events-topic-dev`, calls the NLP stub, and writes the denormalised `events`
+table. There is no detailed spec section for it yet — design it the way the
+collectors were spec'd below. Run the publisher first to see live ordered messages
+on the topic (`publisher/README.md`). In parallel and fully independent of the
+Dataflow work, the **Reddit collector** can be unblocked the moment its API
+credentials exist (see [§ Real credentials](#real-credentials)).
 
 ### Phase 2 — Polish, prod env, defence
 - `terraform/envs/prod/` composition (same shape as dev)
@@ -382,6 +395,7 @@ A and (B or C) can start in parallel; the other waits a day for A's common libra
 │       ├── cloud_run_jobs/
 │       ├── iam/
 │       ├── network/
+│       ├── pubsub/
 │       ├── secrets/
 │       └── storage/
 ├── collectors/                            # implemented — shared lib + both collectors
@@ -390,10 +404,12 @@ A and (B or C) can start in parallel; the other waits a day for A's common libra
 │   ├── youtube/                           # live — collecting real data in GCP
 │   ├── config/                            # events.yaml + youtube_videos.yaml (API-verified ids)
 │   └── tests/
-└── docs/                                  # phase write-ups (collector code, first collection)
+├── publisher/                             # live — replay publisher (BQ staging → Pub/Sub)
+│   └── tests/
+└── docs/                                  # phase write-ups (collectors, first collection, publisher)
 ```
 
-Future directories that will appear in Phase 1: `publisher/`, `dataflow/`, `nlp/`, and more `terraform/modules/` (`pubsub/`, `dataflow/`, `cloud_build/`).
+Future directories that will appear in the rest of Phase 1: `dataflow/`, `nlp/`, and more `terraform/modules/` (`dataflow/`, `cloud_build/`).
 
 ## Getting set up
 

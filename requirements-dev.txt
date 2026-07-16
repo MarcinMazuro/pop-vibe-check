@@ -5,7 +5,8 @@ ruff==0.8.6
 mypy==1.14.1
 pytest==8.3.4
 
-# Runtime dependencies needed to import and unit-test the collectors locally.
+# Runtime dependencies needed to import and unit-test the collectors and
+# the publisher locally.
 # (Kept in sync with the per-service requirements.txt files.)
 PyYAML==6.0.2
 google-cloud-storage==2.19.0
@@ -13,6 +14,8 @@ langdetect==1.0.9
 tenacity==9.0.0
 praw==7.8.1
 google-api-python-client==2.157.0
+google-cloud-bigquery==3.42.2
+google-cloud-pubsub==2.39.0
 
 # Type stubs for static analysis.
 types-PyYAML==6.0.12.20241230

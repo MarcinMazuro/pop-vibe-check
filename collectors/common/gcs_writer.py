@@ -15,7 +15,10 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from google.cloud import storage
+# Module-style import: google-cloud-storage ships no py.typed marker, so
+# the `from google.cloud import storage` form trips mypy's attr-defined
+# check once any typed google.cloud package (e.g. bigquery) is installed.
+import google.cloud.storage as storage
 
 _BUCKET_ENV_VAR = "TARGET_BUCKET"
 

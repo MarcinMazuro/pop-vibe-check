@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pop-vibe-check-collectors"
 version = "0.1.0"
-description = "Reddit and YouTube collectors for the pop-vibe-check sentiment pipeline."
+description = "Reddit and YouTube collectors plus the replay publisher for the pop-vibe-check sentiment pipeline."
 requires-python = ">=3.12"
 readme = "README.md"
 
 [tool.setuptools]
-packages = ["collectors", "collectors.common", "collectors.reddit", "collectors.youtube"]
+packages = ["collectors", "collectors.common", "collectors.reddit", "collectors.youtube", "publisher"]
 
 # ---------------------------------------------------------------------------
 # Formatting
@@ -25,7 +25,7 @@ target-version = ["py312"]
 [tool.ruff]
 line-length = 88
 target-version = "py312"
-src = ["collectors"]
+src = ["collectors", "publisher"]
 
 [tool.ruff.lint]
 # E/W: pycodestyle (PEP 8), F: pyflakes, I: isort, D: pydocstyle (docstrings),
@@ -43,6 +43,7 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 # Tests do not need full annotations or module/class docstrings.
 "collectors/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104"]
+"publisher/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104"]
 
 # ---------------------------------------------------------------------------
 # Static typing
@@ -53,7 +54,7 @@ strict = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 ignore_missing_imports = true
-files = ["collectors"]
+files = ["collectors", "publisher"]
 
 [[tool.mypy.overrides]]
 # Tests use pytest fixtures and assert-style bodies; full annotations add noise.
@@ -62,9 +63,15 @@ disallow_untyped_defs = false
 disallow_incomplete_defs = false
 check_untyped_defs = true
 
+[[tool.mypy.overrides]]
+module = "publisher.tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 [tool.pytest.ini_options]
-testpaths = ["collectors/tests"]
+testpaths = ["collectors/tests", "publisher/tests"]
 pythonpath = ["."]

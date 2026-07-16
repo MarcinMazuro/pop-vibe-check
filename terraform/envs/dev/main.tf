@@ -65,8 +65,9 @@ module "artifact_registry" {
   reader_sa_emails = [
     module.iam.collector_reddit_sa_email,
     module.iam.collector_youtube_sa_email,
-    # publisher_sa and dataflow_worker_sa land in Phase 1; add them here
-    # when the iam module gains those workloads.
+    module.iam.publisher_sa_email,
+    # dataflow_worker_sa lands with the Dataflow PR; add it here when
+    # the iam module gains that workload.
   ]
 }
 
@@ -91,6 +92,19 @@ module "bigquery" {
   env         = local.env
   region      = var.region
   labels      = local.labels
+
+  publisher_sa_email = module.iam.publisher_sa_email
+}
+
+module "pubsub" {
+  source = "../../modules/pubsub"
+
+  project_id  = var.project_id
+  name_prefix = var.name_prefix
+  env         = local.env
+  labels      = local.labels
+
+  publisher_sa_email = module.iam.publisher_sa_email
 }
 
 module "budgets" {
@@ -117,10 +131,17 @@ module "cloud_run_jobs" {
   raw_archive_bucket_name    = module.storage.raw_archive_bucket_name
   reddit_collector_sa_email  = module.iam.collector_reddit_sa_email
   youtube_collector_sa_email = module.iam.collector_youtube_sa_email
+  publisher_sa_email         = module.iam.publisher_sa_email
   secret_names               = module.secrets.secret_names
+
+  bq_dataset_id       = module.bigquery.dataset_id
+  bq_landing_table_id = module.bigquery.raw_landing_table_id
+  bq_staging_table_id = module.bigquery.raw_staging_table_id
+  events_topic_name   = module.pubsub.events_topic_name
 
   # reddit_image_uri stays on the public 'pause' placeholder until the
   # Reddit container is built and pushed — e.g.:
   #   reddit_image_uri = "${module.artifact_registry.repository_url}/reddit-collector:<sha>"
-  youtube_image_uri = "europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/youtube-collector:729b1fdc5d8250915d0a59fa68d2408489b0a1f4"
+  youtube_image_uri   = "europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/youtube-collector:729b1fdc5d8250915d0a59fa68d2408489b0a1f4"
+  publisher_image_uri = "europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/publisher:2e209f7c654dca317b49a4afeb4d2b402193846e"
 }
