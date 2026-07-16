@@ -143,6 +143,16 @@ After collectors produce raw JSONL reliably:
 6. `cloud_build/` module — per-service triggers, workload-identity for runner SA impersonation (closes the bootstrap chicken-and-egg)
 7. Application: ✓ `publisher/`; remaining: `dataflow/` Beam pipeline, `nlp/stub/`, then `nlp/registry/` with MLflow
 
+**Where to pick up next.** The frontier is the **Dataflow bridge** (items 4 + 7): a
+`dataflow/` Terraform module (Beam Flex Template, worker SA, and the dead-letter
+topic deferred from the pubsub module) plus a Beam pipeline that consumes
+`co-events-topic-dev`, calls the NLP stub, and writes the denormalised `events`
+table. There is no detailed spec section for it yet — design it the way the
+collectors were spec'd below. Run the publisher first to see live ordered messages
+on the topic (`publisher/README.md`). In parallel and fully independent of the
+Dataflow work, the **Reddit collector** can be unblocked the moment its API
+credentials exist (see [§ Real credentials](#real-credentials)).
+
 ### Phase 2 — Polish, prod env, defence
 - `terraform/envs/prod/` composition (same shape as dev)
 - Pre-commit hooks (`terraform fmt`, `tflint`, `tfsec`)
