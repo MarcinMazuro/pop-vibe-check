@@ -160,6 +160,102 @@ resource "google_cloud_run_v2_job" "youtube_collector" {
 }
 
 # ----------------------------------------------------------------------------
+# Replay publisher Cloud Run Job.
+#
+# Loads the GCS raw archive into BigQuery (landing → MERGE → staging)
+# and replays the staged records to Pub/Sub in global chronological
+# order with time compression, simulating a live stream for the
+# downstream Dataflow pipeline.
+#
+# Runtime env vars split into two layers:
+# - Deploy-time literals (PROJECT_ID, BQ_*, RAW_ARCHIVE_BUCKET,
+#   PUBSUB_TOPIC, SPEEDUP, MAX_SLEEP_SECONDS) — set here, identical
+#   across executions. SPEEDUP=86400 replays one simulated day per wall
+#   second; MAX_SLEEP_SECONDS clamps the inter-record sleep so months of
+#   dead air between lifecycle events are skipped.
+# - Execution-time params (RUN_LOAD, EVENT_ID, WINDOW_FROM, WINDOW_TO,
+#   plus SPEEDUP / MAX_SLEEP_SECONDS overrides) — NOT set here. Operator
+#   supplies them per run via
+#   `gcloud run jobs execute --update-env-vars=RUN_LOAD=only` etc.,
+#   identical to the collector interface.
+#
+# max_retries = 0 on purpose: an automatic retry of a partially
+# completed replay would double-publish the records already sent.
+# Reruns are a manual decision (the staging table is deduplicated, and
+# downstream consumers dedup by id).
+# ----------------------------------------------------------------------------
+resource "google_cloud_run_v2_job" "publisher" {
+  project  = var.project_id
+  location = var.region
+  name     = "${var.name_prefix}-publisher-${var.env}"
+
+  labels = var.labels
+
+  template {
+    template {
+      service_account = var.publisher_sa_email
+      timeout         = var.publisher_task_timeout
+      max_retries     = 0
+
+      containers {
+        image = var.publisher_image_uri
+
+        resources {
+          limits = {
+            memory = var.memory
+            cpu    = var.cpu
+          }
+        }
+
+        env {
+          name  = "PROJECT_ID"
+          value = var.project_id
+        }
+
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset_id
+        }
+
+        env {
+          name  = "BQ_LANDING_TABLE"
+          value = var.bq_landing_table_id
+        }
+
+        env {
+          name  = "BQ_STAGING_TABLE"
+          value = var.bq_staging_table_id
+        }
+
+        env {
+          name  = "RAW_ARCHIVE_BUCKET"
+          value = var.raw_archive_bucket_name
+        }
+
+        env {
+          name  = "PUBSUB_TOPIC"
+          value = var.events_topic_name
+        }
+
+        env {
+          name  = "SPEEDUP"
+          value = "86400"
+        }
+
+        env {
+          name  = "MAX_SLEEP_SECONDS"
+          value = "5"
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [launch_stage]
+  }
+}
+
+# ----------------------------------------------------------------------------
 # Bucket-level write IAM for the collectors on the raw archive.
 #
 # The storage module did not grant these because the collector SAs did not
@@ -178,4 +274,13 @@ resource "google_storage_bucket_iam_member" "youtube_raw_archive_writer" {
   bucket = var.raw_archive_bucket_name
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${var.youtube_collector_sa_email}"
+}
+
+# The publisher only reads: BigQuery load jobs fetch the JSONL.gz
+# objects from GCS with the caller's identity, so objectViewer is
+# sufficient — unlike the collectors, it never writes to the archive.
+resource "google_storage_bucket_iam_member" "publisher_raw_archive_reader" {
+  bucket = var.raw_archive_bucket_name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${var.publisher_sa_email}"
 }

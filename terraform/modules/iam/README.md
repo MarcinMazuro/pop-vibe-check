@@ -6,13 +6,14 @@ bindings live alongside the resources they pertain to (bucket IAM in
 
 ## What this creates
 
-Three service accounts, all named `${name_prefix}-{workload}-sa-${env}`:
+Four service accounts, all named `${name_prefix}-{workload}-sa-${env}`:
 
 - **`{name_prefix}-collector-reddit-sa-{env}`** — runs the Reddit collector Cloud Run Job.
 - **`{name_prefix}-collector-youtube-sa-{env}`** — runs the YouTube collector Cloud Run Job.
+- **`{name_prefix}-publisher-sa-{env}`** — runs the replay publisher Cloud Run Job (GCS → BigQuery load, chronological Pub/Sub replay).
 - **`{name_prefix}-cloud-build-sa-{env}`** — executes Cloud Build triggers for this env (terraform, collector image builds, publisher image builds, Dataflow Flex Template uploads).
 
-Publisher and Dataflow worker SAs are deferred to Phase 1, alongside the modules that consume them.
+The Dataflow worker SA is deferred to the Dataflow PR, alongside the module that consumes it.
 
 ## Inputs
 
@@ -28,6 +29,7 @@ Publisher and Dataflow worker SAs are deferred to Phase 1, alongside the modules
 |---|---|
 | `collector_reddit_sa_email` | Email of the Reddit collector SA |
 | `collector_youtube_sa_email` | Email of the YouTube collector SA |
+| `publisher_sa_email` | Email of the replay publisher SA |
 | `cloud_build_sa_email` | Email of the Cloud Build runner SA |
 | `service_accounts` | Map of workload short name → SA email |
 | `service_account_ids` | Map of workload short name → fully-qualified SA resource ID |

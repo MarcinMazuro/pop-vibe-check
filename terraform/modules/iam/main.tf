@@ -7,7 +7,7 @@
 # live in the modules that own those resources, per the convention in this
 # project's IaC guidelines.
 #
-# Publisher and Dataflow worker SAs are deferred to Phase 1.
+# The Dataflow worker SA is deferred to the Dataflow PR.
 #
 # google_service_account does not support labels in provider v5 — there is
 # nothing to tag here even though every other resource gets the standard
@@ -22,6 +22,10 @@ locals {
     "collector-youtube" = {
       display_name = "YouTube collector"
       description  = "Reads the YouTube Data API and writes raw JSONL to the raw archive bucket. Run as the youtube-collector Cloud Run Job."
+    }
+    "publisher" = {
+      display_name = "Replay publisher"
+      description  = "Loads the GCS raw archive into BigQuery staging and replays it chronologically to Pub/Sub with time compression. Run as the publisher Cloud Run Job."
     }
     "cloud-build" = {
       display_name = "Cloud Build runner"
