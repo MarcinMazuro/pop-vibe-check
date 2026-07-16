@@ -139,9 +139,9 @@ module "cloud_run_jobs" {
   bq_staging_table_id = module.bigquery.raw_staging_table_id
   events_topic_name   = module.pubsub.events_topic_name
 
-  # reddit_image_uri and publisher_image_uri stay on the public 'pause'
-  # placeholder until each container is built and pushed — e.g.:
-  #   reddit_image_uri    = "${module.artifact_registry.repository_url}/reddit-collector:<sha>"
-  #   publisher_image_uri = "${module.artifact_registry.repository_url}/publisher:<sha>"
-  youtube_image_uri = "europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/youtube-collector:729b1fdc5d8250915d0a59fa68d2408489b0a1f4"
+  # reddit_image_uri stays on the public 'pause' placeholder until the
+  # Reddit container is built and pushed — e.g.:
+  #   reddit_image_uri = "${module.artifact_registry.repository_url}/reddit-collector:<sha>"
+  youtube_image_uri   = "europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/youtube-collector:729b1fdc5d8250915d0a59fa68d2408489b0a1f4"
+  publisher_image_uri = "europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/publisher:f70a08b6b333c615dca3c4898f5e327a9e9d3f74"
 }
