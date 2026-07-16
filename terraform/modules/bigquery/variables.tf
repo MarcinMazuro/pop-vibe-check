@@ -32,6 +32,11 @@ variable "labels" {
   type        = map(string)
 }
 
+variable "publisher_sa_email" {
+  description = "Email of the replay publisher SA — granted dataEditor on the dataset and jobUser on the project so it can run load/MERGE/replay jobs."
+  type        = string
+}
+
 variable "delete_contents_on_destroy" {
   description = <<-EOT
     Escape hatch for destroying the dataset when it still contains tables.
