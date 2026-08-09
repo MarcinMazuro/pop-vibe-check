@@ -142,12 +142,12 @@ terraform apply
 ```
 
 A clean `plan` on a fresh project with `billing_account_id` set and one
-entry in `operator_emails` should show **31 resources to add**:
+entry in `operator_emails` should show **32 resources to add**:
 
 - 15 × `google_project_service` (one per entry in `var.enabled_services` — includes `monitoring.googleapis.com` since the budgets module landed)
 - 1 × `google_storage_bucket` (the state bucket)
 - 1 × `google_service_account` (the runner SA)
-- 13 × `google_project_iam_member` (one per curated role on the project, including `monitoring.editor`)
+- 14 × `google_project_iam_member` (one per curated role on the project, including `compute.securityAdmin` for the Dataflow inter-worker firewall rule)
 - 1 × `google_billing_account_iam_member` (only if `billing_account_id` is set)
 - N × `google_service_account_iam_member` (one per operator email)
 

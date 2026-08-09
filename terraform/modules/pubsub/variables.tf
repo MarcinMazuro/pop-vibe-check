@@ -27,3 +27,8 @@ variable "publisher_sa_email" {
   description = "Email of the replay publisher SA — granted roles/pubsub.publisher on the events topic."
   type        = string
 }
+
+variable "dataflow_worker_sa_email" {
+  description = "Email of the Dataflow worker SA — granted roles/pubsub.subscriber on the Dataflow subscription and roles/pubsub.publisher on the DLQ topic (for the pipeline's explicit dead-letter output)."
+  type        = string
+}

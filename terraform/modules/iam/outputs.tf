@@ -18,6 +18,11 @@ output "cloud_build_sa_email" {
   value       = google_service_account.workload["cloud-build"].email
 }
 
+output "dataflow_worker_sa_email" {
+  description = "Email of the Dataflow worker SA — the streaming pipeline's runtime identity."
+  value       = google_service_account.workload["dataflow-worker"].email
+}
+
 output "service_accounts" {
   description = "Map of workload short name → SA email. Convenient for iterating in downstream modules (e.g. for_each over collector SAs when granting bucket access)."
   value = {

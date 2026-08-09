@@ -83,8 +83,14 @@ locals {
     # Dataflow — Flex Template registration and job submission.
     "roles/dataflow.admin",
 
-    # Compute — VPC and subnet with Private Google Access.
+    # Compute — VPC and subnet with Private Google Access (networkAdmin).
     "roles/compute.networkAdmin",
+
+    # Compute — firewall rules. GCP classes firewall rules as "security"
+    # resources, so networkAdmin does not cover them; the Dataflow
+    # inter-worker rule (TCP 12345-12346 on the Beam harness ports) needs
+    # securityAdmin to create/update/delete.
+    "roles/compute.securityAdmin",
 
     # Cloud Build — per-service triggers scoped by included_files.
     "roles/cloudbuild.builds.editor",

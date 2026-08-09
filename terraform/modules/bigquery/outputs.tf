@@ -22,3 +22,13 @@ output "raw_staging_table_id" {
   description = "Short table id of the deduplicated staging table the publisher replays from (e.g. 'raw_staging')."
   value       = google_bigquery_table.raw_staging.table_id
 }
+
+output "events_landing_table_id" {
+  description = "Short table id of the append-only Dataflow write target (e.g. 'events_landing')."
+  value       = google_bigquery_table.events_landing.table_id
+}
+
+output "events_table_id" {
+  description = "Short table id of the deduplicated analytical events table (e.g. 'events'). MERGE target and Looker Studio source."
+  value       = google_bigquery_table.events.table_id
+}
