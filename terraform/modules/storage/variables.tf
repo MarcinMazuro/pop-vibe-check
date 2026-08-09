@@ -23,6 +23,11 @@ variable "labels" {
   type        = map(string)
 }
 
+variable "dataflow_worker_sa_email" {
+  description = "Email of the Dataflow worker SA — granted roles/storage.objectAdmin on the dataflow-temp bucket so workers can write staging and temp objects."
+  type        = string
+}
+
 variable "raw_archive_autodelete_days" {
   description = <<-EOT
     If greater than 0, raw archive objects are hard-deleted after this many
@@ -55,9 +60,21 @@ variable "force_destroy_artifacts" {
   description = <<-EOT
     Escape hatch for destroying the Cloud Build / Terraform artifacts
     bucket when it still contains objects. Default false — the contents
-    are disposable build logs and Flex Template payloads, so the bar is
-    less critical than for raw archive, but still gated to avoid
-    surprise destroys. Flip to true via -var on a one-off teardown.
+    are disposable build logs, so the bar is less critical than for raw
+    archive, but still gated to avoid surprise destroys. Flip to true via
+    -var on a one-off teardown.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "force_destroy_dataflow_temp" {
+  description = <<-EOT
+    Escape hatch for destroying the Dataflow staging/temp bucket when it
+    still contains objects. Default false. The staging/ and temp/ prefixes
+    are disposable, but templates/ holds the Flex Template spec a running
+    or future job launches from — do not force-destroy while a template is
+    in use. Flip to true via -var on a one-off teardown.
   EOT
   type        = bool
   default     = false

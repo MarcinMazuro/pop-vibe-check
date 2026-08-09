@@ -84,22 +84,25 @@ Supervisor: mgr inż. Szymon Olewniczak.
 |---|---|---|
 | GCP project + bootstrap (state bucket, runner SA, IAM, API enablement) | ✓ Applied | [`terraform/bootstrap/`](terraform/bootstrap/) |
 | Dev environment composition root | ✓ Applied | [`terraform/envs/dev/`](terraform/envs/dev/) |
-| Storage module (raw archive + artifacts buckets) | ✓ Applied | [`terraform/modules/storage/`](terraform/modules/storage/) |
-| IAM module (collector + cloud-build service accounts) | ✓ Applied | [`terraform/modules/iam/`](terraform/modules/iam/) |
+| Storage module (raw archive + artifacts buckets; dataflow-temp bucket added this PR) | ✓ Applied | [`terraform/modules/storage/`](terraform/modules/storage/) |
+| IAM module (collector + cloud-build SAs; dataflow-worker SA added this PR) | ✓ Applied | [`terraform/modules/iam/`](terraform/modules/iam/) |
 | Secrets module (5 empty containers + accessor bindings) | ✓ Applied | [`terraform/modules/secrets/`](terraform/modules/secrets/) |
 | Artifact Registry (Docker repo) | ✓ Applied | [`terraform/modules/artifact_registry/`](terraform/modules/artifact_registry/) |
-| Network (VPC + subnet, Private Google Access) | ✓ Applied | [`terraform/modules/network/`](terraform/modules/network/) |
-| BigQuery (dataset + `raw_landing` / `raw_staging`; `events` table in the Dataflow PR) | ✓ Applied | [`terraform/modules/bigquery/`](terraform/modules/bigquery/) |
+| Network (VPC + subnet, Private Google Access; Dataflow inter-worker firewall added this PR) | ✓ Applied | [`terraform/modules/network/`](terraform/modules/network/) |
+| BigQuery (dataset + `raw_landing` / `raw_staging`; `events` / `events_landing` tables added this PR — see Dataflow infra row) | ✓ Applied | [`terraform/modules/bigquery/`](terraform/modules/bigquery/) |
 | Budgets (monthly cap + email alerts) | ✓ Applied | [`terraform/modules/budgets/`](terraform/modules/budgets/) |
 | Cloud Run Jobs (collector jobs + replay publisher job) | ✓ Applied | [`terraform/modules/cloud_run_jobs/`](terraform/modules/cloud_run_jobs/) |
-| Pub/Sub (events topic + ordered verify subscription; DLQ in the Dataflow PR) | ✓ Applied | [`terraform/modules/pubsub/`](terraform/modules/pubsub/) |
+| Pub/Sub (events topic + ordered verify subscription; Dataflow subscription + DLQ added this PR — see Dataflow infra row) | ✓ Applied | [`terraform/modules/pubsub/`](terraform/modules/pubsub/) |
 | Collector application code (common, reddit, youtube + tests) | ✓ Done | [`collectors/`](collectors/) |
 | YouTube collector: image, job wiring, first collection runs | ✓ Done — 4228 records ([details](docs/phase-0-youtube-first-collection.md)) | GCS `co-raw-archive-dev/youtube/` |
 | Reddit collector: image + smoke test | ✗ **Blocked on Reddit API credentials** | `collectors/reddit/` |
 | Real values in secret containers | YouTube key + salt ✓ real; Reddit ✗ placeholders | Secret Manager |
 | Replay publisher: code, image, job, first replay to Pub/Sub | ✓ Done — 4228 records replayed in order ([details](docs/phase-1-publisher.md)) | [`publisher/`](publisher/) |
-| Dataflow module, `events` table, Cloud Build module | ✗ Phase 1 (remaining) | Not yet |
+| **Dataflow streaming infra (this PR)** — `dataflow/` module + worker SA, `events` / `events_landing` + promotion MERGE, Dataflow subscription + DLQ topic/sub, dataflow-temp bucket, inter-worker firewall, launch-parameter outputs | ✓ Applied | [`terraform/modules/dataflow/`](terraform/modules/dataflow/) + extensions across `bigquery/`, `pubsub/`, `iam/`, `network/`, `storage/` |
+| Dataflow Beam pipeline (Flex Template) + Cloud Build module | ✗ Phase 1 (remaining) | Not yet |
 | NLP model | ✗ Phase 1 (stub first, real model via MLflow later) | Not yet |
+
+The Dataflow infrastructure above is **applied and live** (branch `feat/tf-dataflow-infra`); nothing billable runs until PR 3 launches the pipeline explicitly. Applying it also added `roles/compute.securityAdmin` to the Terraform runner SA in `terraform/bootstrap/` — firewall rules are "security" resources that `compute.networkAdmin` alone can't create.
 
 ### What's actually live in the `pop-vibe-check` GCP project
 
@@ -114,6 +117,7 @@ After all merged PRs and applies:
 - **Pub/Sub:** `co-events-topic-dev` + `co-events-verify-sub-dev` (ordered pull subscription for manual verification)
 - **Cloud Run Jobs:** `co-youtube-collector-dev` (✓ real collector image), `co-publisher-dev` (✓ real publisher image, first replay done), `co-reddit-collector-dev` (still on the `pause` placeholder)
 - **Budget:** monthly alert at 50/90/100/120% of configured cap
+- **Dataflow streaming infra** (this PR, applied — none of it runs anything billable): SA `co-dataflow-worker-sa-dev`; BigQuery `events` + `events_landing` tables; Pub/Sub `co-events-dataflow-sub-dev`, `co-events-dlq-topic-dev`, `co-events-dlq-sub-dev`; GCS `co-dataflow-temp-dev`; firewall `co-allow-dataflow-internal-dev`; and the worker-SA IAM grants (Dataflow/Pub/Sub/BigQuery/Storage/Artifact Registry). The Beam pipeline that will consume these is PR 3.
 
 The YouTube job is fully operational — executing it with `EVENT_ID`/`WINDOW_FROM`/`WINDOW_TO` collects real comments into the raw archive. The publisher job loads the archive into staging (`RUN_LOAD=only`) and replays it to Pub/Sub with time compression (see [publisher/README.md](publisher/README.md)). The Reddit job stays on the placeholder image until Reddit API credentials exist.
 
@@ -135,23 +139,28 @@ YouTube: image built and pushed, job wired, API key fixed, four events collected
 ### Phase 1 — Stream simulation + NLP + analytics
 After collectors produce raw JSONL reliably:
 
-1. ✓ `pubsub/` module — events topic + ordered verify subscription (dead-letter topic deferred to the Dataflow PR, where the first nacking consumer appears)
-2. ✓ (partial) `bigquery/` extension — `raw_landing` + `raw_staging` tables done; `events` table + authorised views land with the Dataflow PR
-3. ✓ (partial) `iam/` extension — publisher SA done; Dataflow worker SA with its module
-4. `dataflow/` module — Beam Flex Template, worker SA wiring
+1. ✓ `pubsub/` module — events topic + ordered verify subscription, plus (this PR, applied) the Dataflow subscription, the DLQ topic + inspection subscription, and the Pub/Sub service-agent + worker-SA IAM the dead-letter path needs.
+2. ✓ `bigquery/` extension — `raw_landing` + `raw_staging`, plus (this PR, applied) `events` + `events_landing` (one shared schema extended with `sentiment_*`, `model_version`, `processed_at`), the documented promotion MERGE, and worker-SA IAM. Looker authorised views still to come.
+3. ✓ `iam/` extension — publisher SA, plus (this PR, applied) the Dataflow worker SA.
+4. ✓ `dataflow/` module — **this PR** applied the infrastructure: worker `dataflow.worker` grant, launcher `dataflow.admin` + actAs grants, the dataflow-temp bucket, the inter-worker firewall rule, and the launch-parameter outputs PR 3 reads from `terraform output`. The Beam **Flex Template** (image + spec) and any Dataflow job resource are **PR 3** — `terraform apply` never starts a streaming job.
 5. ✓ `cloud_run_jobs/` extension — publisher job (BigQuery → Pub/Sub bridge with time compression), deployed and verified ([docs/phase-1-publisher.md](docs/phase-1-publisher.md))
 6. `cloud_build/` module — per-service triggers, workload-identity for runner SA impersonation (closes the bootstrap chicken-and-egg)
 7. Application: ✓ `publisher/`; remaining: `dataflow/` Beam pipeline, `nlp/stub/`, then `nlp/registry/` with MLflow
 
-**Where to pick up next.** The frontier is the **Dataflow bridge** (items 4 + 7): a
-`dataflow/` Terraform module (Beam Flex Template, worker SA, and the dead-letter
-topic deferred from the pubsub module) plus a Beam pipeline that consumes
-`co-events-topic-dev`, calls the NLP stub, and writes the denormalised `events`
-table. There is no detailed spec section for it yet — design it the way the
-collectors were spec'd below. Run the publisher first to see live ordered messages
-on the topic (`publisher/README.md`). In parallel and fully independent of the
-Dataflow work, the **Reddit collector** can be unblocked the moment its API
-credentials exist (see [§ Real credentials](#real-credentials)).
+**Where to pick up next.** With this PR's infrastructure applied, the frontier is the
+**Beam Flex Template + NLP stub** (item 7): a pipeline that consumes
+`co-events-dataflow-sub-dev`, detects language, calls the NLP stub, writes enriched
+rows to `events_landing`, and routes unparseable records to `co-events-dlq-topic-dev`
+— followed by the promotion MERGE into `events` (documented in
+[`terraform/modules/bigquery/README.md`](terraform/modules/bigquery/README.md)).
+The launch reads its parameters from `terraform output` (see
+[`terraform/modules/dataflow/README.md`](terraform/modules/dataflow/README.md)).
+One hard constraint: workers run with no public IPs, so the Flex Template image must
+be **self-contained** — every dependency and any model file baked in at build time,
+nothing fetched from PyPI or a URL at runtime. Run the publisher first to see live
+ordered messages on the topic (`publisher/README.md`). In parallel and fully
+independent of the Dataflow work, the **Reddit collector** can be unblocked the moment
+its API credentials exist (see [§ Real credentials](#real-credentials)).
 
 ### Phase 2 — Polish, prod env, defence
 - `terraform/envs/prod/` composition (same shape as dev)
@@ -409,7 +418,7 @@ A and (B or C) can start in parallel; the other waits a day for A's common libra
 └── docs/                                  # phase write-ups (collectors, first collection, publisher)
 ```
 
-Future directories that will appear in the rest of Phase 1: `dataflow/`, `nlp/`, and more `terraform/modules/` (`dataflow/`, `cloud_build/`).
+`terraform/modules/dataflow/` lands with this PR (IAM + launch parameters). Future directories that will appear in the rest of Phase 1: `dataflow/` (the Beam pipeline), `nlp/`, and `terraform/modules/cloud_build/`.
 
 ## Getting set up
 

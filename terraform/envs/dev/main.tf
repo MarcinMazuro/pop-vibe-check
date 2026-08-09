@@ -23,6 +23,10 @@ module "storage" {
   region      = var.region
   labels      = local.labels
 
+  # Worker SA gets objectAdmin on the dataflow-temp bucket (staging/temp
+  # writes). The binding lives in the storage module, next to the bucket.
+  dataflow_worker_sa_email = module.iam.dataflow_worker_sa_email
+
   # Raw archive grows indefinitely in dev; flip to a positive number
   # before a tear-down if you want Terraform to clean up the bucket
   # contents on the next apply.
@@ -66,9 +70,22 @@ module "artifact_registry" {
     module.iam.collector_reddit_sa_email,
     module.iam.collector_youtube_sa_email,
     module.iam.publisher_sa_email,
-    # dataflow_worker_sa lands with the Dataflow PR; add it here when
-    # the iam module gains that workload.
+    # Dataflow workers pull the Flex Template image at launch; no public
+    # IPs, so they read Artifact Registry over Private Google Access.
+    #
+    # Built as a literal, not module.iam.dataflow_worker_sa_email: that
+    # output is the *new* SA's computed .email, unknown at plan time, and
+    # an unknown value in this reader for_each set makes the whole set
+    # unplannable ("Invalid for_each argument"). The account_id is
+    # deterministic, so the email is known here; depends_on below still
+    # orders the SA's creation before this grant.
+    "${var.name_prefix}-dataflow-worker-sa-${local.env}@${var.project_id}.iam.gserviceaccount.com",
   ]
+
+  # The dataflow-worker reader entry above is a literal string, so it
+  # carries no implicit dependency on the SA resource. Order the whole iam
+  # module (which creates that SA) ahead of these grants explicitly.
+  depends_on = [module.iam]
 }
 
 module "network" {
@@ -93,7 +110,8 @@ module "bigquery" {
   region      = var.region
   labels      = local.labels
 
-  publisher_sa_email = module.iam.publisher_sa_email
+  publisher_sa_email       = module.iam.publisher_sa_email
+  dataflow_worker_sa_email = module.iam.dataflow_worker_sa_email
 }
 
 module "pubsub" {
@@ -104,7 +122,33 @@ module "pubsub" {
   env         = local.env
   labels      = local.labels
 
-  publisher_sa_email = module.iam.publisher_sa_email
+  publisher_sa_email       = module.iam.publisher_sa_email
+  dataflow_worker_sa_email = module.iam.dataflow_worker_sa_email
+}
+
+module "dataflow" {
+  source = "../../modules/dataflow"
+
+  project_id = var.project_id
+  region     = var.region
+
+  dataflow_worker_sa_email = module.iam.dataflow_worker_sa_email
+
+  # The launcher is the Cloud Build SA — the roadmap's eventual CI launcher
+  # of Flex Template jobs. A manual dev launch impersonates it (see the
+  # dataflow module README), the same way applies impersonate the runner SA.
+  launcher_sa_email = module.iam.cloud_build_sa_email
+
+  # Launch parameters, composed from the modules that own each resource.
+  subnetwork_self_link     = module.network.subnet_self_link
+  network_self_link        = module.network.network_self_link
+  worker_network_tag       = module.network.dataflow_worker_tag
+  dataflow_temp_bucket_url = module.storage.dataflow_temp_bucket_url
+  bq_dataset_id            = module.bigquery.dataset_id
+  events_landing_table_id  = module.bigquery.events_landing_table_id
+  events_table_id          = module.bigquery.events_table_id
+  dataflow_subscription_id = module.pubsub.dataflow_subscription_id
+  dlq_topic_id             = module.pubsub.dlq_topic_id
 }
 
 module "budgets" {

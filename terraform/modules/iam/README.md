@@ -6,14 +6,13 @@ bindings live alongside the resources they pertain to (bucket IAM in
 
 ## What this creates
 
-Four service accounts, all named `${name_prefix}-{workload}-sa-${env}`:
+Five service accounts, all named `${name_prefix}-{workload}-sa-${env}`:
 
 - **`{name_prefix}-collector-reddit-sa-{env}`** — runs the Reddit collector Cloud Run Job.
 - **`{name_prefix}-collector-youtube-sa-{env}`** — runs the YouTube collector Cloud Run Job.
 - **`{name_prefix}-publisher-sa-{env}`** — runs the replay publisher Cloud Run Job (GCS → BigQuery load, chronological Pub/Sub replay).
 - **`{name_prefix}-cloud-build-sa-{env}`** — executes Cloud Build triggers for this env (terraform, collector image builds, publisher image builds, Dataflow Flex Template uploads).
-
-The Dataflow worker SA is deferred to the Dataflow PR, alongside the module that consumes it.
+- **`{name_prefix}-dataflow-worker-sa-{env}`** — runtime identity for the Dataflow streaming pipeline workers (consumes the events subscription, runs the NLP model, writes `events_landing`). Its resource grants — `dataflow.worker`, `pubsub.subscriber`, `bigquery.dataEditor`, `storage.objectAdmin` on the temp bucket, Artifact Registry reader — live in the `dataflow/`, `pubsub/`, `bigquery/`, `storage/`, and `artifact_registry/` modules respectively.
 
 ## Inputs
 
@@ -31,12 +30,13 @@ The Dataflow worker SA is deferred to the Dataflow PR, alongside the module that
 | `collector_youtube_sa_email` | Email of the YouTube collector SA |
 | `publisher_sa_email` | Email of the replay publisher SA |
 | `cloud_build_sa_email` | Email of the Cloud Build runner SA |
+| `dataflow_worker_sa_email` | Email of the Dataflow worker SA |
 | `service_accounts` | Map of workload short name → SA email |
 | `service_account_ids` | Map of workload short name → fully-qualified SA resource ID |
 
 ## Notes
 
 - **`google_service_account` does not support labels in provider v5** — these resources are not tagged with the standard project/env/owner/managed_by set despite the project-wide convention. Documented exception.
-- **No IAM bindings here.** When the `storage/`, `secrets/`, `artifact_registry/`, and `bigquery/` modules need to grant access to these workload SAs, they accept the SA emails as inputs and create resource-scoped bindings locally. Keeps the blast radius of any IAM change tight.
+- **No IAM bindings here.** When the `storage/`, `secrets/`, `artifact_registry/`, `bigquery/`, `pubsub/`, and `dataflow/` modules need to grant access to these workload SAs, they accept the SA emails as inputs and create resource-scoped bindings locally. Keeps the blast radius of any IAM change tight.
 - **SAs are per-env** (`-dev`, `-prod`). This deviates from earlier drafts that listed them as cross-env identities; making each env own its workload SAs avoids cross-env IAM coupling and lets `prod` apply from scratch without conflicting with `dev`.
 - **Cloud Build SA is also per-env** for the same reason — a build running in `dev` should not have credentials to push images to `prod` artifact registry. When triggers are wired (Phase 1), each trigger gets the env-matched SA.

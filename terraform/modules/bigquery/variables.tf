@@ -37,6 +37,11 @@ variable "publisher_sa_email" {
   type        = string
 }
 
+variable "dataflow_worker_sa_email" {
+  description = "Email of the Dataflow worker SA — granted dataEditor on the dataset and jobUser on the project so the streaming pipeline can write events_landing (and run the promotion MERGE if that later runs under this identity)."
+  type        = string
+}
+
 variable "delete_contents_on_destroy" {
   description = <<-EOT
     Escape hatch for destroying the dataset when it still contains tables.
