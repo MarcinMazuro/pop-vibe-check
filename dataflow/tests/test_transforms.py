@@ -200,3 +200,41 @@ class TestIsoUtc:
 
     def test_naive_is_read_as_utc(self):
         assert iso_utc(datetime(2025, 4, 24, 12, 0)) == "2025-04-24T12:00:00Z"
+
+
+class TestDetectLanguageDeterminism:
+    """Regression guard for the reproducibility bug found on the first run.
+
+    Two replays of identical data disagreed on the language of 68 short
+    comments. The cause was a seed set as an import-time side effect,
+    which did not take effect on the Dataflow workers, leaving langdetect
+    to seed from system entropy. These tests clear the seed first, so they
+    fail if determinism ever depends on module import again.
+    """
+
+    # Short texts whose detection is unstable when unseeded.
+    UNSTABLE = ["Hell yeah!", "so hype wtfff", "RPG TIME", "what is this?"]
+
+    def _clear_seed(self):
+        from langdetect import DetectorFactory
+
+        DetectorFactory.seed = None
+
+    @pytest.mark.parametrize("text", UNSTABLE)
+    def test_stable_after_the_seed_is_cleared(self, text):
+        self._clear_seed()
+        assert len({detect_language(text) for _ in range(25)}) == 1
+
+    def test_interleaved_calls_do_not_affect_each_other(self):
+        # Workers batch records in different orders between runs, so a
+        # detector whose result depends on call history is not reproducible.
+        self._clear_seed()
+        alone = [detect_language(t) for t in self.UNSTABLE]
+        self._clear_seed()
+        for filler in ("some unrelated english sentence here", "ein deutscher satz"):
+            detect_language(filler)
+        interleaved = []
+        for text in self.UNSTABLE:
+            detect_language("noise between detections")
+            interleaved.append(detect_language(text))
+        assert alone == interleaved

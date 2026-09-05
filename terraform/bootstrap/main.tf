@@ -92,6 +92,15 @@ locals {
     # securityAdmin to create/update/delete.
     "roles/compute.securityAdmin",
 
+    # IAM — custom project roles. Least-privilege grants sometimes have
+    # no predefined role that fits: the Dataflow worker needs to manage
+    # the internal subscription Dataflow creates to track a watermark
+    # from a custom Pub/Sub timestamp attribute, and the only predefined
+    # role covering it is roles/pubsub.editor over the whole project.
+    # roleAdmin lets the pubsub module define that capability exactly,
+    # instead of over-granting to avoid a custom role.
+    "roles/iam.roleAdmin",
+
     # Cloud Build — per-service triggers scoped by included_files.
     "roles/cloudbuild.builds.editor",
 

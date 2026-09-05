@@ -24,13 +24,8 @@ from nlp.base import Sentiment
 try:  # pragma: no cover - exercised implicitly wherever langdetect exists.
     from langdetect import DetectorFactory, LangDetectException
     from langdetect import detect as _detect
-
-    # langdetect seeds its own RNG per process, so the same short text can
-    # get different answers in different workers. The project guarantees a
-    # replay is reproducible, and `language` is authoritative in the events
-    # table, so the seed is pinned here at import time.
-    DetectorFactory.seed = 0
 except ImportError:  # pragma: no cover - keeps the module importable bare.
+    DetectorFactory = None
     _detect = None
     LangDetectException = Exception
 
@@ -191,6 +186,24 @@ def detect_language(text: Any) -> str | None:
     """
     if _detect is None or not isinstance(text, str) or not text.strip():
         return None
+
+    # Seed on every call, not once at import.
+    #
+    # langdetect samples n-grams randomly and seeds a fresh RNG per
+    # detection from DetectorFactory.seed — a class attribute that
+    # defaults to None, meaning "seed from system entropy". Setting it at
+    # import time looks equivalent and is not: the first live run produced
+    # different languages for 68 short comments across two replays of
+    # identical data, because on the workers this module reached the
+    # detector without that import-time assignment having taken effect.
+    # Short text is exactly where the sampling matters — "Hell yeah!"
+    # drifts between en, id and tr unseeded.
+    #
+    # Since `language` is authoritative in the events table and the
+    # project guarantees a replay is reproducible, the seed cannot depend
+    # on how the code was loaded. Setting it here costs an attribute
+    # write and makes each call deterministic on its own.
+    DetectorFactory.seed = 0
     try:
         return str(_detect(text[:MAX_DETECT_CHARS]))
     except LangDetectException:

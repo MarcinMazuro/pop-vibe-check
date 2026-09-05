@@ -183,6 +183,15 @@ resource "google_pubsub_subscription_iam_member" "service_agent_source_subscribe
 # stream; publisher on the DLQ topic lets it route unparseable records
 # there explicitly (path (2) above — the load-bearing dead-letter path).
 # Both bindings sit next to the resources they grant on, per convention.
+#
+# viewer is the third, non-obvious one. roles/pubsub.subscriber grants
+# subscriptions.consume but NOT subscriptions.get, and Dataflow reads the
+# subscription's configuration before it starts consuming. Without it the
+# job runs, logs only a warning that sounds like a performance note
+# ("Querying the configuration of Pub/Sub subscription ... failed"), and
+# then quietly consumes nothing — the backlog sits unchanged while the
+# job reports healthy. That failure mode cost a full debugging cycle on
+# the first live run; the grant below is what fixed it.
 # ----------------------------------------------------------------------------
 resource "google_pubsub_subscription_iam_member" "dataflow_worker_subscribe" {
   project      = var.project_id
@@ -191,9 +200,59 @@ resource "google_pubsub_subscription_iam_member" "dataflow_worker_subscribe" {
   member       = "serviceAccount:${var.dataflow_worker_sa_email}"
 }
 
+resource "google_pubsub_subscription_iam_member" "dataflow_worker_view" {
+  project      = var.project_id
+  subscription = google_pubsub_subscription.dataflow.name
+  role         = "roles/pubsub.viewer"
+  member       = "serviceAccount:${var.dataflow_worker_sa_email}"
+}
+
 resource "google_pubsub_topic_iam_member" "dataflow_worker_dlq_publish" {
   project = var.project_id
   topic   = google_pubsub_topic.dlq.name
   role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${var.dataflow_worker_sa_email}"
+}
+
+# ----------------------------------------------------------------------------
+# Watermark tracking — the permission Dataflow needs that no predefined
+# role grants narrowly enough.
+#
+# The pipeline reads Pub/Sub with a custom event-time attribute
+# (created_utc), because the replay compresses months into minutes and
+# publish time is therefore meaningless as a clock. To derive a watermark
+# from that attribute, Dataflow creates its own tracking subscription on
+# the source topic, named "<subscription>__df_internal<hash>", and deletes
+# it when the job drains.
+#
+# Creating it needs pubsub.subscriptions.create plus
+# pubsub.topics.attachSubscription. roles/pubsub.subscriber has neither.
+# The documented answer is roles/pubsub.editor at project scope, which
+# also grants publish and delete on every topic and subscription in the
+# project — far more than this needs. The custom role below is the same
+# capability with nothing extra.
+#
+# Without it the job runs, reports healthy, and consumes nothing: the only
+# symptom is a repeating warning that "Creating watermark tracking pubsub
+# subscription ... failed", while the backlog sits unchanged.
+# ----------------------------------------------------------------------------
+resource "google_project_iam_custom_role" "dataflow_watermark_tracking" {
+  project     = var.project_id
+  role_id     = "dataflowWatermarkTracking_${var.env}"
+  title       = "Dataflow watermark tracking (${var.env})"
+  description = "Lets the Dataflow worker SA manage the internal tracking subscription it needs to derive a watermark from a custom Pub/Sub timestamp attribute."
+
+  permissions = [
+    "pubsub.subscriptions.create",
+    "pubsub.subscriptions.delete",
+    "pubsub.subscriptions.get",
+    "pubsub.subscriptions.update",
+    "pubsub.topics.attachSubscription",
+  ]
+}
+
+resource "google_project_iam_member" "dataflow_worker_watermark_tracking" {
+  project = var.project_id
+  role    = google_project_iam_custom_role.dataflow_watermark_tracking.id
   member  = "serviceAccount:${var.dataflow_worker_sa_email}"
 }
