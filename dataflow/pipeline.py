@@ -46,6 +46,7 @@ from dataflow.transforms import (
     detect_language,
     parse_message,
     validate_record,
+    warm_up_language_detection,
 )
 
 logger = logging.getLogger("dataflow.pipeline")
@@ -106,7 +107,13 @@ class ClassifyBatch(beam.DoFn):
         self._classifier: SentimentClassifier | None = None
 
     def setup(self) -> None:
-        """Load the classifier once per worker process."""
+        """Load the classifier and the language profiles once per process.
+
+        The language profiles are warmed up here rather than on first use
+        so the load happens before several bundle threads start calling
+        the detector at once — see warm_up_language_detection.
+        """
+        warm_up_language_detection()
         self._classifier = load_classifier(self._model_name)
         logger.info(
             "Loaded classifier '%s' (model_version=%s).",
