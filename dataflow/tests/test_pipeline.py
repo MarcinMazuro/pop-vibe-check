@@ -41,9 +41,9 @@ VALID = {
 # parameters required for any pipeline built here. Supply placeholders:
 # these tests exercise DoFns, never the IOs that would use them.
 _TEST_ARGV = [
-    "--input_subscription=projects/test/subscriptions/test",
-    "--output_table=test:test.events_landing",
-    "--dlq_topic=projects/test/topics/test-dlq",
+    "--input_subscription=projects/pop-vibe-check/subscriptions/events-sub",
+    "--output_table=pop-vibe-check:analytics.events_landing",
+    "--dlq_topic=projects/pop-vibe-check/topics/events-dlq",
 ]
 
 
@@ -193,3 +193,104 @@ class TestClassifyBatchDoFn:
         with pytest.raises(Exception, match="Unknown NLP model"):
             with _pipeline() as p:
                 _ = p | beam.Create([[VALID]]) | beam.ParDo(ClassifyBatch("nope"))
+
+
+class TestFetchOutputSchema:
+    @pytest.mark.parametrize(
+        "table", ["no-colon", "project:dataset", "project:", ":dataset.table", ""]
+    )
+    def test_rejects_malformed_table_references(self, table):
+        from dataflow.pipeline import fetch_output_schema
+
+        with pytest.raises(ValueError, match="PROJECT:DATASET.TABLE"):
+            fetch_output_schema(table)
+
+
+class TestBuildPipeline:
+    """Graph construction.
+
+    The first real launch failed here, not at runtime: the Storage Write
+    API rejects a sink built without an explicit schema, and nothing in
+    the unit tests had ever assembled the whole graph. These tests build
+    it — the transforms are wired but never executed, so no endpoint is
+    touched — so that class of failure surfaces in CI instead of in a
+    queued Dataflow job.
+    """
+
+    def _options(self, extra=()):
+        from dataflow.options import SentimentOptions
+
+        return PipelineOptions([*_TEST_ARGV, *extra]).view_as(SentimentOptions)
+
+    def _schema(self):
+        from dataflow.transforms import EVENT_COLUMNS
+
+        return {
+            "fields": [
+                {"name": name, "type": "STRING", "mode": "NULLABLE"}
+                for name in EVENT_COLUMNS
+            ]
+        }
+
+    def test_constructs_with_the_storage_write_api(self, monkeypatch):
+        import dataflow.pipeline as mod
+
+        monkeypatch.setattr(mod, "fetch_output_schema", lambda _: self._schema())
+        # Built, never run: no `with` block, so no runner is invoked and
+        # no Pub/Sub or BigQuery endpoint is contacted.
+        mod.build_pipeline(
+            beam.Pipeline(options=PipelineOptions(_TEST_ARGV)), self._options()
+        )
+
+    def test_constructs_with_streaming_inserts(self, monkeypatch):
+        import dataflow.pipeline as mod
+
+        monkeypatch.setattr(mod, "fetch_output_schema", lambda _: self._schema())
+        mod.build_pipeline(
+            beam.Pipeline(options=PipelineOptions(_TEST_ARGV)),
+            self._options(["--bq_write_method=STREAMING_INSERTS"]),
+        )
+
+    def test_the_sink_receives_a_schema(self, monkeypatch):
+        # The regression guard proper: a sink built without a schema is
+        # what failed the first launch.
+        import dataflow.pipeline as mod
+
+        seen = {}
+        real_write = beam.io.WriteToBigQuery
+
+        def spy(*args, **kwargs):
+            seen.update(kwargs)
+            return real_write(*args, **kwargs)
+
+        monkeypatch.setattr(mod, "fetch_output_schema", lambda _: self._schema())
+        monkeypatch.setattr(beam.io, "WriteToBigQuery", spy)
+        mod.build_pipeline(
+            beam.Pipeline(options=PipelineOptions(_TEST_ARGV)),
+            self._options(["--bq_write_method=STORAGE_WRITE_API"]),
+        )
+
+        assert seen["schema"] == self._schema()
+        assert seen["use_at_least_once"] is True
+
+    def test_streaming_inserts_is_the_default(self, monkeypatch):
+        # Flipped after the Storage Write API turned out to need a Java
+        # expansion service the self-contained image does not carry.
+        import dataflow.pipeline as mod
+
+        seen = {}
+        real_write = beam.io.WriteToBigQuery
+
+        def spy(*args, **kwargs):
+            seen.update(kwargs)
+            return real_write(*args, **kwargs)
+
+        monkeypatch.setattr(mod, "fetch_output_schema", lambda _: self._schema())
+        monkeypatch.setattr(beam.io, "WriteToBigQuery", spy)
+        mod.build_pipeline(
+            beam.Pipeline(options=PipelineOptions(_TEST_ARGV)), self._options()
+        )
+
+        assert seen["method"] == "STREAMING_INSERTS"
+        assert "use_at_least_once" not in seen
+        assert seen["insert_retry_strategy"] == "RETRY_ON_TRANSIENT_ERROR"

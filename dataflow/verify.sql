@@ -9,7 +9,10 @@
 -- row_count and the same fingerprint.
 --
 -- SUM over per-row hashes is deliberate: it is order-independent, so the
--- fingerprint compares the row *set* without depending on scan order.
+-- fingerprint compares the row *set* without depending on scan order. The
+-- cast to NUMERIC is not cosmetic — FARM_FINGERPRINT returns a full-range
+-- INT64, so summing a few thousand of them overflows a 64-bit accumulator
+-- and the query fails outright.
 --
 -- Placeholders are substituted by dataflow/promote.sh from terraform
 -- output.
@@ -18,10 +21,12 @@ SELECT
   COUNT(DISTINCT id)                              AS distinct_ids,
   COUNTIF(sentiment_label IS NULL)                AS missing_sentiment,
   SUM(
-    FARM_FINGERPRINT(
-      TO_JSON_STRING(
-        (SELECT AS STRUCT e.* EXCEPT (model_version, processed_at))
-      )
+    CAST(
+      FARM_FINGERPRINT(
+        TO_JSON_STRING(
+          (SELECT AS STRUCT e.* EXCEPT (model_version, processed_at))
+        )
+      ) AS NUMERIC
     )
   )                                               AS fingerprint
 FROM `${EVENTS_TABLE}` AS e

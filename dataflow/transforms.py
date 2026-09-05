@@ -16,6 +16,7 @@ opinion because a model was unsure would silently bias the analysis.
 from __future__ import annotations
 
 import json
+import threading
 from datetime import UTC, datetime
 from typing import Any
 
@@ -24,15 +25,17 @@ from nlp.base import Sentiment
 try:  # pragma: no cover - exercised implicitly wherever langdetect exists.
     from langdetect import DetectorFactory, LangDetectException
     from langdetect import detect as _detect
-
-    # langdetect seeds its own RNG per process, so the same short text can
-    # get different answers in different workers. The project guarantees a
-    # replay is reproducible, and `language` is authoritative in the events
-    # table, so the seed is pinned here at import time.
-    DetectorFactory.seed = 0
+    from langdetect.detector_factory import init_factory as _init_factory
 except ImportError:  # pragma: no cover - keeps the module importable bare.
+    DetectorFactory = None
     _detect = None
+    _init_factory = None
     LangDetectException = Exception
+
+# Guards the one-time load of langdetect's language profiles. See
+# warm_up_language_detection below for why this is not optional.
+_LANGDETECT_LOCK = threading.Lock()
+_langdetect_ready = False
 
 # Columns of the events / events_landing tables, in schema order. The
 # pipeline writes exactly these keys; anything else in an inbound record
@@ -175,6 +178,42 @@ def validate_record(record: dict[str, Any]) -> dict[str, Any]:
     return normalised
 
 
+def warm_up_language_detection() -> None:
+    """Load langdetect's language profiles once, under a lock.
+
+    langdetect builds its detector factory lazily, and it publishes the
+    module global *before* the profiles finish loading::
+
+        if _factory is None:
+            _factory = DetectorFactory()
+            _factory.load_profile(PROFILES_DIRECTORY)
+
+    A second thread arriving in that window sees a non-None factory, skips
+    loading, and detects against whatever profiles are loaded so far —
+    alphabetically, so "af" and "da" win — or raises "Need to load
+    profiles" outright and the text ends up with no language at all.
+
+    Dataflow runs several bundle-processing threads per worker, so a cold
+    worker hits this on essentially every start. It is what broke the
+    first live run: two replays of identical data disagreed on the
+    language of dozens of short comments, labelling plain English text as
+    af, it or no on cold workers and en once they were warm. Because
+    `language` is authoritative in the events table, that alone made a
+    replay non-reproducible.
+
+    Serialising the first initialisation removes the race. Afterwards the
+    factory is read-only, so the detection path itself needs no lock and
+    the flag check costs an attribute read.
+    """
+    global _langdetect_ready
+    if _init_factory is None or _langdetect_ready:
+        return
+    with _LANGDETECT_LOCK:
+        if not _langdetect_ready:
+            _init_factory()
+            _langdetect_ready = True
+
+
 def detect_language(text: Any) -> str | None:
     """Detect the language of a text, returning ``None`` on failure.
 
@@ -191,6 +230,26 @@ def detect_language(text: Any) -> str | None:
     """
     if _detect is None or not isinstance(text, str) or not text.strip():
         return None
+
+    warm_up_language_detection()
+
+    # Seed on every call, not once at import.
+    #
+    # langdetect samples n-grams randomly and seeds a fresh RNG per
+    # detection from DetectorFactory.seed — a class attribute that
+    # defaults to None, meaning "seed from system entropy". Setting it at
+    # import time looks equivalent and is not: the first live run produced
+    # different languages for 68 short comments across two replays of
+    # identical data, because on the workers this module reached the
+    # detector without that import-time assignment having taken effect.
+    # Short text is exactly where the sampling matters — "Hell yeah!"
+    # drifts between en, id and tr unseeded.
+    #
+    # Since `language` is authoritative in the events table and the
+    # project guarantees a replay is reproducible, the seed cannot depend
+    # on how the code was loaded. Setting it here costs an attribute
+    # write and makes each call deterministic on its own.
+    DetectorFactory.seed = 0
     try:
         return str(_detect(text[:MAX_DETECT_CHARS]))
     except LangDetectException:

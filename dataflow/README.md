@@ -87,6 +87,23 @@ template was built from.
 gcloud builds submit --config dataflow/cloudbuild.yaml .
 ```
 
+**This does not work yet.** `gcloud builds submit` runs as the Compute
+Engine default service account, which holds no project roles, so the build
+fails on its own source bucket before starting. Until the `cloud_build/`
+Terraform module exists (or the build is pointed at
+`co-cloud-build-sa-dev` with `--service-account`), build and push by hand,
+which is how the collector and publisher images were deployed too:
+
+```bash
+SHA=$(git rev-parse HEAD)
+IMG=europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/sentiment-pipeline:$SHA
+docker build -f dataflow/Dockerfile -t "$IMG" .
+docker push "$IMG"
+gcloud dataflow flex-template build \
+  gs://co-dataflow-temp-dev/templates/sentiment-pipeline.json \
+  --image="$IMG" --sdk-language=PYTHON --metadata-file=dataflow/metadata.json
+```
+
 Produces the image tagged with the commit SHA and writes the template spec
 to `gs://co-dataflow-temp-dev/templates/sentiment-pipeline.json`, pinning
 that exact image.
@@ -161,6 +178,25 @@ itself when the SDK is absent and otherwise exercises both DoFns on the
 local runner. The Pub/Sub and BigQuery IOs are not covered by unit tests —
 they need real endpoints, and the first real launch is what exercises
 them.
+
+## If the job runs but nothing happens
+
+Two IAM gaps make the pipeline consume nothing while reporting healthy —
+the job reaches `JOB_STATE_RUNNING`, autoscales, and logs only warnings.
+**Watch the subscription backlog, not the job state.** Both are fixed in
+the `pubsub` module; the symptoms are recorded here because the failure
+mode gives no useful error:
+
+- `roles/pubsub.subscriber` grants `subscriptions.consume` but not
+  `subscriptions.get`, which Dataflow reads before consuming. Symptom:
+  "Querying the configuration of Pub/Sub subscription … failed".
+- Reading with a custom event-time attribute makes Dataflow create its own
+  watermark-tracking subscription on the source topic. Symptom: "Creating
+  watermark tracking pubsub subscription … failed".
+
+See [docs/phase-1-dataflow.md](../docs/phase-1-dataflow.md) for the full
+account of the first run, including the reproducibility bug that came
+from langdetect's behaviour under Dataflow's threading.
 
 ## Known gaps
 

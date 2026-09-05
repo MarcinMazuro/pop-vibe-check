@@ -1,0 +1,32 @@
+# Files excluded from the build context uploaded by `gcloud builds submit`.
+#
+# Without this, gcloud falls back to .gitignore, which works but is not
+# explicit about the big ones. A local .venv alone is close to a gigabyte
+# and would be uploaded on every build.
+.git/
+.gitignore
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Terraform working state — never part of a container build.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+# Agent-local tooling.
+.claude/
+CLAUDE.md
+
+# Editors and OS noise.
+.vscode/
+.idea/
+.DS_Store

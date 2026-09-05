@@ -1,0 +1,28 @@
+# Files kept out of the Docker build context.
+#
+# Every service image builds from the repository root (the shared
+# collectors.common and nlp packages live there), so the context is the
+# whole repo unless trimmed here.
+.git/
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+.claude/
+CLAUDE.md
+
+.vscode/
+.idea/
+.DS_Store

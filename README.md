@@ -2,7 +2,7 @@
 
 Streaming sentiment analysis around pop-culture releases, on GCP with an MLOps pipeline. Engineering thesis project at Gdańsk University of Technology, Department of Computer Systems Architecture.
 
-> **Status:** Phase 0 complete; Phase 1 stream simulation **live**. The YouTube collector has produced the first real dataset (4228 comments across 4 lifecycle events — see [docs/phase-0-youtube-first-collection.md](docs/phase-0-youtube-first-collection.md)), and the **replay publisher now streams it from BigQuery staging to Pub/Sub in chronological order with time compression** (see [docs/phase-1-publisher.md](docs/phase-1-publisher.md)). The Reddit collector is written but **Reddit API access was refused**, so Reddit is out of scope; the remaining Phase 1 work and its three-way split are planned in [docs/phase-1-plan.md](docs/phase-1-plan.md).
+> **Status:** Phase 0 complete; Phase 1 stream simulation **live**. The YouTube collector has produced the first real dataset (4228 comments across 4 lifecycle events — see [docs/phase-0-youtube-first-collection.md](docs/phase-0-youtube-first-collection.md)), the **replay publisher streams it from BigQuery staging to Pub/Sub in chronological order with time compression** (see [docs/phase-1-publisher.md](docs/phase-1-publisher.md)), and the **Dataflow pipeline classifies it into the `events` table** — the same replay run twice produces an identical set of rows (see [docs/phase-1-dataflow.md](docs/phase-1-dataflow.md)). The Reddit collector is written but **Reddit API access was refused**, so Reddit is out of scope; the remaining Phase 1 work and its three-way split are planned in [docs/phase-1-plan.md](docs/phase-1-plan.md).
 
 ---
 
@@ -99,7 +99,7 @@ Supervisor: mgr inż. Szymon Olewniczak.
 | Real values in secret containers | YouTube key + salt ✓ real; Reddit ✗ placeholders | Secret Manager |
 | Replay publisher: code, image, job, first replay to Pub/Sub | ✓ Done — 4228 records replayed in order ([details](docs/phase-1-publisher.md)) | [`publisher/`](publisher/) |
 | **Dataflow streaming infra (this PR)** — `dataflow/` module + worker SA, `events` / `events_landing` + promotion MERGE, Dataflow subscription + DLQ topic/sub, dataflow-temp bucket, inter-worker firewall, launch-parameter outputs | ✓ Applied | [`terraform/modules/dataflow/`](terraform/modules/dataflow/) + extensions across `bigquery/`, `pubsub/`, `iam/`, `network/`, `storage/` |
-| Dataflow Beam pipeline + Flex Template | ✓ Code done, not yet launched | [`dataflow/`](dataflow/) |
+| Dataflow Beam pipeline + Flex Template | ✓ **Live** — 4228 records classified end-to-end, reproducibility verified ([details](docs/phase-1-dataflow.md)) | [`dataflow/`](dataflow/) |
 | NLP stub classifier + registry seam | ✓ Done | [`nlp/`](nlp/) |
 | Real NLP model via MLflow | ✗ Phase 1 (remaining) | Not yet |
 | Cloud Build module (CI triggers) | ✗ Phase 1 (remaining) | Not yet |
@@ -150,15 +150,15 @@ After collectors produce raw JSONL reliably:
 7. Application: ✓ `publisher/`; ✓ `dataflow/` Beam pipeline + Flex Template; ✓ `nlp/` contract, stub and
    registry seam; remaining: a real model registered through MLflow
 
-**Where to pick up next.** The Beam pipeline is written and tested
-([`dataflow/`](dataflow/)): it consumes `co-events-dataflow-sub-dev`, detects
-language, classifies sentiment through the [`nlp/`](nlp/) registry, appends enriched
-rows to `events_landing`, and routes unparseable records to `co-events-dlq-topic-dev`.
-Promotion into `events` and the reproducibility fingerprint are in
-`dataflow/promote.sh`. What remains is **building the Flex Template image and running
-the first real job** — `terraform apply` deliberately never starts one, because a
-streaming Dataflow job bills continuously until drained. Run the publisher first so
-the topic has messages (`publisher/README.md`), then see
+**Where to pick up next.** The end-to-end path works: collectors → GCS → BigQuery
+staging → publisher → Pub/Sub → Dataflow → `events`, with the reproducibility
+guarantee demonstrated ([docs/phase-1-dataflow.md](docs/phase-1-dataflow.md)). The
+frontier is now the two tracks that run alongside it — **more data** and a **real NLP
+model** — planned in [docs/phase-1-plan.md](docs/phase-1-plan.md), plus the
+`cloud_build/` module, which Cloud Build currently needs before it can build anything.
+
+Note that `terraform apply` deliberately never starts a Dataflow job: streaming jobs
+bill continuously until drained. Use `dataflow/launch.sh`, and drain when done — see
 [`dataflow/README.md`](dataflow/README.md).
 
 The full plan for the rest of Phase 1 — this Dataflow work plus the two tracks that
