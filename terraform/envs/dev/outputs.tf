@@ -93,6 +93,11 @@ output "events_dlq_subscription_name" {
   value       = module.pubsub.dlq_subscription_name
 }
 
+output "raw_staging_table_id" {
+  description = "Short table id of the deduplicated staging table the publisher replays from (raw_staging). Used by the promotion coverage check to compare staged ids against landed ones."
+  value       = module.bigquery.raw_staging_table_id
+}
+
 output "events_landing_table_id" {
   description = "Short table id of the append-only Dataflow write target (events_landing)."
   value       = module.bigquery.events_landing_table_id

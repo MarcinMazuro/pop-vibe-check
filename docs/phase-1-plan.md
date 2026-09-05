@@ -151,6 +151,14 @@ an unmitigated limitation. That is the fallback, not the plan.
 The critical path. Infrastructure is applied and idle; only the
 application is missing. Four pull requests.
 
+> **Progress (2026-09-05).** A1 and A3 are implemented and A2's build
+> assets are written: `dataflow/` holds the pipeline, Flex Template
+> image, template spec metadata, Cloud Build config, launch script, and
+> the promotion/verification SQL; `nlp/` holds the classifier contract, a
+> deterministic stub, and the registry seam. What has *not* happened is
+> the part that costs money — no image has been pushed and no Dataflow
+> job has been launched, so `events` is still empty.
+
 ### A1 — Beam pipeline + NLP stub
 
 `dataflow/pipeline.py`:

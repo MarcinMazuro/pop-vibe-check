@@ -1,0 +1,11 @@
+# Flex Template runtime dependencies. Pinned for reproducible image builds.
+#
+# Everything the pipeline imports at runtime must be listed here and
+# installed at BUILD time: Dataflow workers launch with no public IPs, so
+# nothing can be fetched once the job is running.
+#
+# apache-beam is intentionally absent — it is already installed in the
+# Beam SDK base image this Dockerfile builds on, at exactly the version
+# the workers run. Re-pinning it here risks installing a second, mismatched
+# copy over the top.
+langdetect==1.0.9
