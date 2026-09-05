@@ -29,9 +29,9 @@
     {
       "name": "bq_write_method",
       "label": "BigQuery write method",
-      "helpText": "STORAGE_WRITE_API (default, cheaper) or STREAMING_INSERTS (fallback).",
+      "helpText": "STREAMING_INSERTS (default, pure Python) or STORAGE_WRITE_API (cheaper per byte but requires a JRE in the image and a Java worker harness).",
       "isOptional": true,
-      "regexes": ["^(STORAGE_WRITE_API|STREAMING_INSERTS)$"]
+      "regexes": ["^(STREAMING_INSERTS|STORAGE_WRITE_API)$"]
     },
     {
       "name": "timestamp_attribute",

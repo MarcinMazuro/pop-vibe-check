@@ -12,12 +12,23 @@ import argparse
 
 from apache_beam.options.pipeline_options import PipelineOptions
 
-# BigQuery write methods this pipeline accepts. STORAGE_WRITE_API is the
-# default: it is the cheaper of the two per byte, and its at-least-once
-# mode is a good fit here because the landing table is append-only by
-# design and the promotion MERGE already collapses duplicates by id.
-# STREAMING_INSERTS is kept as an escape hatch.
-BQ_WRITE_METHODS = ("STORAGE_WRITE_API", "STREAMING_INSERTS")
+# BigQuery write methods this pipeline accepts.
+#
+# STREAMING_INSERTS is the default, which reverses an earlier decision.
+# STORAGE_WRITE_API is cheaper per byte, but in the Python SDK it is a
+# cross-language transform: it needs a Java expansion service when the
+# graph is built and a Java SDK harness on the workers at runtime. The
+# first launch attempt died on exactly that ("Java must be installed on
+# this system"). Carrying a JRE in an image that must stay self-contained,
+# plus a second language runtime on every worker, is a real cost — and the
+# saving it buys is meaningless at this volume, where a whole replay is a
+# few megabytes. STREAMING_INSERTS is pure Python and needs neither.
+#
+# Either way the landing table is append-only and the promotion MERGE
+# collapses duplicates by id, so at-least-once delivery is correct.
+# STORAGE_WRITE_API stays selectable for anyone who adds the JRE and wants
+# the cheaper path at a larger volume.
+BQ_WRITE_METHODS = ("STREAMING_INSERTS", "STORAGE_WRITE_API")
 
 
 class SentimentOptions(PipelineOptions):
@@ -67,7 +78,7 @@ class SentimentOptions(PipelineOptions):
         )
         parser.add_argument(
             "--bq_write_method",
-            default="STORAGE_WRITE_API",
+            default="STREAMING_INSERTS",
             choices=BQ_WRITE_METHODS,
             help="BigQuery write method. See BQ_WRITE_METHODS for the trade-off.",
         )

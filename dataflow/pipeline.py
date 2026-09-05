@@ -217,6 +217,10 @@ def build_pipeline(pipeline: beam.Pipeline, options: SentimentOptions) -> None:
     # At-least-once is deliberate: the landing table is append-only and
     # the promotion MERGE collapses duplicates by id, so paying for
     # exactly-once here would buy a guarantee the design already provides.
+    #
+    # STORAGE_WRITE_API additionally requires Java — it is a cross-language
+    # transform in the Python SDK — which is why it is no longer the
+    # default. See BQ_WRITE_METHODS in dataflow/options.py.
     method_kwargs: dict[str, Any] = (
         {"use_at_least_once": True}
         if options.bq_write_method == "STORAGE_WRITE_API"

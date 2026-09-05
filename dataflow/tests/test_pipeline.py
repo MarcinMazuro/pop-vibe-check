@@ -257,17 +257,40 @@ class TestBuildPipeline:
         import dataflow.pipeline as mod
 
         seen = {}
-        real_write = mod.beam.io.WriteToBigQuery
+        real_write = beam.io.WriteToBigQuery
 
         def spy(*args, **kwargs):
             seen.update(kwargs)
             return real_write(*args, **kwargs)
 
         monkeypatch.setattr(mod, "fetch_output_schema", lambda _: self._schema())
-        monkeypatch.setattr(mod.beam.io, "WriteToBigQuery", spy)
+        monkeypatch.setattr(beam.io, "WriteToBigQuery", spy)
         mod.build_pipeline(
-            beam.Pipeline(options=PipelineOptions(_TEST_ARGV)), self._options()
+            beam.Pipeline(options=PipelineOptions(_TEST_ARGV)),
+            self._options(["--bq_write_method=STORAGE_WRITE_API"]),
         )
 
         assert seen["schema"] == self._schema()
         assert seen["use_at_least_once"] is True
+
+    def test_streaming_inserts_is_the_default(self, monkeypatch):
+        # Flipped after the Storage Write API turned out to need a Java
+        # expansion service the self-contained image does not carry.
+        import dataflow.pipeline as mod
+
+        seen = {}
+        real_write = beam.io.WriteToBigQuery
+
+        def spy(*args, **kwargs):
+            seen.update(kwargs)
+            return real_write(*args, **kwargs)
+
+        monkeypatch.setattr(mod, "fetch_output_schema", lambda _: self._schema())
+        monkeypatch.setattr(beam.io, "WriteToBigQuery", spy)
+        mod.build_pipeline(
+            beam.Pipeline(options=PipelineOptions(_TEST_ARGV)), self._options()
+        )
+
+        assert seen["method"] == "STREAMING_INSERTS"
+        assert "use_at_least_once" not in seen
+        assert seen["insert_retry_strategy"] == "RETRY_ON_TRANSIENT_ERROR"
