@@ -19,3 +19,7 @@ google-cloud-pubsub==2.39.0
 
 # Type stubs for static analysis.
 types-PyYAML==6.0.12.20241230
+
+# Beam pipeline: needed to import dataflow.pipeline and run its DoFn tests.
+# The dataflow/tests suite skips itself when this is absent.
+apache-beam[gcp]==2.76.0

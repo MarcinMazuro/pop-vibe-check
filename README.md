@@ -99,8 +99,10 @@ Supervisor: mgr inż. Szymon Olewniczak.
 | Real values in secret containers | YouTube key + salt ✓ real; Reddit ✗ placeholders | Secret Manager |
 | Replay publisher: code, image, job, first replay to Pub/Sub | ✓ Done — 4228 records replayed in order ([details](docs/phase-1-publisher.md)) | [`publisher/`](publisher/) |
 | **Dataflow streaming infra (this PR)** — `dataflow/` module + worker SA, `events` / `events_landing` + promotion MERGE, Dataflow subscription + DLQ topic/sub, dataflow-temp bucket, inter-worker firewall, launch-parameter outputs | ✓ Applied | [`terraform/modules/dataflow/`](terraform/modules/dataflow/) + extensions across `bigquery/`, `pubsub/`, `iam/`, `network/`, `storage/` |
-| Dataflow Beam pipeline (Flex Template) + Cloud Build module | ✗ Phase 1 (remaining) | Not yet |
-| NLP model | ✗ Phase 1 (stub first, real model via MLflow later) | Not yet |
+| Dataflow Beam pipeline + Flex Template | ✓ Code done, not yet launched | [`dataflow/`](dataflow/) |
+| NLP stub classifier + registry seam | ✓ Done | [`nlp/`](nlp/) |
+| Real NLP model via MLflow | ✗ Phase 1 (remaining) | Not yet |
+| Cloud Build module (CI triggers) | ✗ Phase 1 (remaining) | Not yet |
 
 The Dataflow infrastructure above is **applied and live** (branch `feat/tf-dataflow-infra`); nothing billable runs until PR 3 launches the pipeline explicitly. Applying it also added `roles/compute.securityAdmin` to the Terraform runner SA in `terraform/bootstrap/` — firewall rules are "security" resources that `compute.networkAdmin` alone can't create.
 
@@ -145,20 +147,19 @@ After collectors produce raw JSONL reliably:
 4. ✓ `dataflow/` module — **this PR** applied the infrastructure: worker `dataflow.worker` grant, launcher `dataflow.admin` + actAs grants, the dataflow-temp bucket, the inter-worker firewall rule, and the launch-parameter outputs PR 3 reads from `terraform output`. The Beam **Flex Template** (image + spec) and any Dataflow job resource are **PR 3** — `terraform apply` never starts a streaming job.
 5. ✓ `cloud_run_jobs/` extension — publisher job (BigQuery → Pub/Sub bridge with time compression), deployed and verified ([docs/phase-1-publisher.md](docs/phase-1-publisher.md))
 6. `cloud_build/` module — per-service triggers, workload-identity for runner SA impersonation (closes the bootstrap chicken-and-egg)
-7. Application: ✓ `publisher/`; remaining: `dataflow/` Beam pipeline, `nlp/stub/`, then `nlp/registry/` with MLflow
+7. Application: ✓ `publisher/`; ✓ `dataflow/` Beam pipeline + Flex Template; ✓ `nlp/` contract, stub and
+   registry seam; remaining: a real model registered through MLflow
 
-**Where to pick up next.** With this PR's infrastructure applied, the frontier is the
-**Beam Flex Template + NLP stub** (item 7): a pipeline that consumes
-`co-events-dataflow-sub-dev`, detects language, calls the NLP stub, writes enriched
-rows to `events_landing`, and routes unparseable records to `co-events-dlq-topic-dev`
-— followed by the promotion MERGE into `events` (documented in
-[`terraform/modules/bigquery/README.md`](terraform/modules/bigquery/README.md)).
-The launch reads its parameters from `terraform output` (see
-[`terraform/modules/dataflow/README.md`](terraform/modules/dataflow/README.md)).
-One hard constraint: workers run with no public IPs, so the Flex Template image must
-be **self-contained** — every dependency and any model file baked in at build time,
-nothing fetched from PyPI or a URL at runtime. Run the publisher first to see live
-ordered messages on the topic (`publisher/README.md`).
+**Where to pick up next.** The Beam pipeline is written and tested
+([`dataflow/`](dataflow/)): it consumes `co-events-dataflow-sub-dev`, detects
+language, classifies sentiment through the [`nlp/`](nlp/) registry, appends enriched
+rows to `events_landing`, and routes unparseable records to `co-events-dlq-topic-dev`.
+Promotion into `events` and the reproducibility fingerprint are in
+`dataflow/promote.sh`. What remains is **building the Flex Template image and running
+the first real job** — `terraform apply` deliberately never starts one, because a
+streaming Dataflow job bills continuously until drained. Run the publisher first so
+the topic has messages (`publisher/README.md`), then see
+[`dataflow/README.md`](dataflow/README.md).
 
 The full plan for the rest of Phase 1 — this Dataflow work plus the two tracks that
 run alongside it (data completeness, and the NLP model with MLflow) split across the
@@ -410,6 +411,8 @@ A and (B or C) can start in parallel; the other waits a day for A's common libra
 │       ├── pubsub/
 │       ├── secrets/
 │       └── storage/
+├── dataflow/                              # Beam pipeline + Flex Template (built, not yet launched)
+├── nlp/                                   # classifier contract, deterministic stub, registry seam
 ├── collectors/                            # implemented — shared lib + both collectors
 │   ├── common/                            # author hashing, GCS writer, retry, event loader
 │   ├── reddit/                            # written; out of scope (Reddit API access refused)
@@ -421,7 +424,7 @@ A and (B or C) can start in parallel; the other waits a day for A's common libra
 └── docs/                                  # phase write-ups (collectors, first collection, publisher)
 ```
 
-`terraform/modules/dataflow/` lands with this PR (IAM + launch parameters). Future directories that will appear in the rest of Phase 1: `dataflow/` (the Beam pipeline), `nlp/`, and `terraform/modules/cloud_build/`.
+`terraform/modules/dataflow/` holds the IAM and launch parameters; the Beam pipeline itself lives in `dataflow/` and the classifiers in `nlp/`. The remaining directory for Phase 1 is `terraform/modules/cloud_build/`.
 
 ## Getting set up
 

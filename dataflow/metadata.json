@@ -1,0 +1,50 @@
+{
+  "name": "pop-vibe-check sentiment pipeline",
+  "description": "Consumes replayed Reddit/YouTube/Steam records from Pub/Sub, detects language, classifies sentiment, and appends enriched rows to the BigQuery events_landing table. Unparseable records are routed to a dead-letter topic.",
+  "parameters": [
+    {
+      "name": "input_subscription",
+      "label": "Input Pub/Sub subscription",
+      "helpText": "Subscription to consume, as projects/<project>/subscriptions/<name>. Use the dataflow_input_subscription Terraform output.",
+      "regexes": ["^projects/[^/]+/subscriptions/[^/]+$"]
+    },
+    {
+      "name": "output_table",
+      "label": "BigQuery landing table",
+      "helpText": "Write target as PROJECT:DATASET.TABLE. Always the landing table — the events table is written only by the promotion MERGE. Use the dataflow_events_landing_table Terraform output.",
+      "regexes": ["^[^:]+:[^.]+\\.[^.]+$"]
+    },
+    {
+      "name": "dlq_topic",
+      "label": "Dead-letter topic",
+      "helpText": "Topic for records that cannot be turned into an events row, as projects/<project>/topics/<name>. Use the dataflow_dlq_topic Terraform output.",
+      "regexes": ["^projects/[^/]+/topics/[^/]+$"]
+    },
+    {
+      "name": "nlp_model",
+      "label": "NLP model name",
+      "helpText": "Classifier to load from the nlp registry. Defaults to the deterministic stub.",
+      "isOptional": true
+    },
+    {
+      "name": "bq_write_method",
+      "label": "BigQuery write method",
+      "helpText": "STORAGE_WRITE_API (default, cheaper) or STREAMING_INSERTS (fallback).",
+      "isOptional": true,
+      "regexes": ["^(STORAGE_WRITE_API|STREAMING_INSERTS)$"]
+    },
+    {
+      "name": "timestamp_attribute",
+      "label": "Event-time attribute",
+      "helpText": "Pub/Sub attribute carrying event time. Defaults to created_utc; pass an empty string to fall back to publish time.",
+      "isOptional": true
+    },
+    {
+      "name": "max_batch_size",
+      "label": "Classifier batch size",
+      "helpText": "Upper bound on records handed to the classifier at once. Defaults to 200.",
+      "isOptional": true,
+      "regexes": ["^[0-9]+$"]
+    }
+  ]
+}

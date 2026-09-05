@@ -5,12 +5,21 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pop-vibe-check-collectors"
 version = "0.1.0"
-description = "Reddit and YouTube collectors plus the replay publisher for the pop-vibe-check sentiment pipeline."
+description = "Collectors, replay publisher, Beam sentiment pipeline and NLP models for pop-vibe-check."
 requires-python = ">=3.12"
 readme = "README.md"
 
 [tool.setuptools]
-packages = ["collectors", "collectors.common", "collectors.reddit", "collectors.youtube", "publisher"]
+packages = [
+    "collectors",
+    "collectors.common",
+    "collectors.reddit",
+    "collectors.youtube",
+    "publisher",
+    "dataflow",
+    "nlp",
+    "nlp.stub",
+]
 
 # ---------------------------------------------------------------------------
 # Formatting
@@ -25,7 +34,7 @@ target-version = ["py312"]
 [tool.ruff]
 line-length = 88
 target-version = "py312"
-src = ["collectors", "publisher"]
+src = ["collectors", "publisher", "dataflow", "nlp"]
 
 [tool.ruff.lint]
 # E/W: pycodestyle (PEP 8), F: pyflakes, I: isort, D: pydocstyle (docstrings),
@@ -44,6 +53,8 @@ convention = "google"
 # Tests do not need full annotations or module/class docstrings.
 "collectors/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104"]
 "publisher/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104"]
+"dataflow/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104", "E402"]
+"nlp/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104"]
 
 # ---------------------------------------------------------------------------
 # Static typing
@@ -54,7 +65,7 @@ strict = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 ignore_missing_imports = true
-files = ["collectors", "publisher"]
+files = ["collectors", "publisher", "dataflow", "nlp"]
 
 [[tool.mypy.overrides]]
 # Tests use pytest fixtures and assert-style bodies; full annotations add noise.
@@ -69,9 +80,25 @@ disallow_untyped_defs = false
 disallow_incomplete_defs = false
 check_untyped_defs = true
 
+[[tool.mypy.overrides]]
+module = ["dataflow.tests.*", "nlp.tests.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+disable_error_code = ["no-untyped-call"]
+
+[[tool.mypy.overrides]]
+# Beam's Python SDK ships largely unannotated: DoFn.process, ParDo, Map,
+# PubsubMessage and the IO transforms are all untyped, so strict mode's
+# no-untyped-call and override checks fire on ordinary, correct pipeline
+# code. Narrowed to the two modules that touch the SDK — the pure record
+# logic in dataflow.transforms stays fully strict-checked.
+module = ["dataflow.pipeline", "dataflow.options"]
+disable_error_code = ["no-untyped-call", "override"]
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 [tool.pytest.ini_options]
-testpaths = ["collectors/tests", "publisher/tests"]
+testpaths = ["collectors/tests", "publisher/tests", "dataflow/tests", "nlp/tests"]
 pythonpath = ["."]
