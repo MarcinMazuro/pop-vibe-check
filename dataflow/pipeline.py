@@ -34,6 +34,7 @@ from typing import Any
 import apache_beam as beam
 from apache_beam.io.gcp.pubsub import PubsubMessage
 from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions
+from google.cloud import bigquery
 from nlp.base import SentimentClassifier
 from nlp.registry import load_classifier
 
@@ -137,6 +138,47 @@ class ClassifyBatch(beam.DoFn):
             )
 
 
+def fetch_output_schema(table: str) -> dict[str, Any]:
+    """Read the write target's schema from BigQuery when the graph is built.
+
+    The Storage Write API needs an explicit schema — unlike streaming
+    inserts, it will not read one off the destination table. The obvious
+    fix is to declare the events schema again in Python, but that would
+    put a second copy of it next to the Terraform-managed one it has to
+    match exactly, free to drift the moment either side changes. Reading
+    it from the table keeps Terraform the single source of truth.
+
+    This runs in the launcher, once per launch, not on the workers.
+
+    Args:
+        table: Write target as ``PROJECT:DATASET.TABLE``.
+
+    Returns:
+        The table schema in the dict form BigQueryIO accepts.
+
+    Raises:
+        ValueError: If ``table`` is not in ``PROJECT:DATASET.TABLE`` form.
+    """
+    project, _, dataset_table = table.partition(":")
+    dataset, _, table_id = dataset_table.partition(".")
+    if not (project and dataset and table_id):
+        raise ValueError(f"output_table must be PROJECT:DATASET.TABLE, got '{table}'.")
+
+    client = bigquery.Client(project=project)
+    schema = client.get_table(f"{project}.{dataset}.{table_id}").schema
+    logger.info("Read %d columns from %s.", len(schema), table)
+    return {
+        "fields": [
+            {
+                "name": field.name,
+                "type": field.field_type,
+                "mode": field.mode or "NULLABLE",
+            }
+            for field in schema
+        ]
+    }
+
+
 def build_pipeline(pipeline: beam.Pipeline, options: SentimentOptions) -> None:
     """Wire the pipeline's transforms onto ``pipeline``.
 
@@ -183,6 +225,7 @@ def build_pipeline(pipeline: beam.Pipeline, options: SentimentOptions) -> None:
 
     write_result = rows | "WriteToBigQuery" >> beam.io.WriteToBigQuery(
         table=options.output_table,
+        schema=fetch_output_schema(options.output_table),
         method=options.bq_write_method,
         # The table is owned by Terraform. CREATE_NEVER means a typo in
         # --output_table fails the job instead of quietly creating a
