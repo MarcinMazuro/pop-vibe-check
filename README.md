@@ -2,7 +2,7 @@
 
 Streaming sentiment analysis around pop-culture releases, on GCP with an MLOps pipeline. Engineering thesis project at Gdańsk University of Technology, Department of Computer Systems Architecture.
 
-> **Status:** Phase 0 complete; Phase 1 stream simulation **live**. The YouTube collector has produced the first real dataset (4228 comments across 4 lifecycle events — see [docs/phase-0-youtube-first-collection.md](docs/phase-0-youtube-first-collection.md)), and the **replay publisher now streams it from BigQuery staging to Pub/Sub in chronological order with time compression** (see [docs/phase-1-publisher.md](docs/phase-1-publisher.md)). The Reddit collector is written but blocked on Reddit API credentials.
+> **Status:** Phase 0 complete; Phase 1 stream simulation **live**. The YouTube collector has produced the first real dataset (4228 comments across 4 lifecycle events — see [docs/phase-0-youtube-first-collection.md](docs/phase-0-youtube-first-collection.md)), and the **replay publisher now streams it from BigQuery staging to Pub/Sub in chronological order with time compression** (see [docs/phase-1-publisher.md](docs/phase-1-publisher.md)). The Reddit collector is written but **Reddit API access was refused**, so Reddit is out of scope; the remaining Phase 1 work and its three-way split are planned in [docs/phase-1-plan.md](docs/phase-1-plan.md).
 
 ---
 
@@ -95,7 +95,7 @@ Supervisor: mgr inż. Szymon Olewniczak.
 | Pub/Sub (events topic + ordered verify subscription; Dataflow subscription + DLQ added this PR — see Dataflow infra row) | ✓ Applied | [`terraform/modules/pubsub/`](terraform/modules/pubsub/) |
 | Collector application code (common, reddit, youtube + tests) | ✓ Done | [`collectors/`](collectors/) |
 | YouTube collector: image, job wiring, first collection runs | ✓ Done — 4228 records ([details](docs/phase-0-youtube-first-collection.md)) | GCS `co-raw-archive-dev/youtube/` |
-| Reddit collector: image + smoke test | ✗ **Blocked on Reddit API credentials** | `collectors/reddit/` |
+| Reddit collector: image + smoke test | ✗ **Out of scope — Reddit API access refused.** Code kept; see [docs/phase-1-plan.md](docs/phase-1-plan.md) | `collectors/reddit/` |
 | Real values in secret containers | YouTube key + salt ✓ real; Reddit ✗ placeholders | Secret Manager |
 | Replay publisher: code, image, job, first replay to Pub/Sub | ✓ Done — 4228 records replayed in order ([details](docs/phase-1-publisher.md)) | [`publisher/`](publisher/) |
 | **Dataflow streaming infra (this PR)** — `dataflow/` module + worker SA, `events` / `events_landing` + promotion MERGE, Dataflow subscription + DLQ topic/sub, dataflow-temp bucket, inter-worker firewall, launch-parameter outputs | ✓ Applied | [`terraform/modules/dataflow/`](terraform/modules/dataflow/) + extensions across `bigquery/`, `pubsub/`, `iam/`, `network/`, `storage/` |
@@ -158,9 +158,12 @@ The launch reads its parameters from `terraform output` (see
 One hard constraint: workers run with no public IPs, so the Flex Template image must
 be **self-contained** — every dependency and any model file baked in at build time,
 nothing fetched from PyPI or a URL at runtime. Run the publisher first to see live
-ordered messages on the topic (`publisher/README.md`). In parallel and fully
-independent of the Dataflow work, the **Reddit collector** can be unblocked the moment
-its API credentials exist (see [§ Real credentials](#real-credentials)).
+ordered messages on the topic (`publisher/README.md`).
+
+The full plan for the rest of Phase 1 — this Dataflow work plus the two tracks that
+run alongside it (data completeness, and the NLP model with MLflow) split across the
+three contributors — is in **[docs/phase-1-plan.md](docs/phase-1-plan.md)**. It also
+records why Reddit is out of scope and what replaces it as a second source.
 
 ### Phase 2 — Polish, prod env, defence
 - `terraform/envs/prod/` composition (same shape as dev)
@@ -409,7 +412,7 @@ A and (B or C) can start in parallel; the other waits a day for A's common libra
 │       └── storage/
 ├── collectors/                            # implemented — shared lib + both collectors
 │   ├── common/                            # author hashing, GCS writer, retry, event loader
-│   ├── reddit/                            # written; blocked on Reddit API credentials
+│   ├── reddit/                            # written; out of scope (Reddit API access refused)
 │   ├── youtube/                           # live — collecting real data in GCP
 │   ├── config/                            # events.yaml + youtube_videos.yaml (API-verified ids)
 │   └── tests/
