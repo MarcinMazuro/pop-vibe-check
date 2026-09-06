@@ -1,0 +1,14 @@
+# Workbench-only. Do NOT add these to dataflow/requirements.txt — the
+# Flex Template image must not ship torch or Hugging Face.
+#
+# Pin loosely enough that a Workbench image with a preinstalled CUDA
+# torch still satisfies the range; tighten after the first successful run.
+torch>=2.2,<3
+transformers>=4.40,<5
+datasets>=2.19,<4
+accelerate>=0.30,<2
+scikit-learn>=1.4,<2
+mlflow>=2.14,<4
+numpy>=1.26,<3
+google-cloud-storage==2.19.0
+google-cloud-aiplatform==1.158.0
