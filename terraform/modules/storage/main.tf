@@ -55,11 +55,11 @@ resource "google_storage_bucket" "raw_archive" {
 # ----------------------------------------------------------------------------
 # Cloud Build / Terraform artifacts bucket.
 #
-# Stores Cloud Build logs and generic build artifacts. Disposable by
-# design — hard-deletes everything older than 30 days so the bucket cannot
-# grow unbounded between defenses. (Dataflow's runtime staging/temp and
-# the Flex Template spec live in the dedicated dataflow-temp bucket below,
-# not here — those have different retention needs.)
+# Stores Cloud Build logs, generic build artifacts, and (under nlp/) the
+# DistilBERT dataset cache and MLflow tracking files. Build-log prefixes
+# are disposable and hard-deleted after 30 days; nlp/ is retained so a
+# stopped Workbench instance can resume without re-downloading Hugging
+# Face datasets.
 # ----------------------------------------------------------------------------
 resource "google_storage_bucket" "tf_artifacts" {
   name     = "${var.name_prefix}-tf-artifacts-${var.env}"
@@ -69,9 +69,13 @@ resource "google_storage_bucket" "tf_artifacts" {
   public_access_prevention    = "enforced"
   force_destroy               = var.force_destroy_artifacts
 
+  # Prefix-scoped on purpose: a bucket-wide 30-day delete would wipe
+  # nlp/datasets/ and nlp/mlruns/ between training sessions. Only the
+  # churn prefixes are swept; nlp/ (and anything else) survives.
   lifecycle_rule {
     condition {
-      age = 30
+      age            = 30
+      matches_prefix = ["logs/", "cloudbuild/"]
     }
     action {
       type = "Delete"
@@ -79,6 +83,19 @@ resource "google_storage_bucket" "tf_artifacts" {
   }
 
   labels = var.labels
+}
+
+# ----------------------------------------------------------------------------
+# ML trainer access to the artifacts bucket.
+#
+# objectAdmin (not just objectViewer) because Workbench writes the
+# dataset cache, MLflow runs, and exported weights under nlp/. Scoped to
+# this one bucket, co-located with it per the project's IAM convention.
+# ----------------------------------------------------------------------------
+resource "google_storage_bucket_iam_member" "ml_trainer_object_admin" {
+  bucket = google_storage_bucket.tf_artifacts.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${var.ml_trainer_sa_email}"
 }
 
 # ----------------------------------------------------------------------------

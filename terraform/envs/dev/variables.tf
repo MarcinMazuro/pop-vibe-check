@@ -36,3 +36,35 @@ variable "notification_emails" {
   type        = list(string)
   default     = []
 }
+
+variable "enable_nlp_workbench" {
+  description = <<-EOT
+    Create the Vertex AI Workbench T4 instance used to fine-tune DistilBERT.
+    Default false: a routine apply must not start a GPU. See
+    terraform/modules/vertex_nlp/README.md for the start/stop runbook.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "nlp_workbench_desired_state" {
+  description = "ACTIVE or STOPPED for the Workbench VM. Ignored while enable_nlp_workbench is false. Default STOPPED."
+  type        = string
+  default     = "STOPPED"
+}
+
+variable "nlp_workbench_owners" {
+  description = "Emails granted Workbench instance owner (Jupyter access). Set these before flipping enable_nlp_workbench."
+  type        = list(string)
+  default     = []
+}
+
+variable "enable_nlp_endpoint" {
+  description = <<-EOT
+    Create the (empty) Vertex AI Endpoint. Default false. Deploying a
+    model replica onto it is a runbook step, not this flag — see
+    nlp/endpoint/register.py.
+  EOT
+  type        = bool
+  default     = false
+}

@@ -28,6 +28,11 @@ variable "dataflow_worker_sa_email" {
   type        = string
 }
 
+variable "ml_trainer_sa_email" {
+  description = "Email of the ML trainer SA — granted roles/storage.objectAdmin on the artifacts bucket so Workbench can cache Hugging Face datasets and write MLflow runs under the nlp/ prefix."
+  type        = string
+}
+
 variable "raw_archive_autodelete_days" {
   description = <<-EOT
     If greater than 0, raw archive objects are hard-deleted after this many

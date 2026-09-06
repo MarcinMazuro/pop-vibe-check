@@ -55,6 +55,7 @@ variable "enabled_services" {
   EOT
   type        = set(string)
   default = [
+    "aiplatform.googleapis.com",
     "artifactregistry.googleapis.com",
     "bigquery.googleapis.com",
     "billingbudgets.googleapis.com",
@@ -65,6 +66,7 @@ variable "enabled_services" {
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
     "monitoring.googleapis.com",
+    "notebooks.googleapis.com",
     "pubsub.googleapis.com",
     "run.googleapis.com",
     "secretmanager.googleapis.com",

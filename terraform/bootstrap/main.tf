@@ -110,6 +110,19 @@ locals {
     # granting access to enable destructive admin-only ops.
     "roles/monitoring.editor",
 
+    # Vertex AI — Model Registry, Endpoints, and the Workbench instance
+    # used to fine-tune DistilBERT. Admin (not user) because this SA
+    # creates and destroys those resources, not merely predicts.
+    "roles/aiplatform.admin",
+
+    # Vertex AI Workbench (notebooks.googleapis.com) — google_workbench_instance
+    # is a GCE VM with a Jupyter service; notebooks.admin covers the
+    # Workbench control plane. instanceAdmin.v1 is required as well
+    # because the instance is a Compute Engine VM (disks, accelerators,
+    # start/stop) and notebooks.admin does not include compute.instances.*.
+    "roles/notebooks.admin",
+    "roles/compute.instanceAdmin.v1",
+
     # Service Usage — google_project_service resources enable APIs
     # idempotently; without this, a re-apply on a fresh project would fail
     # even after APIs were turned on by hand during bootstrap.
