@@ -86,6 +86,9 @@ class TestRegistry:
     def test_stub_is_registered(self):
         assert "stub" in available_models()
 
+    def test_vertex_is_registered(self):
+        assert "vertex" in available_models()
+
     def test_loads_the_stub_by_default(self):
         assert isinstance(load_classifier(), StubClassifier)
 

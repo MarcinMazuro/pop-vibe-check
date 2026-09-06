@@ -4,10 +4,11 @@ The pipeline names the model it wants (``--nlp_model``) and this module
 hands back an instance. Adding a real model means registering it here; the
 pipeline is untouched.
 
-Model weights must be present locally by the time this runs. Dataflow
-workers launch without public IPs, so a classifier that downloads weights
-on construction will hang until the worker times out — bake the weights
-into the image instead.
+Dataflow workers launch without public IPs. They reach Google APIs
+(``aiplatform.googleapis.com``, Pub/Sub, BigQuery, GCS) over Private
+Google Access. They still cannot reach PyPI or Hugging Face Hub — do not
+download weights in a factory. The ``vertex`` client calls a Vertex
+Endpoint; the ``stub`` client is local and needs no network.
 """
 
 from __future__ import annotations
@@ -15,12 +16,14 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from nlp.base import SentimentClassifier
+from nlp.endpoint.classifier import VertexEndpointClassifier
 from nlp.stub.classifier import StubClassifier
 
-# Name -> factory. MLflow-backed models register alongside "stub" once the
-# registry integration exists.
+# Name -> factory. Factories take no arguments; VertexEndpointClassifier
+# reads VERTEX_ENDPOINT_ID / VERTEX_PROJECT / VERTEX_LOCATION from env.
 _FACTORIES: dict[str, Callable[[], SentimentClassifier]] = {
     "stub": StubClassifier,
+    "vertex": VertexEndpointClassifier,
 }
 
 

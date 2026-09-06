@@ -30,6 +30,44 @@ from typing import Protocol, runtime_checkable
 # implementation maps its own label space onto exactly these.
 LABELS: tuple[str, str, str] = ("pos", "neu", "neg")
 
+# DistilBERT head ids used at train and serve time. Order matches
+# tweet_eval sentiment (0=neg, 1=neu, 2=pos) so a checkpoint served
+# without our id2label still maps LABEL_0/1/2 in a documented way.
+LABEL2ID: dict[str, int] = {"neg": 0, "neu": 1, "pos": 2}
+ID2LABEL: dict[int, str] = {index: label for label, index in LABEL2ID.items()}
+
+# Serving-time aliases from Hugging Face / Vertex prediction payloads.
+_HF_LABEL_TO_SENTIMENT: dict[str, str] = {
+    "label_0": "neg",
+    "label_1": "neu",
+    "label_2": "pos",
+    "negative": "neg",
+    "neutral": "neu",
+    "positive": "pos",
+    "neg": "neg",
+    "neu": "neu",
+    "pos": "pos",
+}
+
+
+def normalize_predicted_label(raw: str) -> str:
+    """Map a serving-time label string onto ``pos`` / ``neu`` / ``neg``.
+
+    Args:
+        raw: Label from a Vertex prediction (``pos``, ``LABEL_2``,
+            ``positive``, …).
+
+    Returns:
+        A pipeline label.
+
+    Raises:
+        ValueError: If ``raw`` cannot be mapped.
+    """
+    key = raw.strip().lower()
+    if key in _HF_LABEL_TO_SENTIMENT:
+        return _HF_LABEL_TO_SENTIMENT[key]
+    raise ValueError(f"Cannot map predicted label '{raw}' onto {LABELS}.")
+
 
 @dataclass(frozen=True)
 class Sentiment:
@@ -39,9 +77,10 @@ class Sentiment:
         label: One of :data:`LABELS`.
         score: Model confidence in ``label``, in the closed range 0..1.
         model_version: Identifier of the model that produced this result,
-            written to the ``model_version`` column. For registry-backed
-            models this is the MLflow model version; the stub uses its own
-            versioned identifier so rows remain traceable to a producer.
+            written to the ``model_version`` column. The stub uses a
+            versioned identifier (``stub/1``); the Vertex client writes
+            ``vertex/<deployed-model-id>`` so rows stay traceable to a
+            Model Registry version.
     """
 
     label: str
@@ -66,9 +105,12 @@ class SentimentClassifier(Protocol):
     """Interface every sentiment model implements.
 
     Implementations are constructed once per worker process (in a Beam
-    ``DoFn.setup``) and then called many times, so loading weights belongs
-    in ``__init__`` and must not require network access — Dataflow workers
-    run without public IPs and cannot reach a model host at runtime.
+    ``DoFn.setup``) and then called many times. Loading **weights** belongs
+    in ``__init__`` and must not require the public internet — Dataflow
+    workers have no public IPs and cannot reach PyPI or Hugging Face Hub.
+    Calling a Google API (Vertex ``Endpoint.predict`` over Private Google
+    Access) is allowed; baking a DistilBERT checkpoint into the Flex
+    Template image is not how this project serves the model.
     """
 
     @property

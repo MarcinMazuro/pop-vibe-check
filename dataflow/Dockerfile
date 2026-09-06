@@ -16,11 +16,13 @@
 # The alternative — a launcher-only image plus the stock SDK image — would
 # make the workers install this pipeline's dependencies at start-up. That
 # cannot work here: workers run with --disable-public-ips and reach Google
-# services over Private Google Access only, so there is no PyPI to install
+# APIs over Private Google Access only, so there is no PyPI to install
 # from. A worker that tries hangs until it times out.
 #
-# The same constraint applies to model weights. When a real model replaces
-# the stub, its files are COPYed in below, never downloaded at runtime.
+# The same constraint applies to Hugging Face / torch weights. DistilBERT
+# is served from a Vertex AI Endpoint (aiplatform.googleapis.com is a
+# Google API, so PGA is enough). This image does not COPY checkpoints and
+# does not install torch.
 # ---------------------------------------------------------------------------
 
 FROM gcr.io/dataflow-templates-base/python312-template-launcher-base:20260901-rc00 AS launcher
@@ -39,13 +41,14 @@ COPY --from=launcher /opt/google/dataflow/python_template_launcher \
 COPY dataflow/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# The pipeline and the models it loads. Only these two packages — the
-# collectors and the publisher are not part of this image.
+# The pipeline and the models it loads. Training notebooks, eval gold, and
+# MLflow helpers are not part of the runtime image — workers only need
+# the classifier contract, the stub, and the Vertex Endpoint client.
 COPY dataflow/ ./dataflow/
 COPY nlp/ ./nlp/
 
-# Tests are for CI, not for the runtime image.
-RUN rm -rf ./dataflow/tests ./nlp/tests
+# Tests and Workbench-only trees are for CI / training, not the harness.
+RUN rm -rf ./dataflow/tests ./nlp/tests ./nlp/notebooks ./nlp/training ./nlp/eval ./nlp/tracking
 
 ENV FLEX_TEMPLATE_PYTHON_PY_FILE="${WORKDIR}/dataflow/pipeline.py" \
     PYTHONPATH="${WORKDIR}" \

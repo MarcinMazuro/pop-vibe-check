@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from datetime import UTC, datetime
 from typing import Any
 
@@ -92,27 +93,50 @@ class ClassifyBatch(beam.DoFn):
     """Detect language and classify sentiment for a batch of records.
 
     The classifier is constructed once per worker process in
-    :meth:`setup`, never per element: a real model loads weights, and
-    doing that per record would dominate the run. Construction must not
-    touch the network — workers have no public IPs.
+    :meth:`setup`, never per element. The stub is local. The Vertex
+    client calls ``Endpoint.predict`` over Private Google Access —
+    Google APIs are reachable, PyPI and Hugging Face Hub are not.
     """
 
-    def __init__(self, model_name: str) -> None:
-        """Record which classifier to load.
+    def __init__(
+        self,
+        model_name: str,
+        vertex_endpoint_id: str = "",
+        vertex_project: str = "",
+        vertex_location: str = "",
+    ) -> None:
+        """Record which classifier to load and the Vertex env to inject.
 
         Args:
             model_name: Name resolved through the nlp registry.
+            vertex_endpoint_id: Copied into ``VERTEX_ENDPOINT_ID`` before
+                constructing a ``vertex`` classifier. Empty for the stub.
+            vertex_project: Copied into ``VERTEX_PROJECT``.
+            vertex_location: Copied into ``VERTEX_LOCATION``.
         """
         self._model_name = model_name
+        self._vertex_endpoint_id = vertex_endpoint_id
+        self._vertex_project = vertex_project
+        self._vertex_location = vertex_location
         self._classifier: SentimentClassifier | None = None
 
     def setup(self) -> None:
         """Load the classifier and the language profiles once per process.
 
+        Flex Template ``--parameters`` become pipeline options, not worker
+        environment variables, so Vertex config is copied into ``os.environ``
+        here before the zero-argument registry factory runs.
+
         The language profiles are warmed up here rather than on first use
         so the load happens before several bundle threads start calling
         the detector at once — see warm_up_language_detection.
         """
+        if self._vertex_endpoint_id:
+            os.environ["VERTEX_ENDPOINT_ID"] = self._vertex_endpoint_id
+        if self._vertex_project:
+            os.environ["VERTEX_PROJECT"] = self._vertex_project
+        if self._vertex_location:
+            os.environ["VERTEX_LOCATION"] = self._vertex_location
         warm_up_language_detection()
         self._classifier = load_classifier(self._model_name)
         logger.info(
@@ -218,7 +242,15 @@ def build_pipeline(pipeline: beam.Pipeline, options: SentimentOptions) -> None:
         parsed.records
         | "BatchRecords"
         >> beam.BatchElements(min_batch_size=1, max_batch_size=options.max_batch_size)
-        | "Classify" >> beam.ParDo(ClassifyBatch(options.nlp_model))
+        | "Classify"
+        >> beam.ParDo(
+            ClassifyBatch(
+                options.nlp_model,
+                vertex_endpoint_id=options.vertex_endpoint_id or "",
+                vertex_project=options.vertex_project or "",
+                vertex_location=options.vertex_location or "europe-central2",
+            )
+        )
     )
 
     # At-least-once is deliberate: the landing table is append-only and
@@ -314,11 +346,13 @@ def run(argv: list[str] | None = None) -> None:
     options = pipeline_options.view_as(SentimentOptions)
 
     logger.info(
-        "Starting pipeline: subscription=%s table=%s dlq=%s model=%s method=%s",
+        "Starting pipeline: subscription=%s table=%s dlq=%s model=%s "
+        "vertex_endpoint=%s method=%s",
         options.input_subscription,
         options.output_table,
         options.dlq_topic,
         options.nlp_model,
+        options.vertex_endpoint_id or "-",
         options.bq_write_method,
     )
 

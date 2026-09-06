@@ -16,6 +16,12 @@
 #
 # Usage:
 #   dataflow/launch.sh [--yes] [--model NAME] [--env-dir DIR]
+#
+# --model vertex also needs a live Endpoint. VERTEX_ENDPOINT_ID /
+# VERTEX_PROJECT / VERTEX_LOCATION are taken from the environment or
+# from terraform output (vertex_endpoint_id, vertex_project_id,
+# vertex_location). The stub is still the default so a first e2e replay
+# does not require a GPU.
 
 set -euo pipefail
 
@@ -59,6 +65,28 @@ DLQ_TOPIC="$(tf_output dataflow_dlq_topic)"
 TEMPLATE_SPEC="${SPEC_DIR}/sentiment-pipeline.json"
 JOB_NAME="co-sentiment-$(date -u +%Y%m%d-%H%M%S)"
 
+VERTEX_ENDPOINT_ID="${VERTEX_ENDPOINT_ID:-}"
+VERTEX_PROJECT="${VERTEX_PROJECT:-}"
+VERTEX_LOCATION="${VERTEX_LOCATION:-europe-central2}"
+
+if [[ "${NLP_MODEL}" == "vertex" ]]; then
+  if [[ -z "${VERTEX_ENDPOINT_ID}" ]]; then
+    VERTEX_ENDPOINT_ID="$(tf_output vertex_endpoint_id || true)"
+  fi
+  if [[ -z "${VERTEX_PROJECT}" ]]; then
+    VERTEX_PROJECT="$(tf_output vertex_project_id || true)"
+  fi
+  if [[ "${VERTEX_LOCATION}" == "europe-central2" ]]; then
+    VERTEX_LOCATION="$(tf_output vertex_location || true)"
+    VERTEX_LOCATION="${VERTEX_LOCATION:-europe-central2}"
+  fi
+  if [[ -z "${VERTEX_ENDPOINT_ID}" || -z "${VERTEX_PROJECT}" ]]; then
+    echo "Model 'vertex' needs VERTEX_ENDPOINT_ID and VERTEX_PROJECT." >&2
+    echo "Enable the Endpoint (terraform -var=enable_nlp_endpoint=true) or export the env vars." >&2
+    exit 1
+  fi
+fi
+
 # The image the workers run. Read back out of the template spec so the
 # harness is byte-identical to the launcher — the whole point of building
 # one image for both roles.
@@ -78,6 +106,7 @@ About to launch a STREAMING Dataflow job. It bills until drained.
   write target  ${OUTPUT_TABLE}
   dead letters  ${DLQ_TOPIC}
   model         ${NLP_MODEL}
+  vertex ep     ${VERTEX_ENDPOINT_ID:--}
 
 SUMMARY
 
@@ -105,6 +134,9 @@ gcloud dataflow flex-template run "${JOB_NAME}" \
   --parameters="output_table=${OUTPUT_TABLE}" \
   --parameters="dlq_topic=${DLQ_TOPIC}" \
   --parameters="nlp_model=${NLP_MODEL}" \
+  --parameters="vertex_endpoint_id=${VERTEX_ENDPOINT_ID}" \
+  --parameters="vertex_project=${VERTEX_PROJECT}" \
+  --parameters="vertex_location=${VERTEX_LOCATION}" \
   --parameters="sdk_container_image=${SDK_IMAGE}"
 
 cat <<NEXT

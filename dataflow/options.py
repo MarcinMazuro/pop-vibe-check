@@ -73,8 +73,31 @@ class SentimentOptions(PipelineOptions):
             default="stub",
             help=(
                 "Name of the classifier to load from the nlp registry. "
-                "Defaults to the deterministic stub."
+                "Defaults to the deterministic stub. Use 'vertex' for "
+                "the DistilBERT Endpoint client."
             ),
+        )
+        parser.add_argument(
+            "--vertex_endpoint_id",
+            default="",
+            help=(
+                "Vertex AI Endpoint resource name or id. Copied into "
+                "VERTEX_ENDPOINT_ID on the worker before the classifier "
+                "is constructed. Required when --nlp_model=vertex."
+            ),
+        )
+        parser.add_argument(
+            "--vertex_project",
+            default="",
+            help=(
+                "GCP project of the Vertex Endpoint. Copied into "
+                "VERTEX_PROJECT on the worker."
+            ),
+        )
+        parser.add_argument(
+            "--vertex_location",
+            default="europe-central2",
+            help="Vertex region. Copied into VERTEX_LOCATION on the worker.",
         )
         parser.add_argument(
             "--bq_write_method",
