@@ -11,6 +11,7 @@ Provisions the BigQuery dataset and its four tables: `raw_landing` / `raw_stagin
 - **`events`** — the analytical source of truth (CLAUDE.md §9): one row per `id`, DAY-partitioned on `created_utc`, clustered by `(source, event_tag)`. Written **only** by the MERGE, never by the pipeline directly. Single denormalised table — the dashboard layer does no joins.
 - Publisher IAM: dataset-level `roles/bigquery.dataEditor` plus project-level `roles/bigquery.jobUser` for the publisher SA (jobUser is only grantable at project scope; kept here because it exists solely for this dataset's load/replay jobs).
 - Dataflow worker IAM: the same `dataEditor` (dataset) + `jobUser` (project) pair for the Dataflow worker SA, so the pipeline can write `events_landing`.
+- ML trainer IAM: dataset-level `roles/bigquery.dataViewer` plus project-level `roles/bigquery.jobUser` so Vertex AI Workbench can SELECT from `raw_staging` / `events` when building the own-domain fine-tune split. Read-only on purpose — the trainer must not write analytical tables.
 
 ### Schema: one source, two tables
 
@@ -31,6 +32,7 @@ Note: BigQuery dataset names require underscores rather than hyphens (GCP rule).
 | `labels` | map(string) | yes | — | Labels applied to the dataset |
 | `publisher_sa_email` | string | yes | — | Publisher SA granted dataEditor on the dataset and jobUser on the project |
 | `dataflow_worker_sa_email` | string | yes | — | Dataflow worker SA granted dataEditor on the dataset and jobUser on the project, so the streaming pipeline can write `events_landing` |
+| `ml_trainer_sa_email` | string | yes | — | ML trainer SA granted dataViewer on the dataset and jobUser on the project (Workbench gold / own-domain reads) |
 | `delete_contents_on_destroy` | bool | no | `false` | One-off escape hatch for `terraform destroy` when the dataset still has tables. See "Tearing down" below. |
 
 ## Outputs

@@ -23,6 +23,11 @@ output "dataflow_worker_sa_email" {
   value       = google_service_account.workload["dataflow-worker"].email
 }
 
+output "ml_trainer_sa_email" {
+  description = "Email of the ML trainer SA — attached to Vertex AI Workbench and used to upload models to Vertex AI Model Registry."
+  value       = google_service_account.workload["ml-trainer"].email
+}
+
 output "service_accounts" {
   description = "Map of workload short name → SA email. Convenient for iterating in downstream modules (e.g. for_each over collector SAs when granting bucket access)."
   value = {

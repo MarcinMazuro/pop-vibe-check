@@ -19,6 +19,10 @@ packages = [
     "dataflow",
     "nlp",
     "nlp.stub",
+    "nlp.endpoint",
+    "nlp.training",
+    "nlp.tracking",
+    "nlp.eval",
 ]
 
 # ---------------------------------------------------------------------------
@@ -54,7 +58,7 @@ convention = "google"
 "collectors/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104"]
 "publisher/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104"]
 "dataflow/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104", "E402"]
-"nlp/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104"]
+"nlp/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104", "D107"]
 
 # ---------------------------------------------------------------------------
 # Static typing
@@ -94,7 +98,7 @@ disable_error_code = ["no-untyped-call"]
 # code. Narrowed to the two modules that touch the SDK — the pure record
 # logic in dataflow.transforms stays fully strict-checked.
 module = ["dataflow.pipeline", "dataflow.options"]
-disable_error_code = ["no-untyped-call", "override"]
+disable_error_code = ["no-untyped-call", "override", "misc"]
 
 # ---------------------------------------------------------------------------
 # Tests

@@ -2,10 +2,18 @@
 #
 # Everything the pipeline imports at runtime must be listed here and
 # installed at BUILD time: Dataflow workers launch with no public IPs, so
-# nothing can be fetched once the job is running.
+# nothing can be fetched from PyPI or Hugging Face Hub once the job is
+# running. Google APIs (Vertex AI, Pub/Sub, BigQuery, GCS) are reached
+# over Private Google Access — that is why google-cloud-aiplatform is
+# here and torch / model weights are not.
 #
 # apache-beam is intentionally absent — it is already installed in the
 # Beam SDK base image this Dockerfile builds on, at exactly the version
 # the workers run. Re-pinning it here risks installing a second, mismatched
 # copy over the top.
+#
+# google-cloud-aiplatform is pinned to the last 1.x line. 2.x is a
+# breaking SDK; Endpoint.predict is stable on 1.158.
 langdetect==1.0.9
+google-cloud-aiplatform==1.158.0
+tenacity==9.0.0

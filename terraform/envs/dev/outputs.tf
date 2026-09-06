@@ -172,3 +172,37 @@ output "dataflow_events_table" {
   description = "BigQuery analytical table (PROJECT:DATASET.TABLE). Promotion MERGE target, not a Dataflow write target."
   value       = module.dataflow.events_table
 }
+
+# --- Vertex NLP (gated Workbench + Endpoint) --------------------------------
+# Launch: dataflow/launch.sh --model vertex reads vertex_endpoint_id.
+# Both resources default to count = 0; empty strings here mean "not created".
+
+output "ml_trainer_sa_email" {
+  description = "Email of the ML trainer SA attached to Vertex AI Workbench."
+  value       = module.iam.ml_trainer_sa_email
+}
+
+output "nlp_workbench_name" {
+  description = "Short Workbench instance name, empty while enable_nlp_workbench is false."
+  value       = module.vertex_nlp.workbench_name
+}
+
+output "nlp_workbench_zone" {
+  description = "Zone the Workbench instance is (or would be) created in (T4: europe-central2-b or -c)."
+  value       = module.vertex_nlp.workbench_zone
+}
+
+output "vertex_location" {
+  description = "Vertex AI region for the Endpoint and Model Registry. Launch env: VERTEX_LOCATION."
+  value       = module.vertex_nlp.location
+}
+
+output "vertex_endpoint_id" {
+  description = "Fully-qualified Endpoint resource name, empty while enable_nlp_endpoint is false. Launch env: VERTEX_ENDPOINT_ID."
+  value       = module.vertex_nlp.endpoint_resource_name
+}
+
+output "vertex_project_id" {
+  description = "GCP project the Vertex Endpoint lives in. Launch env: VERTEX_PROJECT."
+  value       = var.project_id
+}

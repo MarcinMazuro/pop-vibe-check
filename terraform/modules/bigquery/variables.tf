@@ -42,6 +42,11 @@ variable "dataflow_worker_sa_email" {
   type        = string
 }
 
+variable "ml_trainer_sa_email" {
+  description = "Email of the ML trainer SA — granted dataViewer on the dataset and jobUser on the project so Workbench can read raw_staging (and events, once promoted) when building the own-domain fine-tune split."
+  type        = string
+}
+
 variable "delete_contents_on_destroy" {
   description = <<-EOT
     Escape hatch for destroying the dataset when it still contains tables.

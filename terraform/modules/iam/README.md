@@ -6,13 +6,14 @@ bindings live alongside the resources they pertain to (bucket IAM in
 
 ## What this creates
 
-Five service accounts, all named `${name_prefix}-{workload}-sa-${env}`:
+Six service accounts, all named `${name_prefix}-{workload}-sa-${env}`:
 
 - **`{name_prefix}-collector-reddit-sa-{env}`** — runs the Reddit collector Cloud Run Job.
 - **`{name_prefix}-collector-youtube-sa-{env}`** — runs the YouTube collector Cloud Run Job.
 - **`{name_prefix}-publisher-sa-{env}`** — runs the replay publisher Cloud Run Job (GCS → BigQuery load, chronological Pub/Sub replay).
 - **`{name_prefix}-cloud-build-sa-{env}`** — executes Cloud Build triggers for this env (terraform, collector image builds, publisher image builds, Dataflow Flex Template uploads).
-- **`{name_prefix}-dataflow-worker-sa-{env}`** — runtime identity for the Dataflow streaming pipeline workers (consumes the events subscription, runs the NLP model, writes `events_landing`). Its resource grants — `dataflow.worker`, `pubsub.subscriber`, `bigquery.dataEditor`, `storage.objectAdmin` on the temp bucket, Artifact Registry reader — live in the `dataflow/`, `pubsub/`, `bigquery/`, `storage/`, and `artifact_registry/` modules respectively.
+- **`{name_prefix}-dataflow-worker-sa-{env}`** — runtime identity for the Dataflow streaming pipeline workers (consumes the events subscription, runs the NLP model, writes `events_landing`). Its resource grants — `dataflow.worker`, `pubsub.subscriber`, `bigquery.dataEditor`, `storage.objectAdmin` on the temp bucket, Artifact Registry reader, Vertex AI predict — live in the `dataflow/`, `pubsub/`, `bigquery/`, `storage/`, `artifact_registry/`, and `vertex_nlp/` modules respectively.
+- **`{name_prefix}-ml-trainer-sa-{env}`** — attached to the Vertex AI Workbench instance (gated). Reads the analytics dataset, writes NLP caches / MLflow runs under `nlp/` on the artifacts bucket, pushes serving images to Artifact Registry, and uploads Vertex model versions. Resource grants live in `storage/`, `bigquery/`, `artifact_registry/`, and `vertex_nlp/`.
 
 ## Inputs
 
@@ -31,6 +32,7 @@ Five service accounts, all named `${name_prefix}-{workload}-sa-${env}`:
 | `publisher_sa_email` | Email of the replay publisher SA |
 | `cloud_build_sa_email` | Email of the Cloud Build runner SA |
 | `dataflow_worker_sa_email` | Email of the Dataflow worker SA |
+| `ml_trainer_sa_email` | Email of the ML trainer / Workbench SA |
 | `service_accounts` | Map of workload short name → SA email |
 | `service_account_ids` | Map of workload short name → fully-qualified SA resource ID |
 

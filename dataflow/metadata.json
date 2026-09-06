@@ -23,7 +23,25 @@
     {
       "name": "nlp_model",
       "label": "NLP model name",
-      "helpText": "Classifier to load from the nlp registry. Defaults to the deterministic stub.",
+      "helpText": "Classifier to load from the nlp registry. Defaults to the deterministic stub. Use vertex for the DistilBERT Endpoint client.",
+      "isOptional": true
+    },
+    {
+      "name": "vertex_endpoint_id",
+      "label": "Vertex Endpoint id",
+      "helpText": "Vertex AI Endpoint resource name or id. Required when nlp_model=vertex. Use the vertex_endpoint_id Terraform output. Copied into VERTEX_ENDPOINT_ID on the worker.",
+      "isOptional": true
+    },
+    {
+      "name": "vertex_project",
+      "label": "Vertex project",
+      "helpText": "GCP project of the Vertex Endpoint. Copied into VERTEX_PROJECT on the worker.",
+      "isOptional": true
+    },
+    {
+      "name": "vertex_location",
+      "label": "Vertex location",
+      "helpText": "Vertex region, default europe-central2. Copied into VERTEX_LOCATION on the worker.",
       "isOptional": true
     },
     {

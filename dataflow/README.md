@@ -69,12 +69,13 @@ contract a real model must honour.
 
 ## The image must be self-contained
 
-Workers launch with `--disable-public-ips` and reach Google services over
-Private Google Access only. **There is no PyPI at runtime.** Every
-dependency is installed at build time, and when a real model replaces the
-stub its weights are `COPY`ed into the image — never downloaded on
-start-up. A worker that tries to fetch something hangs until it times out,
-which presents as a job that starts and then does nothing.
+Workers launch with `--disable-public-ips` and reach Google APIs over
+Private Google Access only. **There is no PyPI or Hugging Face Hub at
+runtime.** Every pip dependency is installed at build time.
+`google-cloud-aiplatform` is in the image so workers can call a Vertex
+Endpoint; DistilBERT **weights are not** `COPY`ed in. A worker that
+tries to fetch something from the public internet hangs until it times
+out, which presents as a job that starts and then does nothing.
 
 This is also why the Dockerfile builds one image that serves as both the
 Flex Template launcher and the Beam SDK worker harness: the launch passes
@@ -117,7 +118,15 @@ Have the publisher put messages on the topic first (see
 dataflow/launch.sh                  # asks for confirmation
 dataflow/launch.sh --yes            # skips it
 dataflow/launch.sh --model stub     # pick a registered classifier
+dataflow/launch.sh --model vertex   # DistilBERT via Vertex Endpoint
 ```
+
+`--model vertex` reads `VERTEX_ENDPOINT_ID` / `VERTEX_PROJECT` /
+`VERTEX_LOCATION` from the environment, or from terraform outputs
+`vertex_endpoint_id`, `vertex_project_id`, `vertex_location`. The
+Endpoint must already exist and have a deployed replica — see
+`nlp/README.md`. The stub stays the default so a first e2e replay does
+not need a GPU.
 
 Every infrastructure value — region, worker SA, subnetwork, temp and
 staging locations, subscription, table, DLQ topic — is read from

@@ -27,6 +27,10 @@ module "storage" {
   # writes). The binding lives in the storage module, next to the bucket.
   dataflow_worker_sa_email = module.iam.dataflow_worker_sa_email
 
+  # Trainer SA writes dataset caches / MLflow runs under nlp/ on the
+  # artifacts bucket. The binding lives next to the bucket.
+  ml_trainer_sa_email = module.iam.ml_trainer_sa_email
+
   # Raw archive grows indefinitely in dev; flip to a positive number
   # before a tear-down if you want Terraform to clean up the bucket
   # contents on the next apply.
@@ -64,6 +68,9 @@ module "artifact_registry" {
 
   writer_sa_emails = [
     module.iam.cloud_build_sa_email,
+    # Literal: module.iam.ml_trainer_sa_email is computed and would make
+    # this for_each set unplannable. Account id is deterministic.
+    "${var.name_prefix}-ml-trainer-sa-${local.env}@${var.project_id}.iam.gserviceaccount.com",
   ]
 
   reader_sa_emails = [
@@ -112,6 +119,7 @@ module "bigquery" {
 
   publisher_sa_email       = module.iam.publisher_sa_email
   dataflow_worker_sa_email = module.iam.dataflow_worker_sa_email
+  ml_trainer_sa_email      = module.iam.ml_trainer_sa_email
 }
 
 module "pubsub" {
@@ -188,4 +196,29 @@ module "cloud_run_jobs" {
   #   reddit_image_uri = "${module.artifact_registry.repository_url}/reddit-collector:<sha>"
   youtube_image_uri   = "europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/youtube-collector:729b1fdc5d8250915d0a59fa68d2408489b0a1f4"
   publisher_image_uri = "europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/publisher:2e209f7c654dca317b49a4afeb4d2b402193846e"
+}
+
+# Vertex AI Workbench + Endpoint for DistilBERT. Both gates default OFF
+# (count = 0) so a routine apply does not start a GPU — the same shape
+# reddit_image_uri uses to keep the Reddit job on a placeholder. Flip
+# enable_nlp_workbench / enable_nlp_endpoint via -var for a training or
+# serving session; see terraform/modules/vertex_nlp/README.md.
+module "vertex_nlp" {
+  source = "../../modules/vertex_nlp"
+
+  project_id  = var.project_id
+  name_prefix = var.name_prefix
+  env         = local.env
+  region      = var.region
+  labels      = local.labels
+
+  trainer_sa_email         = module.iam.ml_trainer_sa_email
+  dataflow_worker_sa_email = module.iam.dataflow_worker_sa_email
+  network_id               = module.network.network_id
+  subnet_id                = module.network.subnet_id
+
+  enable_workbench        = var.enable_nlp_workbench
+  workbench_desired_state = var.nlp_workbench_desired_state
+  workbench_owners        = var.nlp_workbench_owners
+  enable_endpoint         = var.enable_nlp_endpoint
 }
