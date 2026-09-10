@@ -8,8 +8,11 @@ project_id = "your-gcp-project-id"
 # workspace / state) when analysing another release, e.g. "w4".
 # name_prefix = "co"
 
-# Required by the budgets module. Same billing account passed to
-# terraform/bootstrap. Find with: gcloud billing accounts list
+# Required by the budgets module. MUST be the billing account the GCP
+# project is linked to (`gcloud billing projects describe <project_id>`),
+# not merely an account you can list — otherwise the budget sees $0
+# spend and alerts never fire. Same value is passed to terraform/bootstrap
+# so the runner SA gets roles/billing.costsManager on that account.
 billing_account_id = "XXXXXX-YYYYYY-ZZZZZZ"
 
 # Monthly spend cap for THIS env in the billing account's default

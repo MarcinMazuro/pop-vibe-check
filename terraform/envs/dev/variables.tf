@@ -22,7 +22,7 @@ variable "name_prefix" {
 }
 
 variable "billing_account_id" {
-  description = "Billing account ID ('XXXXXX-YYYYYY-ZZZZZZ') the budget module hangs off. Same value passed to terraform/bootstrap; duplicated here so envs/dev is self-contained."
+  description = "Billing account ID ('XXXXXX-YYYYYY-ZZZZZZ') the budget module hangs off. Must be the account the project is linked to (`gcloud billing projects describe`); a mismatch makes the budget see $0 spend. Same value is passed to terraform/bootstrap so the runner SA can manage budgets on that account."
   type        = string
 }
 
