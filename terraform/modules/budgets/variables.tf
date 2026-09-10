@@ -19,7 +19,7 @@ variable "env" {
 }
 
 variable "billing_account_id" {
-  description = "Billing account ID in the form 'XXXXXX-YYYYYY-ZZZZZZ' that the budget hangs off."
+  description = "Billing account ID in the form 'XXXXXX-YYYYYY-ZZZZZZ' that the budget hangs off. Must be the account the project is linked to, or the budget sees $0 spend."
   type        = string
 
   validation {

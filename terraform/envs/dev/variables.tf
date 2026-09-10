@@ -22,7 +22,7 @@ variable "name_prefix" {
 }
 
 variable "billing_account_id" {
-  description = "Billing account ID ('XXXXXX-YYYYYY-ZZZZZZ') the budget module hangs off. Same value passed to terraform/bootstrap; duplicated here so envs/dev is self-contained."
+  description = "Billing account ID ('XXXXXX-YYYYYY-ZZZZZZ') the budget module hangs off. Must be the account the project is linked to (`gcloud billing projects describe`); a mismatch makes the budget see $0 spend. Same value is passed to terraform/bootstrap so the runner SA can manage budgets on that account."
   type        = string
 }
 
@@ -39,8 +39,9 @@ variable "notification_emails" {
 
 variable "enable_nlp_workbench" {
   description = <<-EOT
-    Create the Vertex AI Workbench T4 instance used to fine-tune DistilBERT.
-    Default false: a routine apply must not start a GPU. See
+    Create the Vertex AI Workbench instance used to fine-tune DistilBERT.
+    Default false: a routine apply must not start a training VM. CPU-only
+    unless nlp_workbench_accelerator_count is set. See
     terraform/modules/vertex_nlp/README.md for the start/stop runbook.
   EOT
   type        = bool
@@ -57,6 +58,30 @@ variable "nlp_workbench_owners" {
   description = "Emails granted Workbench instance owner (Jupyter access). Set these before flipping enable_nlp_workbench."
   type        = list(string)
   default     = []
+}
+
+variable "nlp_workbench_machine_type" {
+  description = "GCE machine type for Workbench. Default e2-standard-4 (CPU). Use e2-standard-8 if training OOMs."
+  type        = string
+  default     = "e2-standard-4"
+}
+
+variable "nlp_workbench_accelerator_type" {
+  description = "Guest accelerator type. Empty with count 0 (CPU-only). NVIDIA_TESLA_T4 only when count is 1."
+  type        = string
+  default     = ""
+}
+
+variable "nlp_workbench_accelerator_count" {
+  description = "Guest accelerator count. Default 0 (no NVIDIA). Do not set to 1 on free-tier billing."
+  type        = number
+  default     = 0
+}
+
+variable "nlp_workbench_idle_timeout_seconds" {
+  description = "Workbench idle shutdown in seconds. 0 disables auto-stop (default). Enabled range 600–86400; 10800 is 3 hours."
+  type        = number
+  default     = 0
 }
 
 variable "enable_nlp_endpoint" {

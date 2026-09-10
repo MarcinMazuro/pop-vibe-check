@@ -60,4 +60,11 @@ resource "google_billing_budget" "monthly" {
     ]
     disable_default_iam_recipients = true
   }
+
+  # billing_account is ForceNew. Create the replacement first so a failed
+  # apply against a different billing account cannot leave the env with
+  # no budget at all.
+  lifecycle {
+    create_before_destroy = true
+  }
 }

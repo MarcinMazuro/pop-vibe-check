@@ -1,8 +1,9 @@
 # modules/vertex_nlp
 
-Vertex AI pieces for DistilBERT sentiment: a gated T4 Workbench instance
-for fine-tuning, a gated serving Endpoint, and the IAM that lets the ML
-trainer upload models and the Dataflow worker call `predict`.
+Vertex AI pieces for DistilBERT sentiment: a gated Workbench instance
+for fine-tuning (CPU-only by default), a gated serving Endpoint, and the
+IAM that lets the ML trainer upload models and the Dataflow worker call
+`predict`.
 
 This is the Agent Platform stack from the thesis (Workbench / Model
 Registry / Endpoint). Console labels say Vertex AI; the APIs are
@@ -21,13 +22,20 @@ never start a GPU:
 
 | Resource | Gate | Default |
 |---|---|---|
-| `google_workbench_instance` (`n1-standard-8` + `NVIDIA_TESLA_T4` × 1 in `europe-central2-b`) | `enable_workbench` | `false` |
+| `google_workbench_instance` (`e2-standard-4`, **no** `accelerator_configs`, `europe-central2-b`) | `enable_workbench` | `false` |
+| `google_compute_firewall` IAP SSH (`35.235.240.0/20` → TCP 22, tag `workbench`) | `enable_workbench` | `false` |
 | `google_vertex_ai_endpoint` (empty; no deployed replica) | `enable_endpoint` | `false` |
 
+`workbench_accelerator_count` defaults to `0`, so `accelerator_configs`
+is omitted and a plan cannot mention NVIDIA / T4. GPU training is opt-in
+(`count=1` + `NVIDIA_TESLA_T4` + typically `n1-standard-8`) and is blocked
+on free-tier billing.
+
 Even with `enable_workbench=true`, `workbench_desired_state` defaults to
-`STOPPED`, so creating the VM does not burn T4 hours until an operator
-sets `ACTIVE` (or starts it in the console). Idle shutdown is 3 hours
-(`idle-timeout-seconds`).
+`STOPPED`, so creating the VM does not burn hours until an operator
+sets `ACTIVE` (or starts it in the console). Idle shutdown defaults to
+**off** (`workbench_idle_timeout_seconds = 0`); set `10800` to restore
+the 3-hour auto-stop.
 
 **Terraform does not store model versions.** Uploading DistilBERT to
 Vertex AI Model Registry and deploying a replica onto the Endpoint are
@@ -37,11 +45,11 @@ serving — the same accident this module's gates exist to prevent.
 
 ## Cost runbook
 
-Workbench T4 and an Endpoint T4 replica are the second cost line after
-streaming Dataflow. The intended session is:
+Workbench (CPU, or T4 if opted in) and an Endpoint replica are the
+second cost line after streaming Dataflow. The intended session is:
 
-1. Set `enable_workbench=true` (and `workbench_owners`) → apply → start the instance (`desired_state=ACTIVE` or console Start).
-2. Train on Workbench (see `nlp/README.md`). Stop the instance when the run finishes — do not leave T4 idle. Idle shutdown is a backstop, not a plan.
+1. Set `enable_workbench=true` (and `workbench_owners`) → apply → start the instance (`desired_state=ACTIVE` or console Start). Default machine is `e2-standard-4` with **no** GPU.
+2. Train on Workbench (see `nlp/README.md`). Stop the instance when the run finishes — do not leave it idle. Idle shutdown is off by default; it is not a substitute for a manual STOP.
 3. `python -m nlp.endpoint.register upload …` → Model Registry.
 4. Set `enable_endpoint=true` → apply (creates the empty Endpoint).
 5. `python -m nlp.endpoint.register deploy …` → one replica, T4 or CPU, `min_replica_count=1`.
@@ -65,10 +73,12 @@ Do **not** `terraform apply` with these gates on as part of a routine infra chan
 | `dataflow_worker_sa_email` | string | yes | — | Dataflow worker SA (predict) |
 | `network_id` | string | yes | — | VPC id for Workbench |
 | `subnet_id` | string | yes | — | Subnet id for Workbench (PGA, no public IP) |
-| `enable_workbench` | bool | no | `false` | Create the T4 Workbench instance |
-| `workbench_zone` | string | no | `europe-central2-b` | Must be `-b` or `-c` (T4 is not in `-a`) |
-| `workbench_machine_type` | string | no | `n1-standard-8` | GCE machine type |
-| `workbench_idle_timeout_seconds` | number | no | `10800` | Idle shutdown |
+| `enable_workbench` | bool | no | `false` | Create the Workbench instance |
+| `workbench_zone` | string | no | `europe-central2-b` | Must be `-b` or `-c` |
+| `workbench_machine_type` | string | no | `e2-standard-4` | GCE machine type (CPU). `e2-standard-8` if RAM is tight |
+| `workbench_accelerator_type` | string | no | `""` | Empty when count is 0. `NVIDIA_TESLA_T4` only when count is 1 |
+| `workbench_accelerator_count` | number | no | `0` | `0` omits `accelerator_configs` (CPU-only) |
+| `workbench_idle_timeout_seconds` | number | no | `0` | Idle shutdown; `0` omits the key (disabled). Enabled: 600–86400 |
 | `workbench_desired_state` | string | no | `STOPPED` | `ACTIVE` or `STOPPED` |
 | `workbench_owners` | list(string) | no | `[]` | Emails that can open Jupyter |
 | `enable_endpoint` | bool | no | `false` | Create the empty Endpoint |
@@ -94,6 +104,30 @@ and Artifact Registry. There is still no path to PyPI or Hugging Face Hub
 from a Dataflow worker — training downloads happen on Workbench (which
 operators start with console access) or from a pre-cached
 `gs://…/nlp/datasets/` prefix.
+
+### SSH over IAP
+
+The custom-mode VPC has no default allow-ssh. With `enable_workbench=true`
+this module adds `{name_prefix}-allow-workbench-iap-ssh-{env}`: ingress
+from `35.235.240.0/20` (IAP TCP forwarding) to TCP 22, target tag
+`workbench`. Jupyter still works through the Vertex console proxy.
+
+From a laptop with `gcloud` (replace the project if needed):
+
+```bash
+gcloud workbench instances ssh co-nlp-workbench-dev \
+  --project=pop-vibe-check \
+  --location=europe-central2-b
+
+# equivalent, if the GCE VM keeps the same name:
+gcloud compute ssh jupyter@co-nlp-workbench-dev \
+  --project=pop-vibe-check \
+  --zone=europe-central2-b \
+  --tunnel-through-iap
+```
+
+The caller needs `roles/iap.tunnelResourceAccessor` (or equivalent) on the
+project or instance. Do not add a public IP or Cloud NAT to reach this VM.
 
 ## Related grants (other modules)
 

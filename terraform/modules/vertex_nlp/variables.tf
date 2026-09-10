@@ -50,11 +50,12 @@ variable "subnet_id" {
 
 variable "enable_workbench" {
   description = <<-EOT
-    Create the T4 Workbench instance. Default false so `terraform apply`
-    never starts a GPU. Flip to true for a training session, then stop
+    Create the Workbench instance. Default false so `terraform apply`
+    never starts a training VM. Flip to true for a session, then stop
     the instance (or set enable_workbench back to false) when finished.
     Even when true, workbench_desired_state defaults to STOPPED so the
-    VM exists without burning GPU hours until an operator starts it.
+    VM exists without burning hours until an operator starts it.
+    Default machine is CPU-only; GPU is opt-in via workbench_accelerator_*.
   EOT
   type        = bool
   default     = false
@@ -62,32 +63,69 @@ variable "enable_workbench" {
 
 variable "workbench_zone" {
   description = <<-EOT
-    Zone for the Workbench VM. NVIDIA T4 is available in europe-central2-b
-    and europe-central2-c, not in europe-central2-a. Default -b.
+    Zone for the Workbench VM. Default europe-central2-b. Restricted to
+    -b/-c so a later GPU opt-in (T4 is not in -a) does not require a
+    recreate into another zone.
   EOT
   type        = string
   default     = "europe-central2-b"
 
   validation {
     condition     = can(regex("^europe-central2-[bc]$", var.workbench_zone))
-    error_message = "workbench_zone must be europe-central2-b or europe-central2-c (T4 is not in -a)."
+    error_message = "workbench_zone must be europe-central2-b or europe-central2-c."
   }
 }
 
 variable "workbench_machine_type" {
-  description = "GCE machine type for Workbench. n1-standard-8 is the documented pairing with a single T4."
+  description = "GCE machine type for Workbench. Default e2-standard-4 (CPU). Use e2-standard-8 if DistilBERT OOMs; n1-standard-8 only when pairing with a T4."
   type        = string
-  default     = "n1-standard-8"
+  default     = "e2-standard-4"
+}
+
+variable "workbench_accelerator_type" {
+  description = <<-EOT
+    Guest accelerator type when workbench_accelerator_count > 0 (e.g.
+    NVIDIA_TESLA_T4). Must stay empty when count is 0 so plan shows no GPU.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "workbench_accelerator_count" {
+  description = <<-EOT
+    Guest accelerator count. Default 0 omits accelerator_configs (CPU-only).
+    Set to 1 with workbench_accelerator_type=NVIDIA_TESLA_T4 for GPU
+    training — blocked on free-tier billing accounts.
+  EOT
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.workbench_accelerator_count >= 0
+    error_message = "workbench_accelerator_count must be >= 0."
+  }
 }
 
 variable "workbench_idle_timeout_seconds" {
-  description = "Idle shutdown for the Workbench VM, in seconds. 10800 = 3 hours. The instance stops itself if Jupyter is unused; GPU billing stops with it."
+  description = <<-EOT
+    Idle shutdown in seconds. 0 omits the metadata key and disables auto-stop
+    (GCP rejects the value 0; empty/absent is the documented off switch).
+    Enabled values must be 600–86400 (10 min–24 h). 10800 is 3 hours.
+  EOT
   type        = number
-  default     = 10800
+  default     = 0
+
+  validation {
+    condition = (
+      var.workbench_idle_timeout_seconds == 0 ||
+      (var.workbench_idle_timeout_seconds >= 600 && var.workbench_idle_timeout_seconds <= 86400)
+    )
+    error_message = "workbench_idle_timeout_seconds must be 0 (disabled) or 600–86400."
+  }
 }
 
 variable "workbench_desired_state" {
-  description = "ACTIVE or STOPPED. Default STOPPED so enabling the resource still does not start the GPU until an operator opts in."
+  description = "ACTIVE or STOPPED. Default STOPPED so enabling the resource still does not start the VM until an operator opts in."
   type        = string
   default     = "STOPPED"
 

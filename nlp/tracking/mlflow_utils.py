@@ -38,17 +38,40 @@ def start_run(
         The active ``mlflow.ActiveRun``.
     """
     import os
+    from pathlib import Path
 
     import mlflow
+    from mlflow.tracking import MlflowClient
 
     uri = (
         tracking_uri
         or os.environ.get("MLFLOW_TRACKING_URI")
         or DEFAULT_GCS_TRACKING_URI
     )
-    mlflow.set_tracking_uri(uri)
+    # MLflow's tracking *store* is file/SQL/HTTP. ``gs://`` is valid as an
+    # artifact location (google-cloud-storage) but not as the registry URI
+    # on Workbench-local MLflow 2.x.
+    if uri.startswith("gs://"):
+        local = Path(
+            os.environ.get("MLFLOW_LOCAL_STORE", "/home/jupyter/mlruns")
+        ).resolve()
+        local.mkdir(parents=True, exist_ok=True)
+        tracking = local.as_uri()
+        mlflow.set_tracking_uri(tracking)
+        client = MlflowClient(tracking_uri=tracking)
+        existing = client.get_experiment_by_name(experiment)
+        if existing is None:
+            client.create_experiment(experiment, artifact_location=uri)
+        logger.info(
+            "MLflow tracking_uri=%s artifact_location=%s experiment=%s",
+            tracking,
+            uri,
+            experiment,
+        )
+    else:
+        mlflow.set_tracking_uri(uri)
+        logger.info("MLflow tracking_uri=%s experiment=%s", uri, experiment)
     mlflow.set_experiment(experiment)
-    logger.info("MLflow tracking_uri=%s experiment=%s", uri, experiment)
     return mlflow.start_run(run_name=run_name)
 
 

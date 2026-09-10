@@ -188,7 +188,7 @@ output "nlp_workbench_name" {
 }
 
 output "nlp_workbench_zone" {
-  description = "Zone the Workbench instance is (or would be) created in (T4: europe-central2-b or -c)."
+  description = "Zone the Workbench instance is (or would be) created in (europe-central2-b or -c)."
   value       = module.vertex_nlp.workbench_zone
 }
 

@@ -4,7 +4,7 @@ output "trainer_sa_email" {
 }
 
 output "workbench_enabled" {
-  description = "Whether the T4 Workbench instance currently exists (enable_workbench)."
+  description = "Whether the Workbench instance currently exists (enable_workbench)."
   value       = var.enable_workbench
 }
 
