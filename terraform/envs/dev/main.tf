@@ -218,11 +218,12 @@ module "vertex_nlp" {
   network_id               = module.network.network_id
   subnet_id                = module.network.subnet_id
 
-  enable_workbench            = var.enable_nlp_workbench
-  workbench_desired_state     = var.nlp_workbench_desired_state
-  workbench_owners            = var.nlp_workbench_owners
-  workbench_machine_type      = var.nlp_workbench_machine_type
-  workbench_accelerator_type  = var.nlp_workbench_accelerator_type
-  workbench_accelerator_count = var.nlp_workbench_accelerator_count
-  enable_endpoint             = var.enable_nlp_endpoint
+  enable_workbench               = var.enable_nlp_workbench
+  workbench_desired_state        = var.nlp_workbench_desired_state
+  workbench_owners               = var.nlp_workbench_owners
+  workbench_machine_type         = var.nlp_workbench_machine_type
+  workbench_accelerator_type     = var.nlp_workbench_accelerator_type
+  workbench_accelerator_count    = var.nlp_workbench_accelerator_count
+  workbench_idle_timeout_seconds = var.nlp_workbench_idle_timeout_seconds
+  enable_endpoint                = var.enable_nlp_endpoint
 }

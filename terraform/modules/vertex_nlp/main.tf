@@ -114,9 +114,11 @@ resource "google_workbench_instance" "nlp" {
       subnet  = var.subnet_id
     }
 
-    metadata = {
+    # Omit idle-timeout-seconds to disable shutdown. GCP rejects 0
+    # (enabled range is 600–86400).
+    metadata = var.workbench_idle_timeout_seconds > 0 ? {
       idle-timeout-seconds = tostring(var.workbench_idle_timeout_seconds)
-    }
+    } : {}
 
     tags = ["workbench"]
   }

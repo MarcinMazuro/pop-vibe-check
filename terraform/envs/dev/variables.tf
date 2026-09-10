@@ -78,6 +78,12 @@ variable "nlp_workbench_accelerator_count" {
   default     = 0
 }
 
+variable "nlp_workbench_idle_timeout_seconds" {
+  description = "Workbench idle shutdown in seconds. 0 disables auto-stop (default). Enabled range 600–86400; 10800 is 3 hours."
+  type        = number
+  default     = 0
+}
+
 variable "enable_nlp_endpoint" {
   description = <<-EOT
     Create the (empty) Vertex AI Endpoint. Default false. Deploying a

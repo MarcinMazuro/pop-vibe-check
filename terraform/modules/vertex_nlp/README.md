@@ -33,8 +33,9 @@ on free-tier billing.
 
 Even with `enable_workbench=true`, `workbench_desired_state` defaults to
 `STOPPED`, so creating the VM does not burn hours until an operator
-sets `ACTIVE` (or starts it in the console). Idle shutdown is 3 hours
-(`idle-timeout-seconds`).
+sets `ACTIVE` (or starts it in the console). Idle shutdown defaults to
+**off** (`workbench_idle_timeout_seconds = 0`); set `10800` to restore
+the 3-hour auto-stop.
 
 **Terraform does not store model versions.** Uploading DistilBERT to
 Vertex AI Model Registry and deploying a replica onto the Endpoint are
@@ -48,7 +49,7 @@ Workbench (CPU, or T4 if opted in) and an Endpoint replica are the
 second cost line after streaming Dataflow. The intended session is:
 
 1. Set `enable_workbench=true` (and `workbench_owners`) → apply → start the instance (`desired_state=ACTIVE` or console Start). Default machine is `e2-standard-4` with **no** GPU.
-2. Train on Workbench (see `nlp/README.md`). Stop the instance when the run finishes — do not leave it idle. Idle shutdown is a backstop, not a plan.
+2. Train on Workbench (see `nlp/README.md`). Stop the instance when the run finishes — do not leave it idle. Idle shutdown is off by default; it is not a substitute for a manual STOP.
 3. `python -m nlp.endpoint.register upload …` → Model Registry.
 4. Set `enable_endpoint=true` → apply (creates the empty Endpoint).
 5. `python -m nlp.endpoint.register deploy …` → one replica, T4 or CPU, `min_replica_count=1`.
@@ -77,7 +78,7 @@ Do **not** `terraform apply` with these gates on as part of a routine infra chan
 | `workbench_machine_type` | string | no | `e2-standard-4` | GCE machine type (CPU). `e2-standard-8` if RAM is tight |
 | `workbench_accelerator_type` | string | no | `""` | Empty when count is 0. `NVIDIA_TESLA_T4` only when count is 1 |
 | `workbench_accelerator_count` | number | no | `0` | `0` omits `accelerator_configs` (CPU-only) |
-| `workbench_idle_timeout_seconds` | number | no | `10800` | Idle shutdown |
+| `workbench_idle_timeout_seconds` | number | no | `0` | Idle shutdown; `0` omits the key (disabled). Enabled: 600–86400 |
 | `workbench_desired_state` | string | no | `STOPPED` | `ACTIVE` or `STOPPED` |
 | `workbench_owners` | list(string) | no | `[]` | Emails that can open Jupyter |
 | `enable_endpoint` | bool | no | `false` | Create the empty Endpoint |

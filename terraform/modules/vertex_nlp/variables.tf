@@ -107,9 +107,21 @@ variable "workbench_accelerator_count" {
 }
 
 variable "workbench_idle_timeout_seconds" {
-  description = "Idle shutdown for the Workbench VM, in seconds. 10800 = 3 hours. The instance stops itself if Jupyter is unused; compute billing stops with it."
+  description = <<-EOT
+    Idle shutdown in seconds. 0 omits the metadata key and disables auto-stop
+    (GCP rejects the value 0; empty/absent is the documented off switch).
+    Enabled values must be 600–86400 (10 min–24 h). 10800 is 3 hours.
+  EOT
   type        = number
-  default     = 10800
+  default     = 0
+
+  validation {
+    condition = (
+      var.workbench_idle_timeout_seconds == 0 ||
+      (var.workbench_idle_timeout_seconds >= 600 && var.workbench_idle_timeout_seconds <= 86400)
+    )
+    error_message = "workbench_idle_timeout_seconds must be 0 (disabled) or 600–86400."
+  }
 }
 
 variable "workbench_desired_state" {
