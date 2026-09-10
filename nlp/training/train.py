@@ -165,6 +165,17 @@ def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     args = parse_args(argv)
 
+    # Workbench images ship TensorFlow + an old sklearn that imports
+    # numpy.core.numeric.ComplexWarning, removed in NumPy 2. Disable TF
+    # and restore the alias before Hugging Face imports Trainer.
+    os.environ.setdefault("USE_TF", "0")
+    import numpy.core.numeric as _numeric
+
+    if not hasattr(_numeric, "ComplexWarning"):
+        from numpy.exceptions import ComplexWarning as _ComplexWarning
+
+        _numeric.ComplexWarning = _ComplexWarning
+
     parts = [
         load_sst2(cache_dir=args.cache_dir),
         load_twitter(cache_dir=args.cache_dir, seed=args.seed),
@@ -175,6 +186,17 @@ def main(argv: list[str] | None = None) -> None:
         parts.append(load_own_domain(args.own_domain))
     rows = mix_corpus(parts)
     logger.info("Hybrid corpus: %d examples.", len(rows))
+
+    # Workbench images ship TensorFlow. Importing Trainer then pulls TF
+    # utils and an old sklearn that still import numpy.core.numeric.ComplexWarning
+    # (moved in NumPy 2). Disable TF and restore the alias first.
+    os.environ.setdefault("USE_TF", "0")
+    import numpy.core.numeric as _numeric
+
+    if not hasattr(_numeric, "ComplexWarning"):
+        from numpy.exceptions import ComplexWarning as _ComplexWarning
+
+        _numeric.ComplexWarning = _ComplexWarning
 
     import torch
     from transformers import (
