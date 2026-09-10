@@ -1,8 +1,9 @@
 r"""Fine-tune DistilBERT-base-uncased for three-class sentiment.
 
-Run this on Vertex AI Workbench with a T4, not on a Dataflow worker and
-not from CI. Hugging Face / torch are imported inside :func:`main` so
-``nlp.training.labels`` stays importable without those packages.
+Run this on Vertex AI Workbench (CPU by default; T4 is opt-in), not on a
+Dataflow worker and not from CI. Hugging Face / torch are imported inside
+:func:`main` so ``nlp.training.labels`` stays importable without those
+packages.
 
 Example (Workbench, after rsyncing the dataset cache)::
 
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +38,26 @@ DEFAULT_LR = 2e-5
 DEFAULT_EPOCHS = 3
 DEFAULT_BATCH = 16
 DEFAULT_SEED = 33
+
+
+def fp16_enabled(cuda_available: bool | None = None) -> bool:
+    """Return whether AMP fp16 should be enabled.
+
+    Hugging Face ``TrainingArguments(fp16=True)`` raises on CPU because
+    AMP is CUDA-only. Probe ``torch.cuda.is_available()`` unless the
+    caller already knows.
+
+    Args:
+        cuda_available: Explicit CUDA probe result; ``None`` imports torch.
+
+    Returns:
+        ``True`` only when CUDA is available.
+    """
+    if cuda_available is None:
+        import torch
+
+        cuda_available = torch.cuda.is_available()
+    return bool(cuda_available)
 
 
 def examples_to_hf_dataset(rows: list[LabeledText]) -> Any:
@@ -99,6 +121,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--model-cache-dir",
+        default=None,
+        help=(
+            "Hugging Face Hub cache for DistilBERT weights. Defaults to "
+            "HF_HUB_CACHE when set."
+        ),
+    )
+    parser.add_argument(
         "--own-domain",
         default=None,
         help="Optional JSONL of hand-labelled YouTube / gold rows.",
@@ -146,6 +176,7 @@ def main(argv: list[str] | None = None) -> None:
     rows = mix_corpus(parts)
     logger.info("Hybrid corpus: %d examples.", len(rows))
 
+    import torch
     from transformers import (
         AutoModelForSequenceClassification,
         AutoTokenizer,
@@ -155,9 +186,11 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     set_seed(args.seed)
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    model_cache = args.model_cache_dir or os.environ.get("HF_HUB_CACHE")
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, cache_dir=model_cache)
     model = AutoModelForSequenceClassification.from_pretrained(
         MODEL_NAME,
+        cache_dir=model_cache,
         num_labels=len(LABEL2ID),
         id2label={str(k): v for k, v in ID2LABEL.items()},
         label2id=LABEL2ID,
@@ -173,6 +206,9 @@ def main(argv: list[str] | None = None) -> None:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    use_fp16 = fp16_enabled(torch.cuda.is_available())
+    logger.info("Training device: cuda=%s fp16=%s", torch.cuda.is_available(), use_fp16)
+
     training_args = TrainingArguments(
         output_dir=str(output_dir / "checkpoints"),
         num_train_epochs=args.epochs,
@@ -184,7 +220,7 @@ def main(argv: list[str] | None = None) -> None:
         load_best_model_at_end=True,
         metric_for_best_model="macro_f1",
         seed=args.seed,
-        fp16=True,
+        fp16=use_fp16,
         report_to=[],
     )
 
@@ -224,6 +260,7 @@ def main(argv: list[str] | None = None) -> None:
                 "batch_size": args.batch_size,
                 "seed": args.seed,
                 "n_examples": len(rows),
+                "fp16": use_fp16,
             }
         )
 
