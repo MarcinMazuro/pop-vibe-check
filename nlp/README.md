@@ -25,10 +25,12 @@ cannot reach PyPI or Hugging Face Hub.
 | `eval/` | Gold sample, guidelines, metrics, time-window SQL, external CSVs |
 | `notebooks/` | Workbench walkthrough |
 
-## Training on Vertex AI Workbench (T4)
+## Training on Vertex AI Workbench (CPU by default)
 
 Infra is gated **off**. A routine `terraform apply` does not create the
-GPU VM. For a training session, from `terraform/envs/dev`:
+VM. Default machine is `e2-standard-4` with **no** NVIDIA accelerator
+(free-tier billing blocks T4). For a training session, from
+`terraform/envs/dev`:
 
 ```bash
 terraform apply \
@@ -37,28 +39,39 @@ terraform apply \
   -var="nlp_workbench_desired_state=ACTIVE"
 ```
 
-Zone is `europe-central2-b` (T4 is not in `-a`). The instance runs as
-`co-ml-trainer-sa-dev`, on `co-vpc-dev` / `co-subnet-dev`, no public IP.
+Zone is `europe-central2-b`. The instance runs as `co-ml-trainer-sa-dev`,
+on `co-vpc-dev` / `co-subnet-dev`, no public IP. SSH over IAP is documented
+in `terraform/modules/vertex_nlp/README.md`.
 
-In Jupyter:
+On the VM (user `jupyter`):
 
 ```bash
 git clone <this repo> && cd pop-vibe-check
+python -m venv ~/hf-venv && source ~/hf-venv/bin/activate
 pip install -r nlp/training/requirements.txt
 
-# Dataset cache — do this once, then rsync on later sessions:
-#   gsutil -m rsync -r /home/jupyter/hf-datasets gs://co-tf-artifacts-dev/nlp/datasets/
 gsutil -m rsync -r gs://co-tf-artifacts-dev/nlp/datasets/ /home/jupyter/hf-datasets
+gsutil -m rsync -r gs://co-tf-artifacts-dev/nlp/models/hf-cache/ /home/jupyter/hf-cache
+
+export HF_HUB_CACHE=/home/jupyter/hf-cache
+export HF_HOME=/home/jupyter/hf-home
+export TRANSFORMERS_OFFLINE=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1
 
 python -m nlp.training.train \
   --cache-dir /home/jupyter/hf-datasets \
+  --model-cache-dir /home/jupyter/hf-cache \
   --output-dir /home/jupyter/models/distilbert-sent \
+  --batch-size 8 \
   --own-domain /home/jupyter/gold/own_domain.jsonl   # optional
 ```
 
+`TrainingArguments(fp16=…)` is CUDA-only; `train.py` turns fp16 off on CPU.
+Drop `--batch-size` to 8 (or lower) if the VM OOMs; bump the machine type
+to `e2-standard-8` rather than attaching a T4 on free-tier billing.
+
 Or open `nlp/notebooks/finetune_distilbert.ipynb`.
 
-**Stop the GPU when the run finishes.** Idle shutdown (3 h) is a
+**Stop the instance when the run finishes.** Idle shutdown (3 h) is a
 backstop, not a plan:
 
 ```bash
