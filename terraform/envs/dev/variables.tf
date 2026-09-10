@@ -39,8 +39,9 @@ variable "notification_emails" {
 
 variable "enable_nlp_workbench" {
   description = <<-EOT
-    Create the Vertex AI Workbench T4 instance used to fine-tune DistilBERT.
-    Default false: a routine apply must not start a GPU. See
+    Create the Vertex AI Workbench instance used to fine-tune DistilBERT.
+    Default false: a routine apply must not start a training VM. CPU-only
+    unless nlp_workbench_accelerator_count is set. See
     terraform/modules/vertex_nlp/README.md for the start/stop runbook.
   EOT
   type        = bool
@@ -57,6 +58,24 @@ variable "nlp_workbench_owners" {
   description = "Emails granted Workbench instance owner (Jupyter access). Set these before flipping enable_nlp_workbench."
   type        = list(string)
   default     = []
+}
+
+variable "nlp_workbench_machine_type" {
+  description = "GCE machine type for Workbench. Default e2-standard-4 (CPU). Use e2-standard-8 if training OOMs."
+  type        = string
+  default     = "e2-standard-4"
+}
+
+variable "nlp_workbench_accelerator_type" {
+  description = "Guest accelerator type. Empty with count 0 (CPU-only). NVIDIA_TESLA_T4 only when count is 1."
+  type        = string
+  default     = ""
+}
+
+variable "nlp_workbench_accelerator_count" {
+  description = "Guest accelerator count. Default 0 (no NVIDIA). Do not set to 1 on free-tier billing."
+  type        = number
+  default     = 0
 }
 
 variable "enable_nlp_endpoint" {

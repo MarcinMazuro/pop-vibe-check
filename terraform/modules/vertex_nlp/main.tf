@@ -1,12 +1,13 @@
 # ----------------------------------------------------------------------------
 # Vertex NLP module — Workbench (fine-tune), Endpoint (serve), IAM.
 #
-# Both the T4 Workbench instance and the serving Endpoint are gated
+# Both the Workbench instance and the serving Endpoint are gated
 # (count = 0 by default). A routine `terraform apply` must never start a
-# GPU: Workbench T4 and a deployed Endpoint replica are the second-largest
-# cost line after streaming Dataflow. IAM for the trainer SA and the
-# Dataflow worker SA is *not* gated — predict/upload grants are cheap and
-# must already exist when an operator flips a gate on.
+# GPU: Workbench defaults to CPU-only (no guest_accelerator) and a
+# deployed Endpoint replica is still the second-largest cost line after
+# streaming Dataflow. IAM for the trainer SA and the Dataflow worker SA
+# is *not* gated — predict/upload grants are cheap and must already exist
+# when an operator flips a gate on.
 #
 # Model versions live in Vertex AI Model Registry as training artifacts.
 # Terraform does not upload or deploy them; see this module's README.
@@ -61,12 +62,15 @@ resource "google_project_iam_member" "dataflow_aiplatform_user" {
 }
 
 # ----------------------------------------------------------------------------
-# Workbench T4 — gated.
+# Workbench — gated, CPU-only by default.
 #
-# n1-standard-8 + NVIDIA_TESLA_T4 x1 in europe-central2-b/c. No public IP:
-# Jupyter is reached through the Vertex console proxy; Google APIs go over
-# Private Google Access on the existing subnet. desired_state defaults to
-# STOPPED even when count = 1, so creating the VM does not start the GPU.
+# e2-standard-4, no guest_accelerator. Omit accelerator_configs entirely
+# when workbench_accelerator_count is 0 so terraform plan cannot mention
+# NVIDIA / T4. GPU training is opt-in (count=1 + NVIDIA_TESLA_T4) and is
+# blocked on free-tier billing. No public IP: Jupyter goes through the
+# Vertex console proxy; SSH uses IAP (firewall below). Google APIs go
+# over Private Google Access. desired_state defaults to STOPPED even
+# when count = 1, so creating the VM does not start billing until ACTIVE.
 # ----------------------------------------------------------------------------
 resource "google_workbench_instance" "nlp" {
   count = var.enable_workbench ? 1 : 0
@@ -83,9 +87,12 @@ resource "google_workbench_instance" "nlp" {
     machine_type      = var.workbench_machine_type
     disable_public_ip = true
 
-    accelerator_configs {
-      type       = "NVIDIA_TESLA_T4"
-      core_count = 1
+    dynamic "accelerator_configs" {
+      for_each = var.workbench_accelerator_count > 0 ? [1] : []
+      content {
+        type       = var.workbench_accelerator_type
+        core_count = var.workbench_accelerator_count
+      }
     }
 
     service_accounts {
@@ -114,10 +121,39 @@ resource "google_workbench_instance" "nlp" {
     tags = ["workbench"]
   }
 
+  lifecycle {
+    precondition {
+      condition     = var.workbench_accelerator_count == 0 || trimspace(var.workbench_accelerator_type) != ""
+      error_message = "workbench_accelerator_type is required when workbench_accelerator_count > 0."
+    }
+  }
+
   timeouts {
     create = "20m"
     update = "20m"
     delete = "20m"
+  }
+}
+
+# IAP TCP forwarding range (https://cloud.google.com/iap/docs/using-tcp-forwarding).
+# Custom-mode VPC has no default allow-ssh; without this, a Workbench VM
+# with disable_public_ip cannot be reached by `gcloud compute ssh --tunnel-through-iap`.
+resource "google_compute_firewall" "workbench_iap_ssh" {
+  count = var.enable_workbench ? 1 : 0
+
+  project = var.project_id
+  name    = "${var.name_prefix}-allow-workbench-iap-ssh-${var.env}"
+  network = var.network_id
+
+  description = "Allow IAP-tunneled SSH to Workbench (no public IP)."
+
+  direction     = "INGRESS"
+  source_ranges = ["35.235.240.0/20"]
+  target_tags   = ["workbench"]
+
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
   }
 }
 
