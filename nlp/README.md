@@ -12,6 +12,11 @@ Weights are **not** baked into the Flex Template image. Dataflow workers
 reach `aiplatform.googleapis.com` over Private Google Access; they still
 cannot reach PyPI or Hugging Face Hub.
 
+**Current status (2026-09-10).** DistilBERT is training on CPU Workbench
+`co-nlp-workbench-dev`; the Endpoint T4 serve-replay is blocked on free
+tier. Timeline, GCS prefixes, budget, and the idle-shutdown incident:
+[docs/nlp-vertex-dev.md](../docs/nlp-vertex-dev.md).
+
 ## Layout
 
 | Path | Purpose |
@@ -71,8 +76,8 @@ to `e2-standard-8` rather than attaching a T4 on free-tier billing.
 
 Or open `nlp/notebooks/finetune_distilbert.ipynb`.
 
-**Stop the instance when the run finishes.** Idle shutdown (3 h) is a
-backstop, not a plan:
+**Stop the instance when the run finishes.** Idle shutdown is off by
+default and will not stop this run:
 
 ```bash
 gcloud workbench instances stop co-nlp-workbench-dev \

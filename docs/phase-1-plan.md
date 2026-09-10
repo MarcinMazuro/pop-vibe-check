@@ -275,24 +275,30 @@ sentiment differences are statistically meaningful rather than anecdotal.
 
 ## Track C — Kacper: NLP, MLflow, presentation
 
-**C1 — The real model**, behind the same interface as Marcin's stub. The
-corpus is genuinely multilingual — YouTube carries French around
-`baguette_trailer`, and the Steam sample was under half English. A single
-multilingual classifier (for example an XLM-R sentiment model with
-positive / neutral / negative output) is easier to justify in the write-up
-than routing by detected language, and avoids the question of what happens
-when detection is wrong on a six-word comment. Weights must be baked into
-the Flex Template image at build time (see A2), so measure image size and
-worker start-up early — it constrains Marcin's build.
+**C1–C3 as written on 2026-09-05 are out of date** (XLM-R, weights baked
+into the Flex Template, `terraform/modules/mlflow`). What shipped is
+English DistilBERT on the Vertex Agent Platform (Workbench / Model
+Registry / Endpoint). Inference is Endpoint REST, not image-baked
+weights. Status as of 2026-09-10:
+[docs/nlp-vertex-dev.md](nlp-vertex-dev.md).
 
-**C2 — Evaluation.** A gold set of roughly 300 hand-labelled comments
-gives accuracy and F1 for the evaluation chapter. With Steam in scope,
-`voted_up` supplies a second, much larger weak-label set — the
-disagreement between the two is itself a result worth reporting.
+**C1 — DistilBERT**, behind the same interface as Marcin's stub.
+`distilbert-base-uncased`, 3-class (`pos`/`neu`/`neg`). Dataflow
+`--nlp_model vertex` calls a Vertex Endpoint; `stub` is still the
+default and is what classified the 4228 production rows. Weights are
+**not** baked into the Flex Template. Training is CPU-only on free-tier
+billing (T4 create is rejected). Thesis write-up: DistilBERT + Agent
+Platform, not XLM-R.
 
-**C3 — MLflow.** The largest remaining architectural gap: `nlp/registry/`
-plus a `terraform/modules/mlflow/`. Hosting needs deciding before any of
-it starts (see "Open decisions").
+**C2 — Evaluation.** Unchanged in intent: ~300 gold labels, accuracy and
+F1; Steam `voted_up` as a weak-label set. The harness is in `nlp/eval/`
+([docs/nlp-evaluation.md](nlp-evaluation.md)). Numbers wait on labelling
+and on the first Vertex replay, which is **pending** (Endpoint T4 blocked
+on free tier).
+
+**C3 — MLflow.** Not Cloud Run + Cloud SQL. Tracking is a file store on
+the Workbench VM; artifacts go to `gs://co-tf-artifacts-dev/nlp/mlruns`.
+Experiment `distilbert-sentiment`. There is no `terraform/modules/mlflow`.
 
 **C4 — Presentation.** Looker Studio dashboard and the BigQuery
 authorised views it reads through — listed as outstanding in the
