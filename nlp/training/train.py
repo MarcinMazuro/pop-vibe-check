@@ -1,6 +1,6 @@
 r"""Fine-tune DistilBERT-base-uncased for three-class sentiment.
 
-Run this on Vertex AI Workbench (CPU by default; T4 is opt-in), not on a
+Run this on Vertex AI Workbench (CPU-only), not on a
 Dataflow worker and not from CI. Hugging Face / torch are imported inside
 :func:`main` so ``nlp.training.labels`` stays importable without those
 packages.

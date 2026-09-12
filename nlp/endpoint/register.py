@@ -13,15 +13,14 @@ Usage (from the repo root, after Workbench training)::
     python -m nlp.endpoint.register deploy \\
         --model MODEL_RESOURCE_NAME \\
         --endpoint "$VERTEX_ENDPOINT_ID" \\
-        --machine-type n1-standard-4 \\
-        --accelerator NVIDIA_TESLA_T4
+        --machine-type n1-standard-8
 
     python -m nlp.endpoint.register undeploy \\
         --endpoint "$VERTEX_ENDPOINT_ID"
 
-Cost: a deployed T4 replica bills until undeployed. Undeploy after the
+Cost: a deployed CPU replica bills until undeployed. Undeploy after the
 Dataflow replay drains. An empty Endpoint (Terraform resource, no replica)
-does not bill for GPU.
+does not bill for serving.
 """
 
 from __future__ import annotations
@@ -35,9 +34,13 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_LOCATION = "europe-central2"
 _DEFAULT_STAGING = "gs://co-tf-artifacts-dev/nlp/vertex-staging/"
-# Prebuilt PyTorch CPU prediction container. Swap for a GPU container
-# (pytorch-gpu.*) when deploying with a T4 accelerator.
-_DEFAULT_CONTAINER = "europe-docker.pkg.dev/vertex-ai/prediction/pytorch-cpu.2-3:latest"
+# Hugging Face layout (config.json + model.safetensors + tokenizer).
+# The TorchServe pytorch-cpu.* image expects a single model.mar and rejects
+# this export directory.
+_DEFAULT_CONTAINER = (
+    "europe-docker.pkg.dev/vertex-ai/prediction/"
+    "huggingface-pytorch-inference-cpu.2-3:latest"
+)
 _HF_PREDICT_ROUTE = "predict"
 _HF_HEALTH_ROUTE = "health"
 
@@ -132,7 +135,7 @@ def deploy_model(args: argparse.Namespace) -> None:
 
 
 def undeploy_model(args: argparse.Namespace) -> None:
-    """Undeploy every replica on the Endpoint (stops GPU/CPU billing).
+    """Undeploy every replica on the Endpoint (stops serving billing).
 
     Args:
         args: Parsed CLI args.
@@ -214,23 +217,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     deploy.add_argument("--deployed-name", default="distilbert-sent")
     deploy.add_argument(
         "--machine-type",
-        default="n1-standard-4",
-        help=(
-            "n1-standard-4 + T4 is the default serving shape; "
-            "use n1-standard-8 for CPU-only."
-        ),
+        default="n1-standard-8",
+        help="Serving machine type. Default n1-standard-8 (CPU).",
     )
     deploy.add_argument(
         "--accelerator",
-        default="NVIDIA_TESLA_T4",
-        help="Accelerator type, or empty string for CPU.",
+        default="",
+        help="Accelerator type. Default empty (CPU-only).",
     )
     deploy.add_argument("--accelerator-count", type=int, default=1)
     deploy.add_argument("--min-replicas", type=int, default=1)
     deploy.add_argument("--max-replicas", type=int, default=1)
 
     undeploy = sub.add_parser(
-        "undeploy", help="Remove every replica (stop GPU billing)."
+        "undeploy", help="Remove every replica (stop serving billing)."
     )
     _common(undeploy)
     undeploy.add_argument(
