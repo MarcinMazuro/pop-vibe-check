@@ -1,11 +1,12 @@
 # NLP — DistilBERT on Vertex (dev status)
 
-What landed for Track C through 2026-09-10 (evening CEST), and what is
-still running. Commands live in [`nlp/README.md`](../nlp/README.md) and
+What landed for Track C through 2026-09-12 (CEST). DistilBERT training
+is **complete**; Workbench is **STOPPED**. Commands live in
+[`nlp/README.md`](../nlp/README.md) and
 [`terraform/modules/vertex_nlp/README.md`](../terraform/modules/vertex_nlp/README.md);
 this file is the operational record.
 
-Date: 2026-09-10.
+Date: 2026-09-12.
 
 ---
 
@@ -130,33 +131,40 @@ finishes, **stop the VM by hand** — nothing will auto-stop it.
 
 ---
 
-## Training (evening 10 Sep 2026)
+## Training (complete 12 Sep 2026)
 
-After the idle stop, the run restarted **from scratch** (checkpoint
-directory empty). Process is `nohup`; log
-`/home/jupyter/models/distilbert-sent/train.log`.
+The 10 Sep restart ran to completion on CPU (`nohup`; ~44.5 h wall,
+`global_step=75090`, finished ~16:27 CEST). Best checkpoint is epoch 2.
 
 | | |
 |---|---|
 | Examples | ~222k |
 | Batch | 8 |
 | Epochs | 3 |
-| Steps | ~75k |
-| ETA | ~41 h |
+| Steps | 75090 |
 | CUDA | false |
+| Best | epoch 2 / `checkpoint-50060` |
+| Best acc | 0.802 |
+| Best metric (macro-F1) | 0.786 |
+| Epoch 3 acc | 0.801 (worse; not selected) |
 
-When it finishes (not done as of this writing):
+Weights and checkpoints are on GCS (`gsutil -m cp -r` 2026-09-12):
 
-1. Manual STOP of `co-nlp-workbench-dev` (idle will not do it).
-2. `gsutil cp` weights to `gs://co-tf-artifacts-dev/nlp/models/distilbert-sent/`.
-3. Registry upload / Endpoint deploy / Dataflow `--model vertex` — see
-   [`nlp/README.md`](../nlp/README.md).
+| Prefix | Size | Contents |
+|---|---|---|
+| `nlp/models/distilbert-sent/` | 2.50 GiB | `model.safetensors` (256 MiB), tokenizer, `train.log`, `checkpoints/checkpoint-25030\|50060\|75090` |
+| `nlp/mlruns/286827588c4749588d09e40bb332b8e7/` | already present | MLflow artifacts from the run |
+| `nlp/mlruns-tracking/` | 1.8 KiB | local file-store copy (`metrics`/`params`/`tags`) |
 
-**Pending — serve-replay.** Deploying an Endpoint replica with a T4, and
-the DistilBERT Dataflow replay that would use it, are **blocked on free
-tier** (same accelerator restriction as Workbench). Do not treat
-`events.model_version` as `vertex/…` until that unblocks. Production
-classification remains the stub on 4228 rows.
+`co-nlp-workbench-dev` was stopped by hand after the copy
+(`gcloud workbench instances stop …`). State is **STOPPED** (not
+deleted). Boot + data disks remain. Idle shutdown is still off; do not
+`enable_nlp_workbench=false` (that destroys the VM).
+
+**Pending — serve-replay.** Registry upload / Endpoint deploy / Dataflow
+`--model vertex` still need a T4 replica and are **blocked on free
+tier**. Do not treat `events.model_version` as `vertex/…` until that
+unblocks. Production classification remains the stub on 4228 rows.
 
 ---
 

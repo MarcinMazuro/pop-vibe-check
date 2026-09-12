@@ -12,9 +12,11 @@ Weights are **not** baked into the Flex Template image. Dataflow workers
 reach `aiplatform.googleapis.com` over Private Google Access; they still
 cannot reach PyPI or Hugging Face Hub.
 
-**Current status (2026-09-10).** DistilBERT is training on CPU Workbench
-`co-nlp-workbench-dev`; the Endpoint T4 serve-replay is blocked on free
-tier. Timeline, GCS prefixes, budget, and the idle-shutdown incident:
+**Current status (2026-09-12).** DistilBERT train complete (best epoch 2,
+acc 0.802, macro-F1 0.786). Weights at
+`gs://co-tf-artifacts-dev/nlp/models/distilbert-sent/`. Workbench
+`co-nlp-workbench-dev` is **STOPPED**. Endpoint T4 serve-replay is still
+blocked on free tier. Details:
 [docs/nlp-vertex-dev.md](../docs/nlp-vertex-dev.md).
 
 ## Layout
