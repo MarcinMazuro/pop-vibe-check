@@ -5,7 +5,8 @@
 #
 # Ids verified against the YouTube Data API on 2026-07-05 (videos.list:
 # channel, publishedAt, commentCount). Comment counts are point-in-time and
-# only indicative of volume.
+# only indicative of volume. Entries added 2026-09-12 (B2, full-cycle
+# coverage) were verified the same way.
 
 videos:
   - id: IDyqGZy78Ng # XBOX, 2024-06-09, ~1.0k comments
@@ -20,6 +21,13 @@ videos:
     title: Clair Obscur Expedition 33 - Reveal Trailer (PlayStation)
     event_ids: [xbox_showcase_reveal]
 
+  # No usable Gamescom 2024 video found for gamescom_2024_press_preview, even
+  # via a date-windowed (2024-08-19..27) YouTube search.list call on
+  # 2026-09-12: the only on-topic hit had 2 comments, everything else was
+  # unrelated Gamescom roundups. The showing was press-only (no public ONL
+  # stage moment), which likely explains the lack of a canonical video. Left
+  # uncovered rather than force a low-value match.
+
   - id: Gr0Z-K89k6k # PlayStation, 2024-08-28, ~1.8k comments
     title: Clair Obscur Expedition 33 - First Look Gameplay (Flying Waters)
     event_ids: [gameplay_trailer_flying_waters]
@@ -27,6 +35,14 @@ videos:
   - id: YJnjReKXrvk # GameSpot Trailers, 2024-08-28, ~1.6k comments
     title: 6 Minutes of Clair Obscur Expedition 33 Gameplay (GameSpot)
     event_ids: [gameplay_trailer_flying_waters]
+
+  - id: b6YNycptEzc # XBOX, 2025-01-23, ~234 comments
+    title: Clair Obscur Expedition 33 - Release Date Trailer (Developer_Direct 2025)
+    event_ids: [xbox_developer_direct]
+
+  - id: LCy6vC00O0c # Sandfall Interactive, 2025-01-30, ~192 comments
+    title: Clair Obscur Expedition 33 - XBOX Developer_Direct 2025
+    event_ids: [xbox_developer_direct]
 
   - id: 2VaLOc1FpSo # PlayStation, 2025-04-24, ~1.8k comments
     title: Clair Obscur Expedition 33 - Launch Trailer (PlayStation)
@@ -38,18 +54,65 @@ videos:
 
   - id: KvJv-Rlx4bI # IGN, 2025-04-23 (review embargo, day before launch), ~3.2k comments
     title: Clair Obscur Expedition 33 - IGN review
-    event_ids: [launch, critical_acclaim_wave]
+    event_ids: [launch, review_embargo_lift, critical_acclaim_wave]
 
   - id: D29V8pRV4oY # GameSpot, 2025-06-02 - published after launch, so launch
     # windows would match nothing; mapped to the acclaim wave only.
     title: Clair Obscur Expedition 33 - GameSpot video review
     event_ids: [critical_acclaim_wave]
 
-  # No dedicated April-2025 "AI textures" video surfaced via API search
-  # (2025-04-24..06-15 window); coverage of AI usage clusters around the
-  # December 2025 TGA controversy instead (e.g. SamDoesArts y8jhntgQgf0,
-  # 2025-12-27). Revisit: either find a contemporaneous video or retarget
-  # this event at the December wave.
+  # No contemporaneous April-2025 "AI textures" video found for
+  # ai_textures_controversy, confirmed twice: a general web search (2026-09-12)
+  # and a date-windowed (2025-04-24..05-06) YouTube search.list call the same
+  # day, which surfaced only unrelated launch-week content (OST, cutscenes,
+  # reviews). The December 2025 AI-usage wave is real but belongs to a
+  # separate event - see indie_game_awards_rescinded below, which now carries
+  # the SamDoesArts video originally flagged here as a possible retarget.
+  # Left uncovered rather than force a mismatch.
   - id: REPLACE_ai_text # REPLACE
     title: Clair Obscur Expedition 33 - AI textures controversy discussion
     event_ids: [ai_textures_controversy]
+
+  - id: WwYCiu4Hkvo # JampackSam, 2025-04-27, ~222 comments
+    title: Clair Obscur Expedition 33 sold 1 MILLION COPIES in 3 DAYS?
+    event_ids: [one_million_sales_milestone]
+
+  - id: wFYsG5h0nCs # GamingBolt, 2025-04-30, ~429 comments
+    title: Clair Obscur Expedition 33 Is EMBARRASSING The Games Industry
+    event_ids: [one_million_sales_milestone]
+
+  - id: WDraAxp-Wp8 # The Game Awards (official), 2025-12-12, ~4.1k comments
+    title: Clair Obscur Expedition 33 Wins Game of the Year at The Game Awards 2025
+    event_ids: [tga_2025_sweep]
+
+  - id: 9Mm8vFPDEc0 # The Game Awards (official), 2025-12-12, ~773 comments
+    title: Lorien Testard Wins Best Score and Music for Clair Obscur Expedition 33 at The Game Awards 2025
+    event_ids: [tga_2025_sweep]
+
+  - id: t-upfQeKVvc # The Game Awards (official), 2025-12-12, ~330 comments
+    title: Clair Obscur Expedition 33 Wins Best Independent Game at The Game Awards 2025
+    event_ids: [tga_2025_sweep]
+
+  - id: L7K6NzMyFP0 # Critically Moist, 2025-12-21, ~3.2k comments
+    title: THE EXPEDITION 33 SITUATION IS BAD... #moistcritikal #thegameawards
+    event_ids: [indie_game_awards_rescinded]
+
+  - id: y8jhntgQgf0 # SamDoesArts, 2025-12-27, ~2.5k comments
+    title: Game of The Year got CANCELLED for Using AI..
+    event_ids: [indie_game_awards_rescinded]
+
+  - id: I_cOMwkQ1Tw # Doctor Disaster, 2025-12-21, ~1.4k comments
+    title: 'INSANE: Clair Obscur Expedition 33 gets Game of the Year award STRIPPED'
+    event_ids: [indie_game_awards_rescinded]
+
+  - id: mCxwZIAg0Ac # Elesky (fan, piano medley), 2026-04-24, ~367 comments
+    title: EXPEDITION 33 MEDLEY - Piano Version (1st anniversary)
+    event_ids: [anniversary_update_2026]
+
+  - id: tJvDMClXH14 # Maxence Cazorla (fan), 2026-04-24, ~178 comments
+    title: 'Expedition 33 - 1 Year Anniversary - Iconic Motion Capture Scene'
+    event_ids: [anniversary_update_2026]
+
+  - id: zcaCBL7HDqM # Jeux Video Magazine (FR press), 2026-04-24, ~126 comments
+    title: 'Clair Obscur: Des chiffres IMPRESSIONNANTS et du nouveau CONTENU !'
+    event_ids: [anniversary_update_2026]
