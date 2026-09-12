@@ -280,7 +280,7 @@ into the Flex Template, `terraform/modules/mlflow`). What shipped is
 English DistilBERT on the Vertex Agent Platform (Workbench / Model
 Registry / Endpoint). Inference is Endpoint REST, not image-baked
 weights. Status as of 2026-09-10:
-[docs/nlp-vertex-dev.md](nlp-vertex-dev.md).
+[docs/phase-1-nlp-vertex-dev.md](phase-1-nlp-vertex-dev.md).
 
 **C1 — DistilBERT**, behind the same interface as Marcin's stub.
 `distilbert-base-uncased`, 3-class (`pos`/`neu`/`neg`). Dataflow
@@ -291,10 +291,10 @@ CPU-only (`e2-standard-4` Workbench; `n1-standard-8` replica, no
 accelerator). Thesis write-up: DistilBERT + Agent Platform, not XLM-R.
 
 **C2 — Evaluation.** Unchanged in intent: ~300 gold labels, accuracy and
-F1; Steam `voted_up` as a weak-label set. The harness is in `nlp/eval/`
-([docs/nlp-evaluation.md](nlp-evaluation.md)). Numbers wait on labelling
-and on the first Vertex replay (CPU Endpoint deploy — still **pending**,
-not accelerator-blocked).
+F1; Steam `voted_up` as a weak-label set. DistilBERT v1 gold metrics:
+[`docs/phase-1-nlp-evaluation-distilbert-v1.md`](phase-1-nlp-evaluation-distilbert-v1.md).
+Harness in `nlp/eval/`. Time-window / Looker slices wait on the first
+Vertex replay (CPU Endpoint deploy — still **pending**).
 
 **C3 — MLflow.** Not Cloud Run + Cloud SQL. Tracking is a file store on
 the Workbench VM; artifacts go to `gs://co-tf-artifacts-dev/nlp/mlruns`.

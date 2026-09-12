@@ -17,7 +17,7 @@ acc 0.802, macro-F1 0.786). Weights at
 `gs://co-tf-artifacts-dev/nlp/models/distilbert-sent/`. Workbench
 `co-nlp-workbench-dev` is **STOPPED**. Serve-replay (CPU Endpoint +
 `--model vertex`) is still pending. Details:
-[docs/nlp-vertex-dev.md](../docs/nlp-vertex-dev.md).
+[docs/phase-1-nlp-vertex-dev.md](../docs/phase-1-nlp-vertex-dev.md).
 
 ## Layout
 
@@ -164,7 +164,7 @@ invent `neu`.
 
 ## Evaluation
 
-See [docs/nlp-evaluation.md](../docs/nlp-evaluation.md).
+See [docs/phase-1-nlp-evaluation-distilbert-v1.md](../docs/phase-1-nlp-evaluation-distilbert-v1.md).
 
 ```bash
 python -m nlp.eval.sample_gold --input raw.jsonl --output gold.jsonl --n 300

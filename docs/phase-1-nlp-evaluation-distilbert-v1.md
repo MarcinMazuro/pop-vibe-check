@@ -1,12 +1,20 @@
-# NLP evaluation
+# Phase 1 — NLP evaluation (DistilBERT v1)
 
-Outline for the DistilBERT chapter. Numbers land here after the gold set
-is labelled and scored with the fine-tuned checkpoint.
+First fine-tuned sentiment model in phase 1:
+English DistilBERT (`distilbert-base-uncased`, 3-class `pos`/`neu`/`neg`).
+This document is **evaluation only** — gold set, metrics, time windows,
+and external baselines. Infra and Vertex ops live in
+[`phase-1-nlp-vertex-dev.md`](phase-1-nlp-vertex-dev.md).
+
+Date: 2026-09-12.
+
+---
 
 ## 1. Gold set (~300)
 
-**Status (2026-09-12).** Gold labelled; scored with fine-tuned DistilBERT
-(local inference). Model Registry upload done; **no Endpoint deploy**.
+**Status.** Gold labelled; scored with fine-tuned DistilBERT v1 (local
+CPU inference on the checkpoint under
+`gs://co-tf-artifacts-dev/nlp/models/distilbert-sent/`).
 
 | Artifact | Path | Rows |
 |---|---|---|
@@ -35,11 +43,9 @@ pass on the real YouTube comments (not random). Distribution:
 
 Hold-out is ≥ 80 and must not enter `--own-domain` fine-tuning.
 
-**Predictions.** Fine-tuned DistilBERT from
-`gs://co-tf-artifacts-dev/nlp/models/distilbert-sent/` (downloaded to the
-gitignored local path above; CPU inference, `MAX_LEN=128`).
+**Predictions.** DistilBERT v1, `MAX_LEN=128`, CPU.
 
-**DistilBERT metrics** (`nlp/eval/artifacts/report.json`):
+**DistilBERT v1 metrics** (`nlp/eval/artifacts/report.json`):
 
 | Slice | n | accuracy | macro-F1 | F1 pos / neu / neg |
 |---|---|---|---|---|
@@ -48,19 +54,9 @@ gitignored local path above; CPU inference, `MAX_LEN=128`).
 | train | 220 | 0.536 | 0.458 | 0.645 / 0.425 / 0.304 |
 
 Earlier stub-keyword baseline on the same gold (replaced): accuracy 0.417,
-macro-F1 0.363. Per-language / per-source slices remain in the report JSON.
-English DistilBERT on non-EN / langdetect-noise tags is a **measured
-limit**, not a quality target.
-
-**Vertex Model Registry** (upload only; no replica):
-
-`projects/891032629527/locations/europe-central2/models/6682862459948105728`
-(`displayName=distilbert-sent`, region `europe-central2`). Artifact URI
-still `gs://co-tf-artifacts-dev/nlp/models/distilbert-sent`. Serving
-container used at upload:
-`europe-docker.pkg.dev/vertex-ai/prediction/huggingface-pytorch-inference-cpu.2-3:latest`
-(HF layout; the TorchServe `pytorch-cpu` image expects `.mar` and was
-rejected).
+macro-F1 0.363. Per-language / per-source slices remain in the report JSON
+(EN-only accuracy ≈ 0.635). English DistilBERT on non-EN /
+langdetect-noise tags is a **measured limit**, not a quality target.
 
 ```bash
 python -m nlp.eval.evaluate \
@@ -68,6 +64,8 @@ python -m nlp.eval.evaluate \
   --pred nlp/eval/artifacts/pred.jsonl \
   --output nlp/eval/artifacts/report.json
 ```
+
+---
 
 ## 2. Time windows (SQL on `events`)
 
@@ -85,7 +83,9 @@ calendar (reveal, trailer, demo, controversy, TGA) is visible next to
 the launch spike.
 
 Run only after `dataflow/promote.sh` has merged `events_landing` →
-`events`.
+`events` with a real classifier (`vertex/…`), not only the stub.
+
+---
 
 ## 3. External baselines
 
@@ -99,16 +99,12 @@ Join on `date_utc` against the window aggregates (mean polarity vs
 critic score vs CCU). Steam collector rows can replace the Charts CSV
 later; they do not block YouTube gold.
 
-## 4. Looker (C4, after the first MERGE)
+---
 
-Authorized views over `events` in `terraform/modules/bigquery` — **not
-in this change**. Wait until `model_version` on real rows is a Vertex
-id (`vertex/…`), not `stub/1`.
-
-## 5. Reproducibility
+## 4. Reproducibility
 
 The gold JSONL, the evaluate report, and the SQL outputs are the
-artifacts. Model weights live in MLflow (`gs://co-tf-artifacts-dev/nlp/mlruns`)
-and Vertex Model Registry; they are not copied into the Dataflow image.
-Local eval copies under `nlp/eval/artifacts/distilbert-sent/` are
-gitignored.
+evaluation artifacts. Checkpoint identity for v1: hybrid fine-tune best
+epoch 2 (`checkpoint-50060`); weights on GCS / Model Registry (see the
+Vertex ops journal). Local eval copies under
+`nlp/eval/artifacts/distilbert-sent/` are gitignored.

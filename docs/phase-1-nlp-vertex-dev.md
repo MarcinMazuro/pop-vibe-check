@@ -1,10 +1,11 @@
-# NLP — DistilBERT on Vertex (dev status)
+# Phase 1 — NLP Vertex ops journal
 
-What landed for Track C through 2026-09-12 (CEST). DistilBERT training
-is **complete**; Workbench is **STOPPED**. Commands live in
-[`nlp/README.md`](../nlp/README.md) and
-[`terraform/modules/vertex_nlp/README.md`](../terraform/modules/vertex_nlp/README.md);
-this file is the operational record.
+Operational record for Track C on GCP through 2026-09-12 (CEST): what
+ran, where artifacts live, what bills, what is still pending. Commands
+live in [`nlp/README.md`](../nlp/README.md) and
+[`terraform/modules/vertex_nlp/README.md`](../terraform/modules/vertex_nlp/README.md).
+Evaluation numbers for DistilBERT v1:
+[`phase-1-nlp-evaluation-distilbert-v1.md`](phase-1-nlp-evaluation-distilbert-v1.md).
 
 Date: 2026-09-12.
 
@@ -18,9 +19,9 @@ named XLM-R, weights baked into the Flex Template, and a
 
 | Decision | What is in the repo |
 |---|---|
-| Model | English DistilBERT (`distilbert-base-uncased`), 3-class head (`pos`/`neu`/`neg`). Non-EN is a measured limit, not a quality target — [`docs/nlp-evaluation.md`](nlp-evaluation.md). |
+| Model | English DistilBERT v1 (`distilbert-base-uncased`), 3-class head (`pos`/`neu`/`neg`). Non-EN is a measured limit — see the evaluation doc. |
 | Serving | Vertex Endpoint REST from Dataflow (`--nlp_model vertex`). Weights are **not** `COPY`'d into the Flex Template image. |
-| Registry | `stub` (default) and `vertex`. The production replay of 4228 rows is still the stub. |
+| Registry | `stub` (default) and `vertex`. Production replay of 4228 rows is still the stub. DistilBERT v1 is **uploaded** to Model Registry; **no Endpoint replica**. |
 | Platform | Vertex AI Workbench / Model Registry / Endpoint (thesis Agent Platform). Console labels say Vertex AI; APIs are `aiplatform.googleapis.com` and `notebooks.googleapis.com`. |
 | MLflow | File store on the Workbench VM + GCS artifacts. Not Cloud SQL, not Cloud Run, no `terraform/modules/mlflow`. |
 
@@ -68,6 +69,8 @@ MLflow:
   default). `gs://` is not a valid MLflow 2.x tracking URI on Workbench.
 - Artifact location: `gs://co-tf-artifacts-dev/nlp/mlruns`.
 - Experiment: `distilbert-sentiment`.
+- UI: start Workbench, then `mlflow ui --backend-store-uri /home/jupyter/mlruns`
+  (or inspect `nlp/mlruns-tracking/` + `nlp/mlruns/<run_id>/` on GCS).
 
 ---
 
@@ -131,7 +134,8 @@ finishes, **stop the VM by hand** — nothing will auto-stop it.
 ## Training (complete 12 Sep 2026)
 
 The 10 Sep restart ran to completion on CPU (`nohup`; ~44.5 h wall,
-`global_step=75090`, finished ~16:27 CEST). Best checkpoint is epoch 2.
+`global_step=75090`, finished ~16:27 CEST). Best checkpoint is epoch 2
+(**DistilBERT v1**).
 
 | | |
 |---|---|
@@ -141,7 +145,7 @@ The 10 Sep restart ran to completion on CPU (`nohup`; ~44.5 h wall,
 | Steps | 75090 |
 | CUDA | false |
 | Best | epoch 2 / `checkpoint-50060` |
-| Best acc | 0.802 |
+| Best acc (hybrid holdout) | 0.802 |
 | Best metric (macro-F1) | 0.786 |
 | Epoch 3 acc | 0.801 (worse; not selected) |
 
@@ -158,11 +162,32 @@ Weights and checkpoints are on GCS (`gsutil -m cp -r` 2026-09-12):
 deleted). Boot + data disks remain. Idle shutdown is still off; do not
 `enable_nlp_workbench=false` (that destroys the VM).
 
-**Pending — serve-replay.** Registry upload → CPU Endpoint deploy
-(`n1-standard-8`, no accelerator) → Dataflow `--model vertex`. Not
-blocked on accelerators. Do not treat `events.model_version` as
-`vertex/…` until that replay lands. Production classification remains
-the stub on 4228 rows.
+---
+
+## Model Registry (upload only, 12 Sep 2026)
+
+Upload via `nlp/endpoint/register.py` — **no Endpoint deploy**, so no
+node-hour serving charge.
+
+| | |
+|---|---|
+| Resource | `projects/891032629527/locations/europe-central2/models/6682862459948105728` |
+| displayName | `distilbert-sent` |
+| Version | `1` |
+| Artifact URI | `gs://co-tf-artifacts-dev/nlp/models/distilbert-sent` |
+| Container | `europe-docker.pkg.dev/vertex-ai/prediction/huggingface-pytorch-inference-cpu.2-3:latest` |
+
+TorchServe `pytorch-cpu` rejected the HF directory layout (expects
+`.mar`). Endpoint count in `europe-central2` after upload: **0**.
+
+---
+
+## Pending — serve-replay
+
+CPU Endpoint deploy (`n1-standard-8`, no accelerator) → Dataflow
+`--model vertex` → undeploy after drain. Do not treat
+`events.model_version` as `vertex/…` until that lands. Production
+classification remains the stub on 4228 rows.
 
 ---
 
@@ -172,6 +197,6 @@ the stub on 4228 rows.
 |---|---|
 | [`nlp/README.md`](../nlp/README.md) | Train, register, deploy, launch |
 | [`terraform/modules/vertex_nlp/README.md`](../terraform/modules/vertex_nlp/README.md) | Gates, IAM, IAP SSH, cost runbook |
-| [`docs/nlp-evaluation.md`](nlp-evaluation.md) | Gold set, windows, baselines |
-| [`docs/phase-1-dataflow.md`](phase-1-dataflow.md) | Stub replay that is still in `events` |
-| [`docs/phase-1-plan.md`](phase-1-plan.md) | Track C (C1–C3 superseded; pointer here) |
+| [`phase-1-nlp-evaluation-distilbert-v1.md`](phase-1-nlp-evaluation-distilbert-v1.md) | DistilBERT v1 gold metrics |
+| [`phase-1-dataflow.md`](phase-1-dataflow.md) | Stub replay that is still in `events` |
+| [`phase-1-plan.md`](phase-1-plan.md) | Track C (C1–C3 superseded; pointer here) |
