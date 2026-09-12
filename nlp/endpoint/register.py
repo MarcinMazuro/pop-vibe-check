@@ -34,8 +34,13 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_LOCATION = "europe-central2"
 _DEFAULT_STAGING = "gs://co-tf-artifacts-dev/nlp/vertex-staging/"
-# Prebuilt PyTorch CPU prediction container (default serving path).
-_DEFAULT_CONTAINER = "europe-docker.pkg.dev/vertex-ai/prediction/pytorch-cpu.2-3:latest"
+# Hugging Face layout (config.json + model.safetensors + tokenizer).
+# The TorchServe pytorch-cpu.* image expects a single model.mar and rejects
+# this export directory.
+_DEFAULT_CONTAINER = (
+    "europe-docker.pkg.dev/vertex-ai/prediction/"
+    "huggingface-pytorch-inference-cpu.2-3:latest"
+)
 _HF_PREDICT_ROUTE = "predict"
 _HF_HEALTH_ROUTE = "health"
 

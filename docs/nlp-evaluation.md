@@ -1,11 +1,12 @@
 # NLP evaluation
 
 Outline for the DistilBERT chapter. Numbers land here after the gold set
-is labelled and the first Vertex replay is promoted into `events`.
+is labelled and scored with the fine-tuned checkpoint.
 
 ## 1. Gold set (~300)
 
-**Status (2026-09-12).** Gold set labelled and scored locally.
+**Status (2026-09-12).** Gold labelled; scored with fine-tuned DistilBERT
+(local inference). Model Registry upload done; **no Endpoint deploy**.
 
 | Artifact | Path | Rows |
 |---|---|---|
@@ -13,6 +14,7 @@ is labelled and the first Vertex replay is promoted into `events`.
 | Labelled gold | `nlp/eval/artifacts/gold.jsonl` | 300 |
 | Predictions | `nlp/eval/artifacts/pred.jsonl` | 300 |
 | Evaluate report | `nlp/eval/artifacts/report.json` | — |
+| Local weights (gitignored) | `nlp/eval/artifacts/distilbert-sent/` | from GCS |
 
 **Sampling.** Usable rows exported from
 `pop-vibe-check.co_analytics_dev.raw_staging` via `bq` (text length ≥ 8),
@@ -21,7 +23,7 @@ then `python -m nlp.eval.sample_gold` (seed 33, n=300, strata
 `nlp/eval/sql/sample_gold.sql`.
 
 **Labels.** `pos` / `neu` / `neg` per `nlp/eval/GUIDELINES.md`
-(sentiment toward the game/event). Text-by-text assistant-assisted
+(sentiment toward the game/event). Text-by-text **assistant-assisted**
 pass on the real YouTube comments (not random). Distribution:
 
 | Label | n | holdout | train |
@@ -33,22 +35,32 @@ pass on the real YouTube comments (not random). Distribution:
 
 Hold-out is ≥ 80 and must not enter `--own-domain` fine-tuning.
 
-**Predictions (interim).** `pred.jsonl` is the deterministic **stub**
-keyword classifier (`nlp/stub`), not fine-tuned DistilBERT. Fine-tuned
-weights live on GCS (`gs://co-tf-artifacts-dev/nlp/models/distilbert-sent/`);
-`gsutil` was out of scope for this pass. Re-score after a Vertex CPU
-deploy or a local weight download.
+**Predictions.** Fine-tuned DistilBERT from
+`gs://co-tf-artifacts-dev/nlp/models/distilbert-sent/` (downloaded to the
+gitignored local path above; CPU inference, `MAX_LEN=128`).
 
-**Stub metrics** (`nlp/eval/artifacts/report.json`):
+**DistilBERT metrics** (`nlp/eval/artifacts/report.json`):
 
-| Metric | Value |
-|---|---|
-| accuracy | 0.417 |
-| macro-F1 | 0.363 |
-| F1 pos / neu / neg | 0.540 / 0.381 / 0.168 |
+| Slice | n | accuracy | macro-F1 | F1 pos / neu / neg |
+|---|---|---|---|---|
+| overall | 300 | **0.533** | **0.472** | 0.642 / 0.420 / 0.353 |
+| holdout | 80 | 0.525 | 0.498 | 0.633 / 0.407 / 0.455 |
+| train | 220 | 0.536 | 0.458 | 0.645 / 0.425 / 0.304 |
 
-Treat these as a harness baseline, not DistilBERT quality. Per-language
-and per-source slices are in the report JSON.
+Earlier stub-keyword baseline on the same gold (replaced): accuracy 0.417,
+macro-F1 0.363. Per-language / per-source slices remain in the report JSON.
+English DistilBERT on non-EN / langdetect-noise tags is a **measured
+limit**, not a quality target.
+
+**Vertex Model Registry** (upload only; no replica):
+
+`projects/891032629527/locations/europe-central2/models/6682862459948105728`
+(`displayName=distilbert-sent`, region `europe-central2`). Artifact URI
+still `gs://co-tf-artifacts-dev/nlp/models/distilbert-sent`. Serving
+container used at upload:
+`europe-docker.pkg.dev/vertex-ai/prediction/huggingface-pytorch-inference-cpu.2-3:latest`
+(HF layout; the TorchServe `pytorch-cpu` image expects `.mar` and was
+rejected).
 
 ```bash
 python -m nlp.eval.evaluate \
@@ -56,9 +68,6 @@ python -m nlp.eval.evaluate \
   --pred nlp/eval/artifacts/pred.jsonl \
   --output nlp/eval/artifacts/report.json
 ```
-
-English DistilBERT on FR/ZH/RU/KO (and langdetect noise tags in the
-sample) is a **measured limit**, not a quality target.
 
 ## 2. Time windows (SQL on `events`)
 
@@ -101,3 +110,5 @@ id (`vertex/…`), not `stub/1`.
 The gold JSONL, the evaluate report, and the SQL outputs are the
 artifacts. Model weights live in MLflow (`gs://co-tf-artifacts-dev/nlp/mlruns`)
 and Vertex Model Registry; they are not copied into the Dataflow image.
+Local eval copies under `nlp/eval/artifacts/distilbert-sent/` are
+gitignored.
