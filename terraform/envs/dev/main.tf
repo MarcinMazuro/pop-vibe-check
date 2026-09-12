@@ -201,9 +201,9 @@ module "cloud_run_jobs" {
 # Vertex AI Workbench + Endpoint for DistilBERT. Both gates default OFF
 # (count = 0) so a routine apply does not start a training VM — the same
 # shape reddit_image_uri uses to keep the Reddit job on a placeholder.
-# Workbench is CPU-only unless accelerator_count is set. Flip
-# enable_nlp_workbench / enable_nlp_endpoint via -var for a training or
-# serving session; see terraform/modules/vertex_nlp/README.md.
+# Workbench and Endpoint serving are CPU-only (keep accelerator_count at
+# 0). Flip enable_nlp_workbench / enable_nlp_endpoint via -var for a
+# training or serving session; see terraform/modules/vertex_nlp/README.md.
 module "vertex_nlp" {
   source = "../../modules/vertex_nlp"
 

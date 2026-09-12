@@ -3,11 +3,11 @@
 #
 # Both the Workbench instance and the serving Endpoint are gated
 # (count = 0 by default). A routine `terraform apply` must never start a
-# GPU: Workbench defaults to CPU-only (no guest_accelerator) and a
-# deployed Endpoint replica is still the second-largest cost line after
-# streaming Dataflow. IAM for the trainer SA and the Dataflow worker SA
-# is *not* gated — predict/upload grants are cheap and must already exist
-# when an operator flips a gate on.
+# billing VM or replica: Workbench defaults to CPU-only (no
+# guest_accelerator) and a deployed Endpoint replica is still the
+# second-largest cost line after streaming Dataflow. IAM for the trainer
+# SA and the Dataflow worker SA is *not* gated — predict/upload grants
+# are cheap and must already exist when an operator flips a gate on.
 #
 # Model versions live in Vertex AI Model Registry as training artifacts.
 # Terraform does not upload or deploy them; see this module's README.
@@ -62,15 +62,14 @@ resource "google_project_iam_member" "dataflow_aiplatform_user" {
 }
 
 # ----------------------------------------------------------------------------
-# Workbench — gated, CPU-only by default.
+# Workbench — gated, CPU-only.
 #
 # e2-standard-4, no guest_accelerator. Omit accelerator_configs entirely
-# when workbench_accelerator_count is 0 so terraform plan cannot mention
-# NVIDIA / T4. GPU training is opt-in (count=1 + NVIDIA_TESLA_T4) and is
-# blocked on free-tier billing. No public IP: Jupyter goes through the
-# Vertex console proxy; SSH uses IAP (firewall below). Google APIs go
-# over Private Google Access. desired_state defaults to STOPPED even
-# when count = 1, so creating the VM does not start billing until ACTIVE.
+# when workbench_accelerator_count is 0. Keep count at 0 — this stack is
+# CPU-only. No public IP: Jupyter goes through the Vertex console proxy;
+# SSH uses IAP (firewall below). Google APIs go over Private Google
+# Access. desired_state defaults to STOPPED even when count = 1, so
+# creating the VM does not start billing until ACTIVE.
 # ----------------------------------------------------------------------------
 resource "google_workbench_instance" "nlp" {
   count = var.enable_workbench ? 1 : 0
@@ -163,7 +162,7 @@ resource "google_compute_firewall" "workbench_iap_ssh" {
 # Serving Endpoint — gated.
 #
 # Creates an empty Endpoint. Deploying a Model Registry version onto it
-# (the replica that actually bills for GPU/CPU) is `nlp/endpoint/register.py`
+# (the replica that actually bills for serving) is `nlp/endpoint/register.py`
 # plus the runbook, not this resource. traffic_split stays unset until a
 # deploy writes it.
 # ----------------------------------------------------------------------------

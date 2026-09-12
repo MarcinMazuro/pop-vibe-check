@@ -15,8 +15,8 @@ cannot reach PyPI or Hugging Face Hub.
 **Current status (2026-09-12).** DistilBERT train complete (best epoch 2,
 acc 0.802, macro-F1 0.786). Weights at
 `gs://co-tf-artifacts-dev/nlp/models/distilbert-sent/`. Workbench
-`co-nlp-workbench-dev` is **STOPPED**. Endpoint T4 serve-replay is still
-blocked on free tier. Details:
+`co-nlp-workbench-dev` is **STOPPED**. Serve-replay (CPU Endpoint +
+`--model vertex`) is still pending. Details:
 [docs/nlp-vertex-dev.md](../docs/nlp-vertex-dev.md).
 
 ## Layout
@@ -35,9 +35,8 @@ blocked on free tier. Details:
 ## Training on Vertex AI Workbench (CPU by default)
 
 Infra is gated **off**. A routine `terraform apply` does not create the
-VM. Default machine is `e2-standard-4` with **no** NVIDIA accelerator
-(free-tier billing blocks T4). For a training session, from
-`terraform/envs/dev`:
+VM. Default machine is `e2-standard-4` (CPU-only). For a training
+session, from `terraform/envs/dev`:
 
 ```bash
 terraform apply \
@@ -74,7 +73,7 @@ python -m nlp.training.train \
 
 `TrainingArguments(fp16=…)` is CUDA-only; `train.py` turns fp16 off on CPU.
 Drop `--batch-size` to 8 (or lower) if the VM OOMs; bump the machine type
-to `e2-standard-8` rather than attaching a T4 on free-tier billing.
+to `e2-standard-8` if you need more RAM.
 
 Or open `nlp/notebooks/finetune_distilbert.ipynb`.
 
@@ -111,8 +110,8 @@ the artifacts-bucket 30-day delete.
 ## Model Registry and Endpoint
 
 Terraform may create an **empty** Endpoint (`enable_nlp_endpoint=true`).
-It does not upload versions or deploy replicas — those would put GPU
-serving in `terraform apply`.
+It does not upload versions or deploy replicas — those would put a
+billing replica into `terraform apply`.
 
 ```bash
 gsutil -m cp -r /home/jupyter/models/distilbert-sent \
@@ -129,8 +128,7 @@ python -m nlp.endpoint.register deploy \
   --project pop-vibe-check \
   --model projects/.../models/... \
   --endpoint "$(terraform -chdir=terraform/envs/dev output -raw vertex_endpoint_id)" \
-  --machine-type n1-standard-4 \
-  --accelerator NVIDIA_TESLA_T4
+  --machine-type n1-standard-8
 ```
 
 Then replay:
@@ -147,8 +145,8 @@ python -m nlp.endpoint.register undeploy --endpoint "$VERTEX_ENDPOINT_ID"
 gcloud workbench instances stop co-nlp-workbench-dev --location=europe-central2-b
 ```
 
-An empty Endpoint does not bill for GPU. A deployed T4 replica does,
-until undeployed.
+An empty Endpoint does not bill for a replica. A deployed CPU replica
+does, until undeployed.
 
 ## Dataflow client
 

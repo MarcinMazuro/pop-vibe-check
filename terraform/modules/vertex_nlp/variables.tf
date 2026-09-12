@@ -55,7 +55,7 @@ variable "enable_workbench" {
     the instance (or set enable_workbench back to false) when finished.
     Even when true, workbench_desired_state defaults to STOPPED so the
     VM exists without burning hours until an operator starts it.
-    Default machine is CPU-only; GPU is opt-in via workbench_accelerator_*.
+    Machine is CPU-only; leave workbench_accelerator_count at 0.
   EOT
   type        = bool
   default     = false
@@ -64,8 +64,7 @@ variable "enable_workbench" {
 variable "workbench_zone" {
   description = <<-EOT
     Zone for the Workbench VM. Default europe-central2-b. Restricted to
-    -b/-c so a later GPU opt-in (T4 is not in -a) does not require a
-    recreate into another zone.
+    europe-central2-b or europe-central2-c.
   EOT
   type        = string
   default     = "europe-central2-b"
@@ -77,15 +76,15 @@ variable "workbench_zone" {
 }
 
 variable "workbench_machine_type" {
-  description = "GCE machine type for Workbench. Default e2-standard-4 (CPU). Use e2-standard-8 if DistilBERT OOMs; n1-standard-8 only when pairing with a T4."
+  description = "GCE machine type for Workbench. Default e2-standard-4 (CPU). Use e2-standard-8 if DistilBERT OOMs."
   type        = string
   default     = "e2-standard-4"
 }
 
 variable "workbench_accelerator_type" {
   description = <<-EOT
-    Guest accelerator type when workbench_accelerator_count > 0 (e.g.
-    NVIDIA_TESLA_T4). Must stay empty when count is 0 so plan shows no GPU.
+    Guest accelerator type. Leave empty — serving and training are
+    CPU-only. Required only if workbench_accelerator_count > 0.
   EOT
   type        = string
   default     = ""
@@ -93,9 +92,8 @@ variable "workbench_accelerator_type" {
 
 variable "workbench_accelerator_count" {
   description = <<-EOT
-    Guest accelerator count. Default 0 omits accelerator_configs (CPU-only).
-    Set to 1 with workbench_accelerator_type=NVIDIA_TESLA_T4 for GPU
-    training — blocked on free-tier billing accounts.
+    Guest accelerator count. Keep at 0 (omits accelerator_configs,
+    CPU-only). Do not raise this for the DistilBERT path.
   EOT
   type        = number
   default     = 0
@@ -146,7 +144,7 @@ variable "enable_endpoint" {
     Create the Vertex AI Endpoint resource. Default false so `terraform apply`
     does not expose a serving endpoint. Model versions are training artifacts
     and are *not* stored in Terraform state — this flag only creates the
-    empty Endpoint. Deploying a model onto it (the GPU/CPU replica) is a
+    empty Endpoint. Deploying a model onto it (the CPU replica) is a
     runbook step, not an apply.
   EOT
   type        = bool

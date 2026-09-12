@@ -286,15 +286,15 @@ weights. Status as of 2026-09-10:
 `distilbert-base-uncased`, 3-class (`pos`/`neu`/`neg`). Dataflow
 `--nlp_model vertex` calls a Vertex Endpoint; `stub` is still the
 default and is what classified the 4228 production rows. Weights are
-**not** baked into the Flex Template. Training is CPU-only on free-tier
-billing (T4 create is rejected). Thesis write-up: DistilBERT + Agent
-Platform, not XLM-R.
+**not** baked into the Flex Template. Training and Endpoint serving are
+CPU-only (`e2-standard-4` Workbench; `n1-standard-8` replica, no
+accelerator). Thesis write-up: DistilBERT + Agent Platform, not XLM-R.
 
 **C2 — Evaluation.** Unchanged in intent: ~300 gold labels, accuracy and
 F1; Steam `voted_up` as a weak-label set. The harness is in `nlp/eval/`
 ([docs/nlp-evaluation.md](nlp-evaluation.md)). Numbers wait on labelling
-and on the first Vertex replay, which is **pending** (Endpoint T4 blocked
-on free tier).
+and on the first Vertex replay (CPU Endpoint deploy — still **pending**,
+not accelerator-blocked).
 
 **C3 — MLflow.** Not Cloud Run + Cloud SQL. Tracking is a file store on
 the Workbench VM; artifacts go to `gs://co-tf-artifacts-dev/nlp/mlruns`.

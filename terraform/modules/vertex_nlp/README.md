@@ -18,7 +18,7 @@ Always (cheap, not gated):
 - **`roles/aiplatform.user`** (project) for the Dataflow worker SA — Endpoint.predict. Private Google Access on the subnet is enough; workers have no public IP.
 
 Gated, default **off** (`count = 0`). A routine `terraform apply` must
-never start a GPU:
+never start a billing Workbench or Endpoint replica:
 
 | Resource | Gate | Default |
 |---|---|---|
@@ -27,9 +27,7 @@ never start a GPU:
 | `google_vertex_ai_endpoint` (empty; no deployed replica) | `enable_endpoint` | `false` |
 
 `workbench_accelerator_count` defaults to `0`, so `accelerator_configs`
-is omitted and a plan cannot mention NVIDIA / T4. GPU training is opt-in
-(`count=1` + `NVIDIA_TESLA_T4` + typically `n1-standard-8`) and is blocked
-on free-tier billing.
+is omitted. Leave it at `0` — training and serving are CPU-only.
 
 Even with `enable_workbench=true`, `workbench_desired_state` defaults to
 `STOPPED`, so creating the VM does not burn hours until an operator
@@ -40,22 +38,22 @@ the 3-hour auto-stop.
 **Terraform does not store model versions.** Uploading DistilBERT to
 Vertex AI Model Registry and deploying a replica onto the Endpoint are
 training-artifact steps (`nlp/endpoint/register.py`). Putting a deployed
-model in state would make `terraform apply` the thing that starts GPU
+model in state would make `terraform apply` the thing that starts
 serving — the same accident this module's gates exist to prevent.
 
 ## Cost runbook
 
-Workbench (CPU, or T4 if opted in) and an Endpoint replica are the
-second cost line after streaming Dataflow. The intended session is:
+Workbench (CPU) and an Endpoint CPU replica are the second cost line
+after streaming Dataflow. The intended session is:
 
-1. Set `enable_workbench=true` (and `workbench_owners`) → apply → start the instance (`desired_state=ACTIVE` or console Start). Default machine is `e2-standard-4` with **no** GPU.
+1. Set `enable_workbench=true` (and `workbench_owners`) → apply → start the instance (`desired_state=ACTIVE` or console Start). Default machine is `e2-standard-4` (CPU-only).
 2. Train on Workbench (see `nlp/README.md`). Stop the instance when the run finishes — do not leave it idle. Idle shutdown is off by default; it is not a substitute for a manual STOP.
 3. `python -m nlp.endpoint.register upload …` → Model Registry.
 4. Set `enable_endpoint=true` → apply (creates the empty Endpoint).
-5. `python -m nlp.endpoint.register deploy …` → one replica, T4 or CPU, `min_replica_count=1`.
+5. `python -m nlp.endpoint.register deploy …` → one CPU replica (`n1-standard-8`, no accelerator), `min_replica_count=1`.
 6. Dataflow replay with `--model vertex`.
 7. Drain Dataflow.
-8. Undeploy the replica (`python -m nlp.endpoint.register undeploy …`). An empty Endpoint does not bill for GPU.
+8. Undeploy the replica (`python -m nlp.endpoint.register undeploy …`). An empty Endpoint does not bill for a replica.
 9. Stop Workbench. Optionally set both gates back to `false` and apply so the next operator cannot forget a running VM.
 
 Do **not** `terraform apply` with these gates on as part of a routine infra change.
@@ -76,8 +74,8 @@ Do **not** `terraform apply` with these gates on as part of a routine infra chan
 | `enable_workbench` | bool | no | `false` | Create the Workbench instance |
 | `workbench_zone` | string | no | `europe-central2-b` | Must be `-b` or `-c` |
 | `workbench_machine_type` | string | no | `e2-standard-4` | GCE machine type (CPU). `e2-standard-8` if RAM is tight |
-| `workbench_accelerator_type` | string | no | `""` | Empty when count is 0. `NVIDIA_TESLA_T4` only when count is 1 |
-| `workbench_accelerator_count` | number | no | `0` | `0` omits `accelerator_configs` (CPU-only) |
+| `workbench_accelerator_type` | string | no | `""` | Leave empty (CPU-only). Unused when count is 0 |
+| `workbench_accelerator_count` | number | no | `0` | Keep `0` — omits `accelerator_configs` (CPU-only) |
 | `workbench_idle_timeout_seconds` | number | no | `0` | Idle shutdown; `0` omits the key (disabled). Enabled: 600–86400 |
 | `workbench_desired_state` | string | no | `STOPPED` | `ACTIVE` or `STOPPED` |
 | `workbench_owners` | list(string) | no | `[]` | Emails that can open Jupyter |

@@ -34,7 +34,7 @@ They reach `aiplatform.googleapis.com` over Private Google Access.
 | | SHA | What it added |
 |---|---|---|
 | [PR #21](https://github.com/MarcinMazuro/pop-vibe-check/pull/21) | `84822cf` | DistilBERT training, Vertex Workbench / Registry / Endpoint Terraform + client, Dataflow `--model vertex`, stub remains default. |
-| [PR #22](https://github.com/MarcinMazuro/pop-vibe-check/pull/22) | `b620db0` | CPU-only Workbench (no T4), fp16 only on CUDA, MLflow file store + GCS artifacts, IAP SSH docs, idle shutdown omitted by default in Terraform, budget `create_before_destroy`. |
+| [PR #22](https://github.com/MarcinMazuro/pop-vibe-check/pull/22) | `b620db0` | CPU-only Workbench, fp16 only on CUDA, MLflow file store + GCS artifacts, IAP SSH docs, idle shutdown omitted by default in Terraform, budget `create_before_destroy`. |
 
 `b620db0` is the merge of #22 into `main`. #21 is `84822cf`.
 
@@ -93,15 +93,12 @@ budget with a human identity).
 
 ---
 
-## T4 / free tier
+## CPU-only (train + serve)
 
-Creating Workbench with a T4 failed:
-
-> free tier where non-TPU accelerators are not available
-
-Training therefore runs on CPU: `e2-standard-4`, `europe-central2-b`,
-instance `co-nlp-workbench-dev`. Do not attach an accelerator on this
-billing account.
+Training and Endpoint serving stay on CPU: Workbench `e2-standard-4`,
+zone `europe-central2-b`, instance `co-nlp-workbench-dev`; deploy with
+`n1-standard-8` and no accelerator (`nlp/endpoint/register.py`). Do not
+attach guest accelerators on this billing account.
 
 ---
 
@@ -161,10 +158,11 @@ Weights and checkpoints are on GCS (`gsutil -m cp -r` 2026-09-12):
 deleted). Boot + data disks remain. Idle shutdown is still off; do not
 `enable_nlp_workbench=false` (that destroys the VM).
 
-**Pending — serve-replay.** Registry upload / Endpoint deploy / Dataflow
-`--model vertex` still need a T4 replica and are **blocked on free
-tier**. Do not treat `events.model_version` as `vertex/…` until that
-unblocks. Production classification remains the stub on 4228 rows.
+**Pending — serve-replay.** Registry upload → CPU Endpoint deploy
+(`n1-standard-8`, no accelerator) → Dataflow `--model vertex`. Not
+blocked on accelerators. Do not treat `events.model_version` as
+`vertex/…` until that replay lands. Production classification remains
+the stub on 4228 rows.
 
 ---
 
