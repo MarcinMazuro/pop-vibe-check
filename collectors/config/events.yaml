@@ -4,10 +4,15 @@
 # as the EVENT_ID env var and as the GCS output path segment) to its name, type,
 # and date.
 #
-# IMPORTANT: dates are best-effort and MUST be verified against public sources
-# before merge (README "events.yaml" note). Entries flagged "# VERIFY" are
-# anchored on memory/press coverage rather than a confirmed primary source.
-# The two anchor dates (reveal, flying_waters) come from the project README.
+# Dates verified against public sources on 2026-09-12 (see PR that introduced
+# this comment for the source list). Two entries from the original best-effort
+# list turned out not to have happened as described and were corrected:
+# - "State of Play deep dive" was actually the Xbox Developer Direct 2025
+#   showcase (2025-01-23), not a Sony State of Play — renamed accordingly.
+# - "Demo release" never happened; no standalone demo was found. The date
+#   (2025-04-23) is real, but it marks the review-embargo lift, not a demo.
+# - "TGA 2024 Most Anticipated nominee" did not happen — Clair Obscur is not
+#   on the actual nominee list for that category/year — entry removed.
 
 events:
   - id: xbox_showcase_reveal
@@ -15,30 +20,25 @@ events:
     type: reveal
     date_utc: 2024-06-09
 
+  - id: gamescom_2024_press_preview
+    name: Gamescom 2024 press-only preview
+    type: trailer
+    date_utc: 2024-08-20
+
   - id: gameplay_trailer_flying_waters
     name: Flying Waters gameplay trailer
     type: trailer
     date_utc: 2024-08-27
 
-  - id: gamescom_2024_showing
-    name: Gamescom 2024 Opening Night Live showing
+  - id: xbox_developer_direct
+    name: Xbox Developer Direct 2025 deep dive
     type: trailer
-    date_utc: 2024-08-20 # VERIFY
+    date_utc: 2025-01-23
 
-  - id: tga_2024_most_anticipated_nominee
-    name: The Game Awards 2024 - Most Anticipated nominee
-    type: award_nomination
-    date_utc: 2024-12-12 # VERIFY
-
-  - id: state_of_play_deep_dive
-    name: Combat and story deep-dive showcase
-    type: trailer
-    date_utc: 2025-02-13 # VERIFY
-
-  - id: demo_release
-    name: Playable demo release
-    type: demo
-    date_utc: 2025-04-23 # VERIFY
+  - id: review_embargo_lift
+    name: Review embargo lift
+    type: review
+    date_utc: 2025-04-23
 
   - id: launch
     name: Worldwide launch
@@ -48,24 +48,34 @@ events:
   - id: ai_textures_controversy
     name: AI-generated textures controversy
     type: controversy
-    date_utc: 2025-04-26 # VERIFY
+    date_utc: 2025-04-26
 
   - id: one_million_sales_milestone
     name: One million copies sold milestone
     type: milestone
-    date_utc: 2025-04-28 # VERIFY
+    date_utc: 2025-04-27
 
+  # Anchors the collection window already used for the first real dataset
+  # (WINDOW_FROM=2025-05-12, WINDOW_TO=2025-06-16 — see
+  # docs/phase-0-youtube-first-collection.md). Marks the start of the
+  # post-launch critical-reception period, not a single dated announcement —
+  # do not re-flag this as VERIFY looking for a press release.
   - id: critical_acclaim_wave
     name: Post-launch critical acclaim and industry praise
     type: reception
-    date_utc: 2025-05-12 # VERIFY
+    date_utc: 2025-05-12
 
   - id: tga_2025_sweep
     name: The Game Awards 2025 sweep
     type: award
-    date_utc: 2025-12-11 # VERIFY
+    date_utc: 2025-12-11
+
+  - id: indie_game_awards_rescinded
+    name: Indie Game Awards rescinds Game of the Year and Best Debut
+    type: controversy
+    date_utc: 2025-12-20
 
   - id: anniversary_update_2026
     name: First anniversary update
     type: update
-    date_utc: 2026-04-24 # VERIFY
+    date_utc: 2026-04-24
