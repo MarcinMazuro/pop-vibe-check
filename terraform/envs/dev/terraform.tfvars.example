@@ -1,3 +1,7 @@
+# The canonical dev values live in Secret Manager (co-tfvars-dev) and are
+# what Cloud Build applies. Pull them rather than filling this in by hand:
+#   gcloud secrets versions access latest --secret=co-tfvars-dev > terraform.tfvars
+
 project_id = "your-gcp-project-id"
 
 # Optional override; default is europe-central2.
@@ -25,3 +29,11 @@ monthly_budget_amount = 50
 notification_emails = [
   # "you@example.com",
 ]
+
+# Cloud Build GitHub App installation ID. Leave unset until the app is
+# installed and the co-github-token-dev secret has a version; see
+# terraform/modules/cloud_build/README.md.
+# github_app_installation_id = 12345678
+
+# Users allowed to approve the queued `terraform apply` on main.
+# cloud_build_approver_emails = ["you@example.com"]

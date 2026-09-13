@@ -31,6 +31,19 @@ module "storage" {
   # artifacts bucket. The binding lives next to the bucket.
   ml_trainer_sa_email = module.iam.ml_trainer_sa_email
 
+  # Cloud Build publishes Flex Template specs under templates/ (grant is
+  # conditioned to that prefix).
+  cloud_build_sa_email = module.iam.cloud_build_sa_email
+
+  # Manual `gcloud builds submit --gcs-source-staging-dir=gs://<artifacts>/cloudbuild/source`
+  # runs as one of these and reads its source from there. Literals: the
+  # CI SA lives in bootstrap, and a computed email would make the for_each
+  # set unplannable.
+  cloud_build_source_reader_emails = [
+    "${var.name_prefix}-cloud-build-sa-${local.env}@${var.project_id}.iam.gserviceaccount.com",
+    local.terraform_ci_sa_email,
+  ]
+
   # Raw archive grows indefinitely in dev; flip to a positive number
   # before a tear-down if you want Terraform to clean up the bucket
   # contents on the next apply.
@@ -194,8 +207,43 @@ module "cloud_run_jobs" {
   # reddit_image_uri stays on the public 'pause' placeholder until the
   # Reddit container is built and pushed — e.g.:
   #   reddit_image_uri = "${module.artifact_registry.repository_url}/reddit-collector:<sha>"
+  #
+  # The YouTube and publisher images below only seed a freshly created job.
+  # After that Cloud Build deploys every merge to main by digest and the
+  # module ignores the image field — see modules/cloud_run_jobs/README.md.
   youtube_image_uri   = "europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/youtube-collector:729b1fdc5d8250915d0a59fa68d2408489b0a1f4"
   publisher_image_uri = "europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/publisher:2e209f7c654dca317b49a4afeb4d2b402193846e"
+
+  deployer_sa_email = module.iam.cloud_build_sa_email
+}
+
+# Cloud Build CI/CD: GitHub connection, Python checks, image build/deploy,
+# and terraform plan (PR) / apply (main, approval-gated) for this env.
+# The connection and triggers stay count = 0 until
+# github_app_installation_id is set — see modules/cloud_build/README.md.
+module "cloud_build" {
+  source = "../../modules/cloud_build"
+
+  project_id  = var.project_id
+  name_prefix = var.name_prefix
+  env         = local.env
+  region      = var.region
+  labels      = local.labels
+
+  github_owner               = "MarcinMazuro"
+  github_repo                = "pop-vibe-check"
+  github_app_installation_id = var.github_app_installation_id
+
+  cloud_build_sa_email      = module.iam.cloud_build_sa_email
+  terraform_ci_sa_email     = local.terraform_ci_sa_email
+  terraform_runner_sa_email = local.terraform_runner_sa_email
+  terraform_env_dir         = "terraform/envs/${local.env}"
+  approver_emails           = var.cloud_build_approver_emails
+
+  artifact_registry_repository_id = module.artifact_registry.repository_id
+  youtube_job_name                = module.cloud_run_jobs.youtube_job_name
+  publisher_job_name              = module.cloud_run_jobs.publisher_job_name
+  template_spec_dir               = module.dataflow.template_spec_dir
 }
 
 # Vertex AI Workbench + Endpoint for DistilBERT. Both gates default OFF

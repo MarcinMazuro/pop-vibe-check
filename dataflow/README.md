@@ -84,30 +84,34 @@ template was built from.
 
 ## Build
 
+Cloud Build builds this image automatically (see `terraform/modules/cloud_build`):
+
+- **Pull request** touching `dataflow/` or `nlp/` — image build only. The
+  Dockerfile's import check runs, nothing is pushed.
+- **Merge to `main`** — the image is pushed tagged with the full commit SHA,
+  and two template specs pinned to its **digest** are written:
+  `gs://co-dataflow-temp-dev/templates/sentiment-pipeline-<sha>.json`
+  (immutable, one per commit) and `.../sentiment-pipeline.json` (current).
+
+No build ever starts a Dataflow job. `launch.sh` uses the current spec, or
+`launch.sh --sha <commit>` to launch the template of a specific commit.
+
+Manual build from the repo root, e.g. for a branch that is not merged yet:
+
 ```bash
-gcloud builds submit --config dataflow/cloudbuild.yaml .
+gcloud builds submit --region=europe-central2 \
+  --service-account=projects/pop-vibe-check/serviceAccounts/co-cloud-build-sa-dev@pop-vibe-check.iam.gserviceaccount.com \
+
+  --gcs-source-staging-dir=gs://co-tf-artifacts-dev/cloudbuild/source \
+  --config dataflow/cloudbuild.yaml \
+  --substitutions=COMMIT_SHA=$(git rev-parse HEAD),_DEPLOY=true .
 ```
 
-**This does not work yet.** `gcloud builds submit` runs as the Compute
-Engine default service account, which holds no project roles, so the build
-fails on its own source bucket before starting. Until the `cloud_build/`
-Terraform module exists (or the build is pointed at
-`co-cloud-build-sa-dev` with `--service-account`), build and push by hand,
-which is how the collector and publisher images were deployed too:
-
-```bash
-SHA=$(git rev-parse HEAD)
-IMG=europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/sentiment-pipeline:$SHA
-docker build -f dataflow/Dockerfile -t "$IMG" .
-docker push "$IMG"
-gcloud dataflow flex-template build \
-  gs://co-dataflow-temp-dev/templates/sentiment-pipeline.json \
-  --image="$IMG" --sdk-language=PYTHON --metadata-file=dataflow/metadata.json
-```
-
-Produces the image tagged with the commit SHA and writes the template spec
-to `gs://co-dataflow-temp-dev/templates/sentiment-pipeline.json`, pinning
-that exact image.
+`--service-account` is required: without it the build runs as the Compute
+Engine default service account, which holds no project roles. The build SA
+reads its uploaded source with its own credentials, hence
+`--gcs-source-staging-dir` pointing at the prefix it can read. Note that a
+manual `_DEPLOY=true` run also overwrites the current spec.
 
 ## Run
 

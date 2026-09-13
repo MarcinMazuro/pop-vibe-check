@@ -86,13 +86,13 @@ variable "reddit_image_uri" {
 }
 
 variable "youtube_image_uri" {
-  description = "Full image URI for the YouTube collector container. Default is the public 'pause' image; override with the Artifact Registry URI once the real image is built."
+  description = "Full image URI for the YouTube collector container. Default is the public 'pause' image; override with the Artifact Registry URI once the real image is built. Only used when the job is first created: afterwards Cloud Build deploys the image and Terraform ignores it."
   type        = string
   default     = "gcr.io/google-containers/pause"
 }
 
 variable "publisher_image_uri" {
-  description = "Full image URI for the replay publisher container. Default is the public 'pause' image; override with the Artifact Registry URI once the real image is built."
+  description = "Full image URI for the replay publisher container. Default is the public 'pause' image; override with the Artifact Registry URI once the real image is built. Only used when the job is first created: afterwards Cloud Build deploys the image and Terraform ignores it."
   type        = string
   default     = "gcr.io/google-containers/pause"
 }
@@ -132,4 +132,10 @@ variable "publisher_task_timeout" {
   EOT
   type        = string
   default     = "21600s"
+}
+
+variable "deployer_sa_email" {
+  description = "Service account that deploys new images to the YouTube collector and publisher jobs (the per-env Cloud Build SA). Granted run.developer on those jobs and actAs on their runtime SAs. null skips the grants."
+  type        = string
+  default     = null
 }

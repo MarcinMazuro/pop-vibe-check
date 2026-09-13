@@ -5,10 +5,11 @@ module is wired in from this directory. State is stored remotely in the GCS
 bucket provisioned by `terraform/bootstrap`, and every apply impersonates the
 long-lived `pvc-tf-runner-sa` service account.
 
-This directory ships as an **empty composition**: the backend and provider
-are configured, but no modules are wired up yet. A clean `terraform plan`
-should report `No changes`. Modules are added incrementally in subsequent
-PRs.
+**Applies go through Cloud Build, not laptops.** A pull request touching
+`terraform/**` runs `terraform plan` in CI; merging it to `main` queues
+`terraform apply`, which starts once an approver releases it in the Cloud
+Build console. Locally you run `terraform plan` only. See
+"Plan / apply" below.
 
 ---
 
@@ -42,15 +43,31 @@ gcloud config set project <PROJECT_ID>
 
 ### Configure variables
 
-Copy the example file and fill in your project ID:
+The canonical `terraform.tfvars` for dev lives in Secret Manager as
+`co-tfvars-dev` — it is what CI applies. Pull it into this directory
+instead of writing your own, so a local plan sees the same inputs:
 
 ```bash
-cp terraform.tfvars.example terraform.tfvars
-$EDITOR terraform.tfvars
+gcloud secrets versions access latest --secret=co-tfvars-dev \
+  --project=<PROJECT_ID> > terraform.tfvars
 ```
 
-`terraform.tfvars` is excluded by the repository `.gitignore`; the
-`.tfvars.example` file is committed.
+`terraform.tfvars` is excluded by the repository `.gitignore`;
+`terraform.tfvars.example` documents the shape.
+
+**Changing a variable** (budget, alert emails, the Workbench flags,
+approvers) means publishing a new secret version and re-running the
+apply trigger:
+
+```bash
+$EDITOR terraform.tfvars
+gcloud secrets versions add co-tfvars-dev --project=<PROJECT_ID> \
+  --data-file=terraform.tfvars
+gcloud builds triggers run co-terraform-apply-dev \
+  --region=europe-central2 --branch=main
+```
+
+The run still waits for approval.
 
 ### Case-study prefix (`name_prefix`)
 
@@ -93,13 +110,29 @@ re-apply `terraform/bootstrap` first.
 
 ```bash
 terraform plan
-terraform apply
 ```
 
-While this composition is empty, `terraform plan` should print
-**`No changes. Your infrastructure matches the configuration.`** If it
-does not, something in the backend / provider wiring is off — fix that
-before adding modules.
+On a clean `main`, the plan should print **`No changes.`** A diff means
+drift — someone changed a resource outside Terraform, or your local
+`terraform.tfvars` differs from the secret.
+
+Applies happen in Cloud Build (`co-terraform-apply-dev`, runs as
+`pvc-tf-ci-sa`, which impersonates the runner SA just like a laptop does):
+
+1. Open a PR. `co-terraform-plan-pr-dev` runs `fmt -check`, `validate` for
+   bootstrap and this env, and `plan`; the full plan is in the build log
+   linked from the PR check.
+2. Merge. `co-terraform-apply-dev` is queued **awaiting approval**.
+3. An approver (`cloud_build_approver_emails`) approves it in the Cloud
+   Build console (History → the build → Approve). The build plans again
+   against current state and applies exactly that plan.
+
+Approval happens before the build starts, so the applied plan is fresh,
+not the one from the PR; read the apply log if state moved in between.
+
+Local `terraform apply` is reserved for bootstrapping CI itself (the
+connection and triggers cannot apply themselves the first time) and for
+recovering from a broken CI.
 
 ---
 
@@ -113,7 +146,8 @@ When a module under `terraform/modules/<name>/` is ready, wire it up here:
    inputs.
 2. Surface anything downstream consumers need via [outputs.tf](outputs.tf).
 3. Run `terraform plan` locally before opening the PR — every new module
-   should produce a reviewable diff.
+   should produce a reviewable diff. CI plans it again on the PR and
+   applies it after merge.
 
 ---
 
@@ -124,7 +158,7 @@ When a module under `terraform/modules/<name>/` is ready, wire it up here:
 | [versions.tf](versions.tf) | Pins Terraform and provider versions |
 | [backend.tf](backend.tf) | GCS remote state configuration |
 | [providers.tf](providers.tf) | Google provider + runner SA impersonation |
-| [variables.tf](variables.tf) | Input variables (`project_id`, `region`) |
+| [variables.tf](variables.tf) | Input variables |
 | [main.tf](main.tf) | Composition root (modules wired here) |
 | [outputs.tf](outputs.tf) | Outputs (added alongside modules) |
 | [terraform.tfvars.example](terraform.tfvars.example) | Template for local `terraform.tfvars` |

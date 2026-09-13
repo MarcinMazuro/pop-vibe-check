@@ -1,28 +1,67 @@
 # Cloud Build config for the YouTube collector image.
 #
 # Build context is the repository root so the shared collectors.common package
-# is included. Submit from the repo root:
+# is included.
 #
-#   gcloud builds submit --config collectors/youtube/cloudbuild.yaml .
+# Two triggers share this file (see terraform/modules/cloud_build):
+#   - pull request into main → _DEPLOY=false: build only, nothing pushed;
+#   - push to main           → _DEPLOY=true: push the image tagged with the
+#     full commit SHA, then deploy it to the Cloud Run Job by digest.
 #
-# The image is pushed to Artifact Registry tagged with the commit SHA.
+# Terraform ignores the job's image, so this deploy is what decides which
+# image the job runs. Manual run from the repo root (build + deploy):
+#
+#   gcloud builds submit --region=europe-central2 \
+#     --service-account=projects/<project>/serviceAccounts/co-cloud-build-sa-dev@<project>.iam.gserviceaccount.com \
+#     --gcs-source-staging-dir=gs://co-tf-artifacts-dev/cloudbuild/source \
+#     --config collectors/youtube/cloudbuild.yaml \
+#     --substitutions=COMMIT_SHA=$(git rev-parse HEAD),_DEPLOY=true .
 substitutions:
   _REGION: europe-central2
   _REPO: co-images-dev
   _IMAGE: youtube-collector
+  _JOB: co-youtube-collector-dev
+  _DEPLOY: "false"
 
 steps:
-  - name: gcr.io/cloud-builders/docker
+  - id: build
+    name: gcr.io/cloud-builders/docker
     args:
       - build
       - -f
       - collectors/youtube/Dockerfile
       - -t
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:$COMMIT_SHA
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:${COMMIT_SHA}
       - .
 
-images:
-  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:$COMMIT_SHA
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -ec
+      - |
+        if [ "${_DEPLOY}" != "true" ]; then
+          echo "Build-only run (_DEPLOY=${_DEPLOY}); image not pushed."
+          exit 0
+        fi
+        docker push ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:${COMMIT_SHA}
+
+  # Deploy by digest: a tag can be moved, a digest always names the exact
+  # image this build produced.
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -ec
+      - |
+        if [ "${_DEPLOY}" != "true" ]; then
+          echo "Build-only run (_DEPLOY=${_DEPLOY}); nothing deployed."
+          exit 0
+        fi
+        image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}
+        digest=$$(gcloud artifacts docker images describe "$$image:${COMMIT_SHA}" \
+          --format='value(image_summary.digest)')
+        gcloud run jobs update ${_JOB} --region=${_REGION} --image="$$image@$$digest"
 
 options:
   logging: CLOUD_LOGGING_ONLY
