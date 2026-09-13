@@ -102,7 +102,7 @@ Supervisor: mgr inż. Szymon Olewniczak.
 | Dataflow Beam pipeline + Flex Template | ✓ **Live** — 4228 records classified end-to-end, reproducibility verified ([details](docs/phase-1-dataflow.md)) | [`dataflow/`](dataflow/) |
 | NLP stub classifier + registry seam | ✓ Done | [`nlp/`](nlp/) |
 | Real NLP model via MLflow | ✗ Phase 1 (remaining) | Not yet |
-| Cloud Build module (CI triggers) | ✗ Phase 1 (remaining) | Not yet |
+| Cloud Build CI/CD — GitHub connection; PR: Python checks, image builds, `terraform plan`; main: image push + deploy by digest, Flex Template specs, approval-gated `terraform apply` | ✓ Applied | [`terraform/modules/cloud_build/`](terraform/modules/cloud_build/) |
 
 The Dataflow infrastructure above is **applied and live** (branch `feat/tf-dataflow-infra`); nothing billable runs until PR 3 launches the pipeline explicitly. Applying it also added `roles/compute.securityAdmin` to the Terraform runner SA in `terraform/bootstrap/` — firewall rules are "security" resources that `compute.networkAdmin` alone can't create.
 
@@ -146,7 +146,7 @@ After collectors produce raw JSONL reliably:
 3. ✓ `iam/` extension — publisher SA, plus (this PR, applied) the Dataflow worker SA.
 4. ✓ `dataflow/` module — **this PR** applied the infrastructure: worker `dataflow.worker` grant, launcher `dataflow.admin` + actAs grants, the dataflow-temp bucket, the inter-worker firewall rule, and the launch-parameter outputs PR 3 reads from `terraform output`. The Beam **Flex Template** (image + spec) and any Dataflow job resource are **PR 3** — `terraform apply` never starts a streaming job.
 5. ✓ `cloud_run_jobs/` extension — publisher job (BigQuery → Pub/Sub bridge with time compression), deployed and verified ([docs/phase-1-publisher.md](docs/phase-1-publisher.md))
-6. `cloud_build/` module — per-service triggers, workload-identity for runner SA impersonation (closes the bootstrap chicken-and-egg)
+6. ✓ `cloud_build/` module — GitHub (2nd gen) connection, per-service triggers, Terraform plan/apply as `pvc-tf-ci-sa` impersonating the runner SA. **Dev applies now go through CI**; see [`terraform/envs/dev/README.md`](terraform/envs/dev/README.md)
 7. Application: ✓ `publisher/`; ✓ `dataflow/` Beam pipeline + Flex Template; ✓ `nlp/` contract, stub and
    registry seam; remaining: a real model registered through MLflow
 
@@ -154,8 +154,9 @@ After collectors produce raw JSONL reliably:
 staging → publisher → Pub/Sub → Dataflow → `events`, with the reproducibility
 guarantee demonstrated ([docs/phase-1-dataflow.md](docs/phase-1-dataflow.md)). The
 frontier is now the two tracks that run alongside it — **more data** and a **real NLP
-model** — planned in [docs/phase-1-plan.md](docs/phase-1-plan.md), plus the
-`cloud_build/` module, which Cloud Build currently needs before it can build anything.
+model** — planned in [docs/phase-1-plan.md](docs/phase-1-plan.md). Images and dev
+infrastructure are built and applied by Cloud Build
+([`terraform/modules/cloud_build/`](terraform/modules/cloud_build/)).
 
 Note that `terraform apply` deliberately never starts a Dataflow job: streaming jobs
 bill continuously until drained. Use `dataflow/launch.sh`, and drain when done — see
@@ -424,7 +425,7 @@ A and (B or C) can start in parallel; the other waits a day for A's common libra
 └── docs/                                  # phase write-ups (collectors, first collection, publisher)
 ```
 
-`terraform/modules/dataflow/` holds the IAM and launch parameters; the Beam pipeline itself lives in `dataflow/` and the classifiers in `nlp/`. The remaining directory for Phase 1 is `terraform/modules/cloud_build/`.
+`terraform/modules/dataflow/` holds the IAM and launch parameters; the Beam pipeline itself lives in `dataflow/` and the classifiers in `nlp/`. CI/CD lives in `terraform/modules/cloud_build/`, with build configs next to each service (`*/cloudbuild.yaml`), `terraform/cloudbuild.yaml` and `cloudbuild.checks.yaml`.
 
 ## Getting set up
 

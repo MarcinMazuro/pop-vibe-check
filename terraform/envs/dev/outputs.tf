@@ -206,3 +206,25 @@ output "vertex_project_id" {
   description = "GCP project the Vertex Endpoint lives in. Launch env: VERTEX_PROJECT."
   value       = var.project_id
 }
+
+# --- Cloud Build -------------------------------------------------------------
+
+output "terraform_ci_sa_email" {
+  description = "Terraform CI SA (from bootstrap) the plan/apply triggers run as."
+  value       = local.terraform_ci_sa_email
+}
+
+output "github_token_secret_id" {
+  description = "Secret holding the GitHub token for the Cloud Build connection. Populate with `gcloud secrets versions add`."
+  value       = module.cloud_build.github_token_secret_id
+}
+
+output "tfvars_secret_id" {
+  description = "Secret holding this env's canonical terraform.tfvars, read by the Terraform triggers. Update with `gcloud secrets versions add --data-file=terraform.tfvars`."
+  value       = module.cloud_build.tfvars_secret_id
+}
+
+output "cloud_build_trigger_names" {
+  description = "Names of the Cloud Build triggers; empty until github_app_installation_id is set."
+  value       = module.cloud_build.trigger_names
+}

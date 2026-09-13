@@ -15,7 +15,11 @@
 # Drain (not cancel) lets in-flight records finish and reach BigQuery.
 #
 # Usage:
-#   dataflow/launch.sh [--yes] [--model NAME] [--env-dir DIR]
+#   dataflow/launch.sh [--yes] [--model NAME] [--env-dir DIR] [--sha COMMIT]
+#
+# --sha launches the template CI published for that commit
+# (sentiment-pipeline-<sha>.json) instead of the current one
+# (sentiment-pipeline.json, refreshed on every merge to main).
 #
 # --model vertex also needs a live Endpoint. VERTEX_ENDPOINT_ID /
 # VERTEX_PROJECT / VERTEX_LOCATION are taken from the environment or
@@ -28,6 +32,7 @@ set -euo pipefail
 ENV_DIR="terraform/envs/dev"
 NLP_MODEL="stub"
 ASSUME_YES="false"
+TEMPLATE_SHA=""
 
 # Cost guards. Small and few by default: this pipeline processes a paced
 # replay of a few thousand records, not a firehose.
@@ -39,6 +44,7 @@ while [[ $# -gt 0 ]]; do
     --yes) ASSUME_YES="true"; shift ;;
     --model) NLP_MODEL="$2"; shift 2 ;;
     --env-dir) ENV_DIR="$2"; shift 2 ;;
+    --sha) TEMPLATE_SHA="$2"; shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -62,7 +68,11 @@ INPUT_SUBSCRIPTION="$(tf_output dataflow_input_subscription)"
 OUTPUT_TABLE="$(tf_output dataflow_events_landing_table)"
 DLQ_TOPIC="$(tf_output dataflow_dlq_topic)"
 
-TEMPLATE_SPEC="${SPEC_DIR}/sentiment-pipeline.json"
+if [[ -n "${TEMPLATE_SHA}" ]]; then
+  TEMPLATE_SPEC="${SPEC_DIR}/sentiment-pipeline-${TEMPLATE_SHA}.json"
+else
+  TEMPLATE_SPEC="${SPEC_DIR}/sentiment-pipeline.json"
+fi
 JOB_NAME="co-sentiment-$(date -u +%Y%m%d-%H%M%S)"
 
 VERTEX_ENDPOINT_ID="${VERTEX_ENDPOINT_ID:-}"

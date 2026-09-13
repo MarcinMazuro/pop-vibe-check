@@ -7,6 +7,7 @@ Provisions the Reddit and YouTube collector Cloud Run Jobs and the replay publis
 - **`{name_prefix}-reddit-collector-{env}`** — Cloud Run v2 Job running as the Reddit collector SA. Default image is the public `pause` placeholder; override `reddit_image_uri` to the Artifact Registry URI once the real container is built. Memory 2Gi, CPU 1, timeout 1h, max 3 retries (all configurable).
 - **`{name_prefix}-youtube-collector-{env}`** — same shape, runs as the YouTube collector SA.
 - **`{name_prefix}-publisher-{env}`** — the replay publisher: loads the raw archive into BigQuery staging and replays it to Pub/Sub in chronological order with time compression. Timeout 6h, `max_retries = 0` (an automatic retry of a partial replay would double-publish).
+- **Image deployer grants** (when `deployer_sa_email` is set): `roles/run.developer` on the YouTube collector and publisher jobs, and `roles/iam.serviceAccountUser` on their runtime SAs, for the Cloud Build SA that deploys new images.
 - **`roles/storage.objectAdmin`** for each collector SA and **`roles/storage.objectViewer`** for the publisher SA on the raw archive bucket. These bindings live here, not in `storage/`, because the SAs the bindings reference didn't exist when `storage/` was applied — the convention is "bindings next to whichever module knows about both sides".
 
 ## Runtime environment
@@ -40,8 +41,9 @@ Execution-time params are intentionally not in the template — they change ever
 | `bq_staging_table_id` | string | yes | — | Wired into `BQ_STAGING_TABLE` |
 | `events_topic_name` | string | yes | — | Wired into `PUBSUB_TOPIC` |
 | `reddit_image_uri` | string | no | `gcr.io/google-containers/pause` | Full image URI for the Reddit container |
-| `youtube_image_uri` | string | no | `gcr.io/google-containers/pause` | Full image URI for the YouTube container |
-| `publisher_image_uri` | string | no | `gcr.io/google-containers/pause` | Full image URI for the publisher container |
+| `youtube_image_uri` | string | no | `gcr.io/google-containers/pause` | Image the YouTube job is created with; ignored afterwards (see "Image deployment") |
+| `publisher_image_uri` | string | no | `gcr.io/google-containers/pause` | Image the publisher job is created with; ignored afterwards |
+| `deployer_sa_email` | string | no | `null` | SA allowed to update the YouTube and publisher job images (the Cloud Build SA); `null` skips the grants |
 | `memory` | string | no | `2Gi` | Per-task memory limit |
 | `cpu` | string | no | `1` | Per-task CPU limit |
 | `task_timeout` | string | no | `3600s` | Hard timeout per collector task execution |
@@ -58,6 +60,21 @@ Execution-time params are intentionally not in the template — they change ever
 | `youtube_job_id` | Fully-qualified job resource ID |
 | `publisher_job_name` | Short job name of the replay publisher |
 | `publisher_job_id` | Fully-qualified job resource ID for the publisher |
+
+## Image deployment
+
+Terraform owns everything about the YouTube collector and publisher jobs **except the container image**. On every merge to `main` that touches a service, its Cloud Build trigger builds the image, tags it with the full commit SHA, and deploys it by digest:
+
+```bash
+gcloud run jobs update co-publisher-dev --region=europe-central2 \
+  --image=europe-central2-docker.pkg.dev/<project>/co-images-dev/publisher@sha256:<digest>
+```
+
+Both jobs therefore carry `ignore_changes` on the container image (and on `client` / `client_version`, which gcloud stamps on each update). `youtube_image_uri` and `publisher_image_uri` only seed a job the first time it is created. Any other change Terraform makes to the job — env vars, secrets, limits — keeps whatever image is currently deployed.
+
+To see what is running: `gcloud run jobs describe <job> --region=europe-central2 --format='value(template.template.containers[0].image)'`. To roll back, re-run the service's trigger on an older commit, or `gcloud run jobs update --image=` with an older digest.
+
+The Reddit job is not deployed by CI and still takes its image from `reddit_image_uri`.
 
 ## Triggering an execution
 

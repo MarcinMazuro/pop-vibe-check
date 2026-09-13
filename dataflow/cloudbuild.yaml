@@ -1,53 +1,94 @@
 # Cloud Build config for the sentiment pipeline Flex Template.
 #
 # Build context is the repository root so the nlp package is included.
-# Submit from the repo root:
 #
-#   gcloud builds submit --config dataflow/cloudbuild.yaml .
+# Two triggers share this file (see terraform/modules/cloud_build):
+#   - pull request into main → _DEPLOY=false: build the image only. The
+#     Dockerfile's import check still runs, so a broken pipeline image
+#     fails the PR.
+#   - push to main           → _DEPLOY=true: push the image tagged with the
+#     full commit SHA and publish two template specs pinned to its digest:
+#       ${_TEMPLATE_SPEC_DIR}/sentiment-pipeline-<sha>.json  (immutable)
+#       ${_TEMPLATE_SPEC_DIR}/sentiment-pipeline.json        (current)
+#     dataflow/launch.sh uses the current spec by default, or a specific
+#     commit's spec with --sha.
 #
-# Produces two artifacts:
-#   1. the container image, tagged with the commit SHA;
-#   2. the Flex Template spec JSON in GCS, which the launch points at.
+# This build never starts a Dataflow job.
 #
-# The spec pins the image by the SHA tag built in this run, so a launch
-# always names an exact image rather than a moving :latest.
+# Manual run from the repo root (build + publish specs):
+#
+#   gcloud builds submit --region=europe-central2 \
+#     --service-account=projects/<project>/serviceAccounts/co-cloud-build-sa-dev@<project>.iam.gserviceaccount.com \
+#     --gcs-source-staging-dir=gs://co-tf-artifacts-dev/cloudbuild/source \
+#     --config dataflow/cloudbuild.yaml \
+#     --substitutions=COMMIT_SHA=$(git rev-parse HEAD),_DEPLOY=true .
 substitutions:
   _REGION: europe-central2
   _REPO: co-images-dev
   _IMAGE: sentiment-pipeline
-  _TEMPLATE_SPEC: gs://co-dataflow-temp-dev/templates/sentiment-pipeline.json
+  _TEMPLATE_SPEC_DIR: gs://co-dataflow-temp-dev/templates
+  _DEPLOY: "false"
 
 steps:
+  # BuildKit, not the classic builder. apache/beam_python3.12_sdk ships
+  # zstd-compressed layers, which the Docker daemon on Cloud Build workers
+  # cannot unpack ("failed to register layer ... invalid tar header").
+  # A docker-container buildx builder pulls and builds inside BuildKit, and
+  # pushes straight from it, so the daemon never stores the image.
+  #
+  # BuildKit authenticates to Artifact Registry with the build SA's token
+  # from the metadata server.
   - id: build
-    name: gcr.io/cloud-builders/docker
+    name: docker.io/library/docker:29.8.0-cli
+    entrypoint: sh
     args:
-      - build
-      - -f
-      - dataflow/Dockerfile
-      - -t
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:$COMMIT_SHA
-      - .
+      - -ec
+      - |
+        wget -qO- --header 'Metadata-Flavor: Google' \
+          http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token \
+          | sed -E 's/.*"access_token":"([^"]+)".*/\1/' \
+          | docker login -u oauth2accesstoken --password-stdin https://${_REGION}-docker.pkg.dev
+        docker buildx create --name ci --driver docker-container \
+          --driver-opt image=moby/buildkit:v0.29.0 --use
+        if [ "${_DEPLOY}" = "true" ]; then
+          output=--push
+        else
+          echo "Build-only run (_DEPLOY=${_DEPLOY}); image not pushed."
+          output=
+        fi
+        # --provenance=false keeps a single image manifest (no attestation
+        # index), the same shape the Dataflow launcher always pulled.
+        docker buildx build $$output --provenance=false \
+          -f dataflow/Dockerfile \
+          -t ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:${COMMIT_SHA} \
+          .
 
-  # Pushed explicitly rather than via `images:` because the spec build
-  # below needs the image to already exist in the registry.
-  - id: push
-    name: gcr.io/cloud-builders/docker
-    args:
-      - push
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:$COMMIT_SHA
-
+  # The spec pins the image by digest, so a launch names the exact image
+  # this build produced even if the SHA tag were ever moved.
   - id: template-spec
-    name: gcr.io/google.com/cloudsdktool/cloud-sdk
-    entrypoint: gcloud
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
     args:
-      - dataflow
-      - flex-template
-      - build
-      - ${_TEMPLATE_SPEC}
-      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:$COMMIT_SHA
-      - --sdk-language=PYTHON
-      - --metadata-file=dataflow/metadata.json
+      - -ec
+      - |
+        if [ "${_DEPLOY}" != "true" ]; then
+          echo "Build-only run (_DEPLOY=${_DEPLOY}); no template spec published."
+          exit 0
+        fi
+        image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}
+        digest=$$(gcloud artifacts docker images describe "$$image:${COMMIT_SHA}" \
+          --format='value(image_summary.digest)')
+        versioned=${_TEMPLATE_SPEC_DIR}/sentiment-pipeline-${COMMIT_SHA}.json
+        gcloud dataflow flex-template build "$$versioned" \
+          --image="$$image@$$digest" \
+          --sdk-language=PYTHON \
+          --metadata-file=dataflow/metadata.json
+        gcloud storage cp "$$versioned" ${_TEMPLATE_SPEC_DIR}/sentiment-pipeline.json
+
+timeout: 3600s
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: E2_HIGHCPU_8
+  # No machineType: the regional default pool in europe-central2 rejects
+  # the larger build machines on this project's quota. The default machine
+  # is slower but sufficient.

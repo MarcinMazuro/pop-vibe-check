@@ -33,6 +33,18 @@ variable "ml_trainer_sa_email" {
   type        = string
 }
 
+variable "cloud_build_sa_email" {
+  description = "Email of the per-env Cloud Build SA — granted roles/storage.objectAdmin on the dataflow-temp bucket, conditioned to the templates/ prefix, so CI can publish Flex Template specs. null skips the grant."
+  type        = string
+  default     = null
+}
+
+variable "cloud_build_source_reader_emails" {
+  description = "Service accounts manual `gcloud builds submit` runs as (Cloud Build SA, Terraform CI SA). Granted roles/storage.objectViewer on the artifacts bucket, conditioned to cloudbuild/source/, where manual submits stage their source."
+  type        = list(string)
+  default     = []
+}
+
 variable "raw_archive_autodelete_days" {
   description = <<-EOT
     If greater than 0, raw archive objects are hard-deleted after this many

@@ -93,3 +93,15 @@ variable "enable_nlp_endpoint" {
   type        = bool
   default     = false
 }
+
+variable "github_app_installation_id" {
+  description = "Installation ID of the Google Cloud Build GitHub App on the repository owner (the number at the end of github.com/settings/installations/<id>). null keeps the Cloud Build connection and triggers uncreated. See modules/cloud_build/README.md."
+  type        = number
+  default     = null
+}
+
+variable "cloud_build_approver_emails" {
+  description = "User emails allowed to approve the queued terraform apply build on main."
+  type        = list(string)
+  default     = []
+}

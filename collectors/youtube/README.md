@@ -46,15 +46,32 @@ uv run python -m collectors.youtube.main
 
 Build context is the **repository root**:
 
+Cloud Build builds the image on every pull request that touches the
+collector (`collectors/youtube/`, `collectors/common/`, `collectors/config/`)
+and, on merge to `main`, pushes it tagged with the full commit SHA and
+deploys it to `co-youtube-collector-dev` by digest. Terraform ignores the
+job's image, so that deploy is what decides what the job runs.
+
+Locally:
+
 ```bash
-gcloud builds submit --config collectors/youtube/cloudbuild.yaml .
-# or locally:
 docker build -f collectors/youtube/Dockerfile -t youtube-collector .
+```
+
+Manual build + deploy (e.g. an unmerged branch):
+
+```bash
+gcloud builds submit --region=europe-central2 \
+  --service-account=projects/pop-vibe-check/serviceAccounts/co-cloud-build-sa-dev@pop-vibe-check.iam.gserviceaccount.com \
+
+  --gcs-source-staging-dir=gs://co-tf-artifacts-dev/cloudbuild/source \
+  --config collectors/youtube/cloudbuild.yaml \
+  --substitutions=COMMIT_SHA=$(git rev-parse HEAD),_DEPLOY=true .
 ```
 
 ## Execute the Cloud Run Job
 
-After the image URI is wired into Terraform and applied:
+Once an image has been deployed:
 
 ```bash
 gcloud run jobs execute co-youtube-collector-dev \

@@ -1,0 +1,87 @@
+# Cloud Build config for Terraform: plan on pull requests, apply on main.
+#
+# Two triggers share this file (see terraform/modules/cloud_build):
+#   - PR into main touching terraform/**  → _MODE=plan
+#   - push to main touching terraform/**  → _MODE=apply, released by a
+#     manual approval in Cloud Build before the build starts
+#
+# The build runs as the Terraform CI SA, which only holds token-creator on
+# the runner SA. The provider block impersonates the runner by itself; the
+# state backend is pointed at it with -backend-config below.
+#
+# terraform.tfvars is not in git. The environment's canonical copy lives in
+# Secret Manager and is written into the env directory at build time.
+substitutions:
+  _TF_VERSION: 1.8.5
+  _ENV_DIR: terraform/envs/dev
+  _TFVARS_SECRET: co-tfvars-dev
+  _RUNNER_SA: pvc-tf-runner-sa@${PROJECT_ID}.iam.gserviceaccount.com
+  _MODE: plan
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/${PROJECT_ID}/secrets/${_TFVARS_SECRET}/versions/latest
+      env: TFVARS
+
+steps:
+  - id: fmt
+    name: hashicorp/terraform:${_TF_VERSION}
+    args: [fmt, -check, -recursive, -diff, terraform]
+
+  # Bootstrap is applied by hand, but it still has to stay valid.
+  - id: validate-bootstrap
+    name: hashicorp/terraform:${_TF_VERSION}
+    entrypoint: sh
+    args:
+      - -ec
+      - |
+        terraform -chdir=terraform/bootstrap init -backend=false -input=false
+        terraform -chdir=terraform/bootstrap validate
+
+  - id: init
+    name: hashicorp/terraform:${_TF_VERSION}
+    entrypoint: sh
+    secretEnv: [TFVARS]
+    args:
+      - -ec
+      - |
+        printf '%s\n' "$$TFVARS" > ${_ENV_DIR}/terraform.tfvars
+        terraform -chdir=${_ENV_DIR} init -input=false \
+          -backend-config="impersonate_service_account=${_RUNNER_SA}"
+        terraform -chdir=${_ENV_DIR} validate
+
+  - id: plan
+    name: hashicorp/terraform:${_TF_VERSION}
+    args:
+      - -chdir=${_ENV_DIR}
+      - plan
+      - -input=false
+      - -lock-timeout=10m
+      - -out=tfplan
+
+  # Applies exactly the plan printed by the previous step.
+  - id: apply
+    name: hashicorp/terraform:${_TF_VERSION}
+    entrypoint: sh
+    args:
+      - -ec
+      - |
+        if [ "${_MODE}" != "apply" ]; then
+          echo "Plan-only build (_MODE=${_MODE}); nothing applied."
+          exit 0
+        fi
+        terraform -chdir=${_ENV_DIR} apply -input=false -lock-timeout=10m tfplan
+
+timeout: 3600s
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  env:
+    - TF_IN_AUTOMATION=1
+    # Plain logs in Cloud Logging. Not TF_CLI_ARGS: fmt rejects -no-color.
+    - TF_CLI_ARGS_init=-no-color
+    - TF_CLI_ARGS_validate=-no-color
+    - TF_CLI_ARGS_plan=-no-color
+    - TF_CLI_ARGS_apply=-no-color
+  # Lets _RUNNER_SA's default expand ${PROJECT_ID} on manual submits too.
+  dynamicSubstitutions: true

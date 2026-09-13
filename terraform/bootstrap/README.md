@@ -1,6 +1,6 @@
 # terraform/bootstrap
 
-One-time, manually-applied Terraform configuration. Creates the two pieces
+One-time, manually-applied Terraform configuration. Creates the pieces
 of shared infrastructure that every other Terraform run in this repo
 depends on:
 
@@ -11,6 +11,9 @@ depends on:
 2. **One** long-lived service account (`pvc-tf-runner-sa`) that every later
    `terraform apply` impersonates, regardless of which environment or
    release it operates on.
+3. **One** Terraform CI service account (`pvc-tf-ci-sa`) that the Cloud
+   Build plan/apply triggers run as. It can only impersonate the runner SA
+   and write build logs — see "Terraform in CI" below.
 
 Bootstrap is run **once per GCP project**, not once per environment.
 
@@ -142,12 +145,13 @@ terraform apply
 ```
 
 A clean `plan` on a fresh project with `billing_account_id` set and one
-entry in `operator_emails` should show **32 resources to add**:
+entry in `operator_emails` should show roughly **40 resources to add**:
 
 - 15 × `google_project_service` (one per entry in `var.enabled_services` — includes `monitoring.googleapis.com` since the budgets module landed)
 - 1 × `google_storage_bucket` (the state bucket)
-- 1 × `google_service_account` (the runner SA)
-- 14 × `google_project_iam_member` (one per curated role on the project, including `compute.securityAdmin` for the Dataflow inter-worker firewall rule)
+- 2 × `google_service_account` (the runner SA and the Terraform CI SA)
+- one `google_project_iam_member` per curated runner role, plus `logging.logWriter` for the CI SA
+- 1 × `google_service_account_iam_member` (CI SA → token creator on the runner SA)
 - 1 × `google_billing_account_iam_member` (only if `billing_account_id` is set)
 - N × `google_service_account_iam_member` (one per operator email)
 
@@ -267,3 +271,23 @@ or recovering from a destroy, not for onboarding new envs.
 | `state_bucket_url`  | `gs://` URL of the same bucket | reference / debugging |
 | `runner_service_account_email` | Long-lived runner SA email | provider impersonation in `terraform/envs/*` |
 | `runner_service_account_id` | Fully-qualified runner SA resource ID | IAM bindings in later modules |
+| `tf_ci_service_account_email` | Terraform CI SA email | `service_account` of the Terraform triggers in `terraform/modules/cloud_build` |
+
+---
+
+## Terraform in CI
+
+`terraform/envs/dev` is applied by Cloud Build, not from laptops: a pull
+request that touches `terraform/**` runs `terraform plan`, and a merge to
+`main` queues `terraform apply` behind a manual approval. Both builds run
+as `pvc-tf-ci-sa`, which holds a single meaningful permission — token
+creator on `pvc-tf-runner-sa`. The env's provider block and the state
+backend both impersonate the runner, so CI and a laptop reach GCP through
+the same identity.
+
+The CI SA is deliberately distinct from the per-env Cloud Build SA that
+builds container images. Image builds run Dockerfiles and tests straight
+from pull requests; that identity must not be able to mint runner tokens.
+
+Bootstrap itself stays manual: it creates the identities CI runs as, and
+its state is local.
