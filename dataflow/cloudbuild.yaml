@@ -30,27 +30,38 @@ substitutions:
   _DEPLOY: "false"
 
 steps:
+  # BuildKit, not the classic builder. apache/beam_python3.12_sdk ships
+  # zstd-compressed layers, which the Docker daemon on Cloud Build workers
+  # cannot unpack ("failed to register layer ... invalid tar header").
+  # A docker-container buildx builder pulls and builds inside BuildKit, and
+  # pushes straight from it, so the daemon never stores the image.
+  #
+  # BuildKit authenticates to Artifact Registry with the build SA's token
+  # from the metadata server.
   - id: build
-    name: gcr.io/cloud-builders/docker
-    args:
-      - build
-      - -f
-      - dataflow/Dockerfile
-      - -t
-      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:${COMMIT_SHA}
-      - .
-
-  - id: push
-    name: gcr.io/cloud-builders/docker
-    entrypoint: bash
+    name: docker.io/library/docker:29.8.0-cli
+    entrypoint: sh
     args:
       - -ec
       - |
-        if [ "${_DEPLOY}" != "true" ]; then
+        wget -qO- --header 'Metadata-Flavor: Google' \
+          http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token \
+          | sed -E 's/.*"access_token":"([^"]+)".*/\1/' \
+          | docker login -u oauth2accesstoken --password-stdin https://${_REGION}-docker.pkg.dev
+        docker buildx create --name ci --driver docker-container \
+          --driver-opt image=moby/buildkit:v0.29.0 --use
+        if [ "${_DEPLOY}" = "true" ]; then
+          output=--push
+        else
           echo "Build-only run (_DEPLOY=${_DEPLOY}); image not pushed."
-          exit 0
+          output=
         fi
-        docker push ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:${COMMIT_SHA}
+        # --provenance=false keeps a single image manifest (no attestation
+        # index), the same shape the Dataflow launcher always pulled.
+        docker buildx build $$output --provenance=false \
+          -f dataflow/Dockerfile \
+          -t ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:${COMMIT_SHA} \
+          .
 
   # The spec pins the image by digest, so a launch names the exact image
   # this build produced even if the SHA tag were ever moved.
