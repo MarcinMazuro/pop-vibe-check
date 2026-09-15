@@ -282,13 +282,15 @@ Registry / Endpoint). Inference is Endpoint REST, not image-baked
 weights. Status as of 2026-09-10:
 [docs/phase-1-nlp-vertex-dev.md](phase-1-nlp-vertex-dev.md).
 
-**C1 — DistilBERT**, behind the same interface as Marcin's stub.
-`distilbert-base-uncased`, 3-class (`pos`/`neu`/`neg`). Dataflow
-`--nlp_model vertex` calls a Vertex Endpoint; `stub` is still the
+**C1 — XLM-RoBERTa v2**, behind the same interface as Marcin's stub.
+`xlm-roberta-base`, 3-class (`pos`/`neu`/`neg`). DistilBERT v1 remains
+the trained English baseline; v2 recipe:
+[`docs/phase-1-nlp-multilingual-v2.md`](phase-1-nlp-multilingual-v2.md).
+Dataflow `--nlp_model vertex` calls a Vertex Endpoint; `stub` is still the
 default and is what classified the 4228 production rows. Weights are
 **not** baked into the Flex Template. Training and Endpoint serving are
-CPU-only (`e2-standard-4` Workbench; `n1-standard-8` replica, no
-accelerator). Thesis write-up: DistilBERT + Agent Platform, not XLM-R.
+CPU-only (`n2-standard-16` Workbench for v2; `n1-standard-8` replica, no
+accelerator).
 
 **C2 — Evaluation.** Unchanged in intent: ~300 gold labels, accuracy and
 F1; Steam `voted_up` as a weak-label set. DistilBERT v1 gold metrics:
@@ -298,7 +300,7 @@ Vertex replay (CPU Endpoint deploy — still **pending**).
 
 **C3 — MLflow.** Not Cloud Run + Cloud SQL. Tracking is a file store on
 the Workbench VM; artifacts go to `gs://co-tf-artifacts-dev/nlp/mlruns`.
-Experiment `distilbert-sentiment`. There is no `terraform/modules/mlflow`.
+Experiment `xlmr-sentiment` (v2) / `distilbert-sentiment` (v1). There is no `terraform/modules/mlflow`.
 
 **C4 — Presentation.** Looker Studio dashboard and the BigQuery
 authorised views it reads through — listed as outstanding in the

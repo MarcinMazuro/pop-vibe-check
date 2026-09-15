@@ -17,7 +17,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 DEFAULT_GCS_TRACKING_URI = "gs://co-tf-artifacts-dev/nlp/mlruns"
-DEFAULT_EXPERIMENT = "distilbert-sentiment"
+DEFAULT_EXPERIMENT = "xlmr-sentiment"
 
 
 def start_run(

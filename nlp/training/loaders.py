@@ -1,10 +1,14 @@
 """Load and mix the hybrid fine-tune corpus.
 
 Hugging Face ``datasets`` is imported inside the loaders that need it so
-CI can test label maps without downloading SST-2 or Twitter. On Workbench,
+CI can test label maps without downloading Hub corpora. On Workbench,
 point ``cache_dir`` at a local copy of ``gs://co-tf-artifacts-dev/nlp/datasets/``
 (see :func:`cache_dir_from_gcs`) so a restarted instance does not hit the
 Hub.
+
+The v2 mix (XLM-RoBERTa) is :func:`load_v2_corpus`: clapAI subsample,
+multilingual tweets, downsampled tweet_eval / GoEmotions, oversampled
+own-domain gold. SST-2 and Sentiment140 stay available behind flags.
 """
 
 from __future__ import annotations
@@ -17,6 +21,7 @@ from pathlib import Path
 
 from nlp.training.labels import (
     LabeledText,
+    map_clapai_label,
     map_goemotions_labels,
     map_sentiment140_label,
     map_sst2_label,
@@ -29,8 +34,29 @@ logger = logging.getLogger(__name__)
 # rsyncs this to a local disk before `load_dataset`.
 DEFAULT_GCS_DATASETS_URI = "gs://co-tf-artifacts-dev/nlp/datasets/"
 
-# tweet_eval sentiment is ~60k across splits; Sentiment140 fills the rest.
+# tweet_eval sentiment is ~60k across splits; Sentiment140 fills the rest
+# in the v1 mix only (off by default for v2).
 TWITTER_TARGET = 100_000
+
+CLAPAI_DATASET = "clapAI/MultiLingualSentiment"
+CLAPAI_STEAM_LANGS: tuple[str, ...] = ("en", "zh", "ru", "fr", "ko")
+CLAPAI_EXTRA_LANGS: tuple[str, ...] = ("de", "es", "ja")
+CLAPAI_PER_STEAM_LANG = 18_000
+CLAPAI_PER_EXTRA_LANG = 6_000
+TWEET_EVAL_TARGET = 25_000
+GOEMOTIONS_TARGET = 15_000
+OWN_DOMAIN_OVERSAMPLE = 10
+MAX_TEXT_CHARS = 512
+TWEET_SENTIMENT_ML_CONFIGS: tuple[str, ...] = (
+    "arabic",
+    "english",
+    "french",
+    "german",
+    "hindi",
+    "italian",
+    "portuguese",
+    "spanish",
+)
 
 
 def cache_dir_from_gcs(
@@ -265,6 +291,9 @@ def load_own_domain(path: str | Path) -> list[LabeledText]:
                 raise ValueError(
                     f"{path}:{line_no}: both 'text' and 'label' are required"
                 )
+            split = str(payload.get("split") or "").strip().lower()
+            if split == "holdout":
+                continue
             source = str(payload.get("source") or "own_domain")
             rows.append(LabeledText(text, label, source))
     logger.info("Loaded %d own-domain examples from %s.", len(rows), path)
@@ -287,6 +316,272 @@ def mix_corpus(
     for part in parts:
         mixed.extend(row for row in part if row.text.strip())
     return mixed
+
+
+def subsample_rows(
+    rows: Sequence[LabeledText],
+    n: int,
+    *,
+    seed: int = 33,
+) -> list[LabeledText]:
+    """Draw up to ``n`` rows, preserving label proportions.
+
+    Args:
+        rows: Mapped examples.
+        n: Desired size. ``0`` returns an empty list; ``n >= len(rows)``
+            returns a shallow copy.
+        seed: RNG seed.
+
+    Returns:
+        A new list of length ``min(n, len(rows))``.
+    """
+    pool = list(rows)
+    if n <= 0:
+        return []
+    if n >= len(pool):
+        return pool
+
+    rng = random.Random(seed)
+    by_label: dict[str, list[LabeledText]] = {}
+    for row in pool:
+        by_label.setdefault(row.label, []).append(row)
+    for bucket in by_label.values():
+        rng.shuffle(bucket)
+
+    chosen: list[LabeledText] = []
+    leftover: list[LabeledText] = []
+    allocated = 0
+    items = list(by_label.items())
+    for index, (_label, bucket) in enumerate(items):
+        remaining_labels = len(items) - index
+        remaining_slots = n - allocated
+        if remaining_labels == 1:
+            take = min(len(bucket), remaining_slots)
+        else:
+            take = min(
+                len(bucket),
+                remaining_slots,
+                int(round(n * len(bucket) / len(pool))),
+            )
+        chosen.extend(bucket[:take])
+        leftover.extend(bucket[take:])
+        allocated += take
+
+    if len(chosen) < n:
+        rng.shuffle(leftover)
+        chosen.extend(leftover[: n - len(chosen)])
+    rng.shuffle(chosen)
+    return chosen[:n]
+
+
+def oversample_rows(rows: Sequence[LabeledText], factor: int) -> list[LabeledText]:
+    """Repeat ``rows`` ``factor`` times.
+
+    Args:
+        rows: Mapped examples.
+        factor: Repeat count. Values ``<= 1`` return a shallow copy.
+
+    Returns:
+        Concatenated copies, original order inside each copy.
+    """
+    pool = list(rows)
+    if factor <= 1:
+        return pool
+    repeated: list[LabeledText] = []
+    for _ in range(factor):
+        repeated.extend(pool)
+    return repeated
+
+
+def load_clapai_sample(
+    *,
+    cache_dir: str | Path | None = None,
+    seed: int = 33,
+    per_steam_lang: int = CLAPAI_PER_STEAM_LANG,
+    per_extra_lang: int = CLAPAI_PER_EXTRA_LANG,
+    max_chars: int = MAX_TEXT_CHARS,
+) -> list[LabeledText]:
+    """Reservoir-sample clapAI MultiLingualSentiment for Steam-centric langs.
+
+    One pass over the train split. Caps are per language and split evenly
+    across ``pos`` / ``neu`` / ``neg``. Texts longer than ``max_chars``
+    are dropped so the mix matches short game comments.
+
+    Args:
+        cache_dir: Hugging Face datasets cache.
+        seed: Reservoir RNG seed.
+        per_steam_lang: Cap for each of en/zh/ru/fr/ko.
+        per_extra_lang: Cap for each of de/es/ja.
+        max_chars: Maximum raw text length.
+
+    Returns:
+        Mapped examples.
+    """
+    from datasets import load_dataset
+
+    caps: dict[str, int] = {lang: per_steam_lang for lang in CLAPAI_STEAM_LANGS}
+    caps.update({lang: per_extra_lang for lang in CLAPAI_EXTRA_LANGS})
+    per_class = {lang: max(1, cap // 3) for lang, cap in caps.items()}
+    rng = random.Random(seed)
+    buckets: dict[tuple[str, str], list[LabeledText]] = {}
+    seen: dict[tuple[str, str], int] = {}
+
+    dataset = load_dataset(CLAPAI_DATASET, cache_dir=_as_cache(cache_dir))
+    split = dataset["train"] if "train" in dataset else dataset
+    for index, row in enumerate(split):
+        if index % 100_000 == 0:
+            logger.info("Scanning clapAI train row %d.", index)
+        language = str(row.get("language") or "").strip().lower()
+        class_cap = per_class.get(language)
+        if class_cap is None:
+            continue
+        text = str(row.get("text") or "").strip()
+        if not text or len(text) > max_chars:
+            continue
+        try:
+            label = map_clapai_label(str(row.get("label") or ""))
+        except ValueError:
+            continue
+        item = LabeledText(text, label, "clapai")
+        key = (language, label)
+        _reservoir_add(buckets, seen, key, item, class_cap, rng)
+
+    rows = [item for bucket in buckets.values() for item in bucket]
+    logger.info(
+        "Sampled %d clapAI examples across %d buckets.",
+        len(rows),
+        len(buckets),
+    )
+    return rows
+
+
+def load_tweet_sentiment_multilingual(
+    cache_dir: str | Path | None = None,
+) -> list[LabeledText]:
+    """Load CardiffNLP tweet sentiment in eight languages (all splits).
+
+    Args:
+        cache_dir: Hugging Face datasets cache.
+
+    Returns:
+        Mapped examples. Configs that fail to load are skipped with a warning.
+    """
+    from datasets import load_dataset
+
+    rows: list[LabeledText] = []
+    cache = _as_cache(cache_dir)
+    for config in TWEET_SENTIMENT_ML_CONFIGS:
+        try:
+            dataset = load_dataset(
+                "cardiffnlp/tweet_sentiment_multilingual",
+                config,
+                cache_dir=cache,
+            )
+        except Exception as exc:  # noqa: BLE001 — Hub configs vary by revision
+            logger.warning("Skipping tweet_sentiment_multilingual/%s: %s", config, exc)
+            continue
+        for split in dataset:
+            for row in dataset[split]:
+                text = str(row.get("text") or "").strip()
+                if not text:
+                    continue
+                try:
+                    label = map_tweet_eval_label(int(row["label"]))
+                except (ValueError, KeyError, TypeError):
+                    continue
+                rows.append(LabeledText(text, label, "tweet_sentiment_ml"))
+    logger.info("Loaded %d tweet_sentiment_multilingual examples.", len(rows))
+    return rows
+
+
+def load_v2_corpus(
+    *,
+    cache_dir: str | Path | None = None,
+    seed: int = 33,
+    own_domain: str | Path | None = None,
+    skip_goemotions: bool = False,
+    skip_clapai: bool = False,
+    skip_tweet_ml: bool = False,
+    skip_tweet_eval: bool = False,
+    include_sst2: bool = False,
+    include_sentiment140: bool = False,
+    tweet_eval_target: int = TWEET_EVAL_TARGET,
+    goemotions_target: int = GOEMOTIONS_TARGET,
+    own_domain_factor: int = OWN_DOMAIN_OVERSAMPLE,
+) -> list[LabeledText]:
+    """Assemble the multilingual v2 mix (~150–180k examples).
+
+    Args:
+        cache_dir: Hugging Face datasets cache.
+        seed: Sampling seed.
+        own_domain: Optional gold JSONL (holdout rows are skipped).
+        skip_goemotions: Drop the Reddit substitute.
+        skip_clapai: Drop the clapAI subsample.
+        skip_tweet_ml: Drop CardiffNLP multilingual tweets.
+        skip_tweet_eval: Drop English tweet_eval.
+        include_sst2: Append GLUE SST-2 (v1 leftover; off by default).
+        include_sentiment140: Fill Twitter with Sentiment140 (v1 leftover).
+        tweet_eval_target: Cap for tweet_eval after downsample.
+        goemotions_target: Cap for GoEmotions after downsample.
+        own_domain_factor: Repeat count for gold train rows.
+
+    Returns:
+        Concatenated mapped examples.
+    """
+    parts: list[list[LabeledText]] = []
+    if not skip_clapai:
+        parts.append(load_clapai_sample(cache_dir=cache_dir, seed=seed))
+    if not skip_tweet_ml:
+        parts.append(load_tweet_sentiment_multilingual(cache_dir=cache_dir))
+    if not skip_tweet_eval:
+        tweets = load_tweet_eval(cache_dir=cache_dir)
+        parts.append(subsample_rows(tweets, tweet_eval_target, seed=seed))
+    if include_sentiment140:
+        tweet_n = 0 if skip_tweet_eval else tweet_eval_target
+        remaining = max(0, TWITTER_TARGET - tweet_n)
+        parts.append(
+            load_sentiment140_sample(remaining, cache_dir=cache_dir, seed=seed)
+        )
+    if not skip_goemotions:
+        goemotions = load_goemotions(cache_dir=cache_dir)
+        parts.append(subsample_rows(goemotions, goemotions_target, seed=seed))
+    if include_sst2:
+        parts.append(load_sst2(cache_dir=cache_dir))
+    if own_domain:
+        gold = load_own_domain(own_domain)
+        parts.append(oversample_rows(gold, own_domain_factor))
+    mixed = mix_corpus(parts)
+    logger.info("v2 corpus: %d examples.", len(mixed))
+    return mixed
+
+
+def _reservoir_add(
+    buckets: dict[tuple[str, str], list[LabeledText]],
+    seen: dict[tuple[str, str], int],
+    key: tuple[str, str],
+    item: LabeledText,
+    cap: int,
+    rng: random.Random,
+) -> None:
+    """Algorithm R: keep at most ``cap`` items per ``key``.
+
+    Args:
+        buckets: Reservoirs keyed by (language, label).
+        seen: How many candidates have been offered for each key.
+        key: Bucket identity.
+        item: Candidate example.
+        cap: Maximum bucket size.
+        rng: Seeded RNG.
+    """
+    seen[key] = seen.get(key, 0) + 1
+    count = seen[key]
+    bucket = buckets.setdefault(key, [])
+    if len(bucket) < cap:
+        bucket.append(item)
+        return
+    replace_at = rng.randrange(count)
+    if replace_at < cap:
+        bucket[replace_at] = item
 
 
 def _as_cache(cache_dir: str | Path | None) -> str | None:

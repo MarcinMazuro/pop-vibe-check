@@ -30,7 +30,7 @@ from typing import Protocol, runtime_checkable
 # implementation maps its own label space onto exactly these.
 LABELS: tuple[str, str, str] = ("pos", "neu", "neg")
 
-# DistilBERT head ids used at train and serve time. Order matches
+# Classification-head ids used at train and serve time. Order matches
 # tweet_eval sentiment (0=neg, 1=neu, 2=pos) so a checkpoint served
 # without our id2label still maps LABEL_0/1/2 in a documented way.
 LABEL2ID: dict[str, int] = {"neg": 0, "neu": 1, "pos": 2}
@@ -109,8 +109,8 @@ class SentimentClassifier(Protocol):
     in ``__init__`` and must not require the public internet — Dataflow
     workers have no public IPs and cannot reach PyPI or Hugging Face Hub.
     Calling a Google API (Vertex ``Endpoint.predict`` over Private Google
-    Access) is allowed; baking a DistilBERT checkpoint into the Flex
-    Template image is not how this project serves the model.
+    Access) is allowed; baking a checkpoint into the Flex Template image
+    is not how this project serves the model.
     """
 
     @property

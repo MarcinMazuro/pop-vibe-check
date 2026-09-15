@@ -7,7 +7,8 @@ live in [`nlp/README.md`](../nlp/README.md) and
 Evaluation numbers for DistilBERT v1:
 [`phase-1-nlp-evaluation-distilbert-v1.md`](phase-1-nlp-evaluation-distilbert-v1.md).
 
-Date: 2026-09-12.
+Date: 2026-09-12. Multilingual v2 recipe (XLM-RoBERTa, not yet trained):
+[`phase-1-nlp-multilingual-v2.md`](phase-1-nlp-multilingual-v2.md).
 
 ---
 
