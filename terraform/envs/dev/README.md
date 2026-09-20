@@ -127,6 +127,19 @@ Applies happen in Cloud Build (`co-terraform-apply-dev`, runs as
    Build console (History → the build → Approve). The build plans again
    against current state and applies exactly that plan.
 
+   From a terminal, the approval is an API call — `gcloud builds approve`
+   only exists in the alpha/beta channels:
+
+   ```bash
+   BUILD=$(gcloud builds list --region=europe-central2 \
+     --filter='substitutions.TRIGGER_NAME=co-terraform-apply-dev AND status=PENDING' \
+     --limit=1 --format='value(id)')
+   curl -s -X POST -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+     -H 'Content-Type: application/json' \
+     -d '{"approvalResult":{"decision":"APPROVED"}}' \
+     "https://cloudbuild.googleapis.com/v1/projects/<PROJECT_ID>/locations/europe-central2/builds/$BUILD:approve"
+   ```
+
 Approval happens before the build starts, so the applied plan is fresh,
 not the one from the PR; read the apply log if state moved in between.
 
