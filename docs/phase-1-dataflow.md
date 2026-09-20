@@ -8,6 +8,10 @@ demonstrated rather than asserted.
 
 Date: 2026-09-05.
 
+> **Update 2026-09-20.** The same replay now runs as a single Cloud Build
+> run (`co-replay-dev`, `dataflow/replay.cloudbuild.yaml`) instead of a
+> sequence of manual commands — see "Reproduced from CI" at the end.
+
 ---
 
 ## Result
@@ -228,3 +232,41 @@ query fails outright. The sum is cast to `NUMERIC`.
 - **The promotion step is a script, not infrastructure.** Whether it
   becomes a `RUN_MERGE` mode on the publisher job or a separate one-shot
   job is still open.
+
+---
+
+## Reproduced from CI (2026-09-20)
+
+The run below repeats the result above through a completely different
+execution path: `co-replay-dev`, started from commit `7a5a48b`, launching
+the Flex Template that CI built (image pinned by **digest**, not by tag),
+running the publisher, waiting for the landed count to settle, draining,
+promoting and fingerprinting — all inside one 15-minute build.
+
+| | |
+|---|---|
+| Records processed | 4228 |
+| Rows in `events` | 4228 — one per `id` |
+| Missing ids (coverage check) | 0 |
+| Reproducibility fingerprint | `-10329993396494980651` — **identical** to the 2026-09-05 runs |
+
+The fingerprint surviving a change of orchestration, of build pipeline and
+of image reference is a stronger statement than the original two replays:
+the rows depend on the staged data and the model, not on how the run was
+driven.
+
+Two bugs in the pipeline config were found by running it for real, both
+the same mistake: `BUILD_ID` and `PROJECT_ID` are Cloud Build
+substitutions, not shell variables, so `$$NAME` expands to nothing. The
+first produced an invalid Dataflow job name; the second left the progress
+query without a project. The dangerous one was a third issue found
+alongside them — a freshly launched job does not appear in
+`gcloud dataflow jobs list` for several minutes, so looking the job up by
+name (as the drain step first did) would have reported "nothing to drain"
+while the job kept billing. The pipeline now records the job id from the
+launch output and addresses the job by id everywhere.
+
+`events_landing` accumulates duplicate rows across replays (Pub/Sub
+delivers at least once, and each replay re-processes the same ids); the
+promotion MERGE collapses them to one row per `id`, which is why `events`
+holds exactly 4228 after four runs.
