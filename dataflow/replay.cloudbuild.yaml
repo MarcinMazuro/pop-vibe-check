@@ -110,7 +110,17 @@ steps:
         # Submission only. Everything that could fail *after* a job
         # exists belongs in the next step, whose failures still reach the
         # drain below — a failure here means no job was created.
-        JOB_NAME="$$job_name" dataflow/launch.sh --yes --model ${_MODEL} $$sha_flag
+        JOB_NAME="$$job_name" dataflow/launch.sh --yes --model ${_MODEL} $$sha_flag \
+          | tee /workspace/launch.log
+
+        # Take the job id straight from the launch output. `jobs list`
+        # does not return a job for the first minutes of its life, so
+        # looking it up by name here (or in the drain step) would find
+        # nothing and leave a job running.
+        awk '/^ *id:/ { print $$2; exit }' /workspace/launch.log > /workspace/job_id
+        job_id=$$(cat /workspace/job_id)
+        [ -n "$$job_id" ] || { echo "Could not read the job id from the launch output." >&2; exit 1; }
+        echo "Job id: $$job_id"
 
   # --------------------------------------------------------------------
   # 2. Replay: publish, then wait for the pipeline to catch up.
@@ -127,17 +137,17 @@ steps:
         set -x
         run() {
           set -e
-          job_name=$$(cat /workspace/job_name)
+          job_id=$$(cat /workspace/job_id)
 
           echo "Waiting for the job to start."
           started=false
           for _ in $$(seq 1 40); do
-            state=$$(gcloud dataflow jobs list --region=${_REGION} \
-              --filter="name=$$job_name" --format='value(STATE)' | head -1)
+            state=$$(gcloud dataflow jobs describe "$$job_id" --region=${_REGION} \
+              --format='value(currentState)')
             echo "  state=$$state"
             case "$$state" in
-              Running) started=true; break ;;
-              Failed|Cancelled) echo "Job did not start." >&2; return 1 ;;
+              JOB_STATE_RUNNING) started=true; break ;;
+              JOB_STATE_FAILED|JOB_STATE_CANCELLED) echo "Job did not start." >&2; return 1 ;;
             esac
             sleep 30
           done
@@ -199,14 +209,12 @@ steps:
     args:
       - -ec
       - |
-        job_name=$$(cat /workspace/job_name)
-        job_id=$$(gcloud dataflow jobs list --region=${_REGION} \
-          --filter="name=$$job_name" --format='value(JOB_ID)' | head -1)
+        job_id=$$(cat /workspace/job_id 2>/dev/null || true)
         if [ -z "$$job_id" ]; then
-          echo "No job named $$job_name; nothing to drain."
+          echo "No job was launched; nothing to drain."
           exit 0
         fi
-        echo "Draining $$job_name ($$job_id)."
+        echo "Draining $$(cat /workspace/job_name) ($$job_id)."
         gcloud dataflow jobs drain "$$job_id" --region=${_REGION}
 
         for _ in $$(seq 1 60); do
