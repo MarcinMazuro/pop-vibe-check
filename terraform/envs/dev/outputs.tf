@@ -233,3 +233,13 @@ output "alert_policy_names" {
   description = "Monitoring alert policies guarding the streaming path (job failure, job left running, replay backlog, dead letters)."
   value       = module.monitoring.alert_policy_names
 }
+
+output "reporting_dataset_id" {
+  description = "Dataset holding the Looker Studio authorized views. Point the Looker data source at this dataset, never at the analytics one."
+  value       = module.bigquery.reporting_dataset_id
+}
+
+output "report_view_ids" {
+  description = "Map of purpose → PROJECT.DATASET.VIEW for the Looker Studio data sources."
+  value       = module.bigquery.report_view_ids
+}

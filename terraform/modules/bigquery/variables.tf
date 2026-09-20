@@ -63,3 +63,9 @@ variable "promoter_sa_email" {
   type        = string
   default     = null
 }
+
+variable "report_viewer_emails" {
+  description = "User emails allowed to read the reporting dataset's authorized views — the Looker Studio dashboard's readers. Granted dataViewer on the reporting dataset and jobUser on the project, and nothing on the analytics dataset."
+  type        = list(string)
+  default     = []
+}

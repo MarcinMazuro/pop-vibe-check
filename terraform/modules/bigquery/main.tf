@@ -303,6 +303,21 @@ resource "google_bigquery_table" "events" {
 }
 
 # ----------------------------------------------------------------------------
+# Dataset access entries — deliberately NOT google_bigquery_dataset_iam_*.
+#
+# The IAM resources write the dataset's access list through setIamPolicy,
+# which cannot express authorized views: applying one strips every view
+# authorization from the dataset. Since the reporting views below are
+# authorized on this dataset, every grant here has to go through
+# google_bigquery_dataset_access, which speaks the same access list the
+# view entries live in. The provider documents the two as incompatible.
+#
+# roles/bigquery.jobUser stays an ordinary project IAM member: it is a
+# project-scope permission (BigQuery bills the querying project) and has
+# nothing to do with the dataset's access list.
+# ----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
 # Publisher access.
 #
 # Dataset-level dataEditor lets the publisher SA truncate raw_landing,
@@ -311,11 +326,11 @@ resource "google_bigquery_table" "events" {
 # load/query jobs against this dataset — kept here, next to the data it
 # serves, rather than in the iam module.
 # ----------------------------------------------------------------------------
-resource "google_bigquery_dataset_iam_member" "publisher_data_editor" {
-  project    = var.project_id
-  dataset_id = google_bigquery_dataset.analytics.dataset_id
-  role       = "roles/bigquery.dataEditor"
-  member     = "serviceAccount:${var.publisher_sa_email}"
+resource "google_bigquery_dataset_access" "publisher_data_editor" {
+  project       = var.project_id
+  dataset_id    = google_bigquery_dataset.analytics.dataset_id
+  role          = "roles/bigquery.dataEditor"
+  user_by_email = var.publisher_sa_email
 }
 
 resource "google_project_iam_member" "publisher_job_user" {
@@ -333,11 +348,11 @@ resource "google_project_iam_member" "publisher_job_user" {
 # project scope but exists solely for this dataset's write/MERGE jobs —
 # kept here next to the data, following the publisher precedent above.
 # ----------------------------------------------------------------------------
-resource "google_bigquery_dataset_iam_member" "dataflow_worker_data_editor" {
-  project    = var.project_id
-  dataset_id = google_bigquery_dataset.analytics.dataset_id
-  role       = "roles/bigquery.dataEditor"
-  member     = "serviceAccount:${var.dataflow_worker_sa_email}"
+resource "google_bigquery_dataset_access" "dataflow_worker_data_editor" {
+  project       = var.project_id
+  dataset_id    = google_bigquery_dataset.analytics.dataset_id
+  role          = "roles/bigquery.dataEditor"
+  user_by_email = var.dataflow_worker_sa_email
 }
 
 resource "google_project_iam_member" "dataflow_worker_job_user" {
@@ -362,13 +377,13 @@ resource "google_project_iam_member" "dataflow_worker_job_user" {
 # the dataset and to run query jobs. dataEditor, not dataOwner: it never
 # changes table schemas.
 # ----------------------------------------------------------------------------
-resource "google_bigquery_dataset_iam_member" "promoter_data_editor" {
+resource "google_bigquery_dataset_access" "promoter_data_editor" {
   count = var.promoter_sa_email == null ? 0 : 1
 
-  project    = var.project_id
-  dataset_id = google_bigquery_dataset.analytics.dataset_id
-  role       = "roles/bigquery.dataEditor"
-  member     = "serviceAccount:${var.promoter_sa_email}"
+  project       = var.project_id
+  dataset_id    = google_bigquery_dataset.analytics.dataset_id
+  role          = "roles/bigquery.dataEditor"
+  user_by_email = var.promoter_sa_email
 }
 
 resource "google_project_iam_member" "promoter_job_user" {
@@ -379,15 +394,232 @@ resource "google_project_iam_member" "promoter_job_user" {
   member  = "serviceAccount:${var.promoter_sa_email}"
 }
 
-resource "google_bigquery_dataset_iam_member" "ml_trainer_data_viewer" {
-  project    = var.project_id
-  dataset_id = google_bigquery_dataset.analytics.dataset_id
-  role       = "roles/bigquery.dataViewer"
-  member     = "serviceAccount:${var.ml_trainer_sa_email}"
+resource "google_bigquery_dataset_access" "ml_trainer_data_viewer" {
+  project       = var.project_id
+  dataset_id    = google_bigquery_dataset.analytics.dataset_id
+  role          = "roles/bigquery.dataViewer"
+  user_by_email = var.ml_trainer_sa_email
 }
 
 resource "google_project_iam_member" "ml_trainer_job_user" {
   project = var.project_id
   role    = "roles/bigquery.jobUser"
   member  = "serviceAccount:${var.ml_trainer_sa_email}"
+}
+
+# ----------------------------------------------------------------------------
+# Reporting dataset and authorized views.
+#
+# Looker Studio reads from here, never from the analytics dataset. The
+# views are *authorized*: they hold the read permission on `events`
+# themselves, so a dashboard reader granted access to this dataset can
+# see exactly what the views expose and nothing else — not raw_staging,
+# not events_landing, and none of the columns left out below.
+#
+# Two columns are deliberately absent from every view:
+#   - author_hash — pseudonymous personal data under GDPR. Author counts
+#     are computed *inside* the aggregates; the identifiers never leave.
+#   - text — the comment bodies themselves. A dashboard shows how
+#     sentiment moves, not what individuals wrote.
+# ----------------------------------------------------------------------------
+locals {
+  reporting_dataset_id = "${replace(var.name_prefix, "-", "_")}_reporting_${var.env}"
+
+  events_ref = "${var.project_id}.${google_bigquery_dataset.analytics.dataset_id}.${google_bigquery_table.events.table_id}"
+}
+
+resource "google_bigquery_dataset" "reporting" {
+  project    = var.project_id
+  dataset_id = local.reporting_dataset_id
+  location   = var.region
+
+  friendly_name = "${var.name_prefix} reporting (${var.env})"
+  description   = "Presentation layer for release ${var.name_prefix}, ${var.env}. Authorized views over the events table; the only dataset a dashboard reader needs access to."
+
+  delete_contents_on_destroy = var.delete_contents_on_destroy
+
+  labels = var.labels
+}
+
+# Row-level view, minus the personal and free-text columns. The drill-down
+# behind the aggregates.
+resource "google_bigquery_table" "v_events" {
+  project    = var.project_id
+  dataset_id = google_bigquery_dataset.reporting.dataset_id
+  table_id   = "v_events"
+
+  description = "One row per classified record, without author_hash or text. Drill-down source for the dashboards."
+
+  deletion_protection = false
+  labels              = var.labels
+
+  view {
+    use_legacy_sql = false
+    query          = <<-SQL
+      SELECT
+        id,
+        source,
+        created_utc,
+        DATE(created_utc)  AS event_date,
+        event_tag,
+        language,
+        score,
+        sentiment_label,
+        sentiment_score,
+        model_version
+      FROM `${local.events_ref}`
+    SQL
+  }
+}
+
+# The time series the dashboard is built on: one row per day × source ×
+# event_tag, with the label split already pivoted into columns.
+resource "google_bigquery_table" "v_sentiment_daily" {
+  project    = var.project_id
+  dataset_id = google_bigquery_dataset.reporting.dataset_id
+  table_id   = "v_sentiment_daily"
+
+  description = "Daily sentiment split per source and event window. The main time series behind the dashboard."
+
+  deletion_protection = false
+  labels              = var.labels
+
+  view {
+    use_legacy_sql = false
+    query          = <<-SQL
+      SELECT
+        DATE(created_utc)                                       AS event_date,
+        source,
+        event_tag,
+        COUNT(*)                                                AS records,
+        COUNTIF(sentiment_label = 'pos')                        AS positive,
+        COUNTIF(sentiment_label = 'neu')                        AS neutral,
+        COUNTIF(sentiment_label = 'neg')                        AS negative,
+        SAFE_DIVIDE(COUNTIF(sentiment_label = 'pos'), COUNT(*)) AS positive_share,
+        SAFE_DIVIDE(COUNTIF(sentiment_label = 'neg'), COUNT(*)) AS negative_share,
+        -- Positive minus negative, in [-1, 1]: one number per day that a
+        -- line chart can carry.
+        SAFE_DIVIDE(
+          COUNTIF(sentiment_label = 'pos') - COUNTIF(sentiment_label = 'neg'),
+          COUNT(*)
+        )                                                       AS net_sentiment,
+        AVG(sentiment_score)                                    AS avg_confidence,
+        COUNT(DISTINCT author_hash)                             AS distinct_authors
+      FROM `${local.events_ref}`
+      GROUP BY event_date, source, event_tag
+    SQL
+  }
+}
+
+# One row per lifecycle event — the summary table of the thesis.
+resource "google_bigquery_table" "v_sentiment_by_event" {
+  project    = var.project_id
+  dataset_id = google_bigquery_dataset.reporting.dataset_id
+  table_id   = "v_sentiment_by_event"
+
+  description = "One row per lifecycle event tag: volume, sentiment split and the window the records span."
+
+  deletion_protection = false
+  labels              = var.labels
+
+  view {
+    use_legacy_sql = false
+    query          = <<-SQL
+      SELECT
+        event_tag,
+        MIN(created_utc)                                        AS first_record_utc,
+        MAX(created_utc)                                        AS last_record_utc,
+        COUNT(*)                                                AS records,
+        COUNT(DISTINCT source)                                  AS sources,
+        COUNT(DISTINCT author_hash)                             AS distinct_authors,
+        COUNTIF(sentiment_label = 'pos')                        AS positive,
+        COUNTIF(sentiment_label = 'neu')                        AS neutral,
+        COUNTIF(sentiment_label = 'neg')                        AS negative,
+        SAFE_DIVIDE(COUNTIF(sentiment_label = 'pos'), COUNT(*)) AS positive_share,
+        SAFE_DIVIDE(
+          COUNTIF(sentiment_label = 'pos') - COUNTIF(sentiment_label = 'neg'),
+          COUNT(*)
+        )                                                       AS net_sentiment
+      FROM `${local.events_ref}`
+      WHERE event_tag IS NOT NULL
+      GROUP BY event_tag
+    SQL
+  }
+}
+
+# Coverage per source and language. With a second source this is what
+# shows where each one actually contributes — and it is the evidence for
+# the multilingual claim.
+resource "google_bigquery_table" "v_source_coverage" {
+  project    = var.project_id
+  dataset_id = google_bigquery_dataset.reporting.dataset_id
+  table_id   = "v_source_coverage"
+
+  description = "Volume and sentiment per source and language, with the window each source covers."
+
+  deletion_protection = false
+  labels              = var.labels
+
+  view {
+    use_legacy_sql = false
+    query          = <<-SQL
+      SELECT
+        source,
+        language,
+        COUNT(*)                                                AS records,
+        MIN(created_utc)                                        AS first_record_utc,
+        MAX(created_utc)                                        AS last_record_utc,
+        COUNT(DISTINCT event_tag)                               AS event_tags,
+        SAFE_DIVIDE(COUNTIF(sentiment_label = 'pos'), COUNT(*)) AS positive_share
+      FROM `${local.events_ref}`
+      GROUP BY source, language
+    SQL
+  }
+}
+
+# ----------------------------------------------------------------------------
+# Authorization. Each view is granted read on the analytics dataset, which
+# is what lets a reader query it without holding access to `events`.
+# ----------------------------------------------------------------------------
+resource "google_bigquery_dataset_access" "authorized_views" {
+  for_each = {
+    v_events             = google_bigquery_table.v_events.table_id
+    v_sentiment_daily    = google_bigquery_table.v_sentiment_daily.table_id
+    v_sentiment_by_event = google_bigquery_table.v_sentiment_by_event.table_id
+    v_source_coverage    = google_bigquery_table.v_source_coverage.table_id
+  }
+
+  project    = var.project_id
+  dataset_id = google_bigquery_dataset.analytics.dataset_id
+
+  view {
+    project_id = var.project_id
+    dataset_id = google_bigquery_dataset.reporting.dataset_id
+    table_id   = each.value
+  }
+}
+
+# ----------------------------------------------------------------------------
+# Dashboard readers.
+#
+# dataViewer on the reporting dataset only. Running a query also needs
+# project-level jobUser — BigQuery bills the querying project, so the
+# permission is necessarily project-scoped even though the data access is
+# not.
+# ----------------------------------------------------------------------------
+resource "google_bigquery_dataset_access" "report_viewer" {
+  for_each = toset(var.report_viewer_emails)
+
+  project       = var.project_id
+  dataset_id    = google_bigquery_dataset.reporting.dataset_id
+  role          = "roles/bigquery.dataViewer"
+  user_by_email = each.value
+}
+
+resource "google_project_iam_member" "report_viewer_job_user" {
+  for_each = toset(var.report_viewer_emails)
+
+  project = var.project_id
+  role    = "roles/bigquery.jobUser"
+  member  = "user:${each.value}"
 }
