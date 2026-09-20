@@ -81,7 +81,7 @@ def _is_retryable(exc: BaseException) -> bool:
     try:
         from google.api_core import exceptions as gcp_exceptions
     except ImportError:
-        gcp_exceptions = None  # type: ignore[assignment]
+        gcp_exceptions = None
 
     if gcp_exceptions is not None and isinstance(  # noqa: UP038
         exc,

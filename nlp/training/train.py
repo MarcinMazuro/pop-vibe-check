@@ -607,7 +607,7 @@ def main(argv: list[str] | None = None) -> None:
         torch.tensor(weights, dtype=torch.float32) if weights is not None else None
     )
 
-    class WeightedTrainer(Trainer):
+    class WeightedTrainer(Trainer):  # type: ignore[misc]
         """Cross-entropy with optional inverse-frequency class weights."""
 
         def compute_loss(
