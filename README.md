@@ -2,13 +2,13 @@
 
 Streaming sentiment analysis around pop-culture releases, on GCP with an MLOps pipeline. Engineering thesis project at Gdańsk University of Technology, Department of Computer Systems Architecture.
 
-> **Status:** Phase 0 complete; Phase 1 stream simulation **live**. The YouTube collector has produced the first real dataset (4228 comments across 4 lifecycle events — see [docs/phase-0-youtube-first-collection.md](docs/phase-0-youtube-first-collection.md)), the **replay publisher streams it from BigQuery staging to Pub/Sub in chronological order with time compression** (see [docs/phase-1-publisher.md](docs/phase-1-publisher.md)), and the **Dataflow pipeline classifies it into the `events` table** — the same replay run twice produces an identical set of rows (see [docs/phase-1-dataflow.md](docs/phase-1-dataflow.md)). The Reddit collector is written but **Reddit API access was refused**, so Reddit is out of scope; the remaining Phase 1 work and its three-way split are planned in [docs/phase-1-plan.md](docs/phase-1-plan.md).
+> **Status:** Phase 0 complete; Phase 1 stream simulation **live**. The YouTube collector has produced the first real dataset (4228 comments across 4 lifecycle events — see [docs/phase-0-youtube-first-collection.md](docs/phase-0-youtube-first-collection.md)), the **replay publisher streams it from BigQuery staging to Pub/Sub in chronological order with time compression** (see [docs/phase-1-publisher.md](docs/phase-1-publisher.md)), and the **Dataflow pipeline classifies it into the `events` table** — the same replay run twice produces an identical set of rows (see [docs/phase-1-dataflow.md](docs/phase-1-dataflow.md)). The Reddit collector is written but **Reddit API access was refused**, so Reddit is out of scope and **Steam reviews are the second source** ([ADR 0001](docs/adr/0001-steam-replaces-reddit-as-second-source.md)); the remaining Phase 1 work and its three-way split are planned in [docs/phase-1-plan.md](docs/phase-1-plan.md).
 
 ---
 
 ## What it does
 
-Ingests user opinions about pop-culture releases from Reddit and YouTube, classifies sentiment with an NLP model, and visualises how public sentiment evolves over time around key moments in a release's lifecycle (announcement, trailers, launch, controversies, awards).
+Ingests user opinions about pop-culture releases from YouTube and Steam, classifies sentiment with an NLP model, and visualises how public sentiment evolves over time around key moments in a release's lifecycle (announcement, trailers, launch, controversies, awards).
 
 **Case study:** *Clair Obscur: Expedition 33* — full hype cycle from the 2024 Xbox Showcase reveal through the 2025 launch, the AI-textures controversy, the Game Awards sweep, and the 2026 anniversary update. Chosen because the curve is *not* flat — universal critical acclaim → controversy → awards sweep → controversy reignites — so the sentiment dynamics are visibly non-trivial.
 
@@ -95,7 +95,8 @@ Supervisor: mgr inż. Szymon Olewniczak.
 | Pub/Sub (events topic + ordered verify subscription; Dataflow subscription + DLQ added this PR — see Dataflow infra row) | ✓ Applied | [`terraform/modules/pubsub/`](terraform/modules/pubsub/) |
 | Collector application code (common, reddit, youtube + tests) | ✓ Done | [`collectors/`](collectors/) |
 | YouTube collector: image, job wiring, first collection runs | ✓ Done — 4228 records ([details](docs/phase-0-youtube-first-collection.md)) | GCS `co-raw-archive-dev/youtube/` |
-| Reddit collector: image + smoke test | ✗ **Out of scope — Reddit API access refused.** Code kept; see [docs/phase-1-plan.md](docs/phase-1-plan.md) | `collectors/reddit/` |
+| Reddit collector: image + smoke test | ✗ **Out of scope — Reddit API access refused.** Code kept; see [ADR 0001](docs/adr/0001-steam-replaces-reddit-as-second-source.md) | `collectors/reddit/` |
+| Steam collector (second source) | ✗ To build — decided 2026-09-20 ([ADR 0001](docs/adr/0001-steam-replaces-reddit-as-second-source.md)) | `collectors/steam/` |
 | Real values in secret containers | YouTube key + salt ✓ real; Reddit ✗ placeholders | Secret Manager |
 | Replay publisher: code, image, job, first replay to Pub/Sub | ✓ Done — 4228 records replayed in order ([details](docs/phase-1-publisher.md)) | [`publisher/`](publisher/) |
 | **Dataflow streaming infra (this PR)** — `dataflow/` module + worker SA, `events` / `events_landing` + promotion MERGE, Dataflow subscription + DLQ topic/sub, dataflow-temp bucket, inter-worker firewall, launch-parameter outputs | ✓ Applied | [`terraform/modules/dataflow/`](terraform/modules/dataflow/) + extensions across `bigquery/`, `pubsub/`, `iam/`, `network/`, `storage/` |
@@ -166,7 +167,7 @@ bill continuously until drained. Use `dataflow/launch.sh`, and drain when done �
 The full plan for the rest of Phase 1 — this Dataflow work plus the two tracks that
 run alongside it (data completeness, and the NLP model with MLflow) split across the
 three contributors — is in **[docs/phase-1-plan.md](docs/phase-1-plan.md)**. It also
-records why Reddit is out of scope and what replaces it as a second source.
+records why Reddit is out of scope; [ADR 0001](docs/adr/0001-steam-replaces-reddit-as-second-source.md) records Steam replacing it.
 
 ### Phase 2 — Polish, prod env, defence
 - `terraform/envs/prod/` composition (same shape as dev)
@@ -418,6 +419,7 @@ A and (B or C) can start in parallel; the other waits a day for A's common libra
 ├── collectors/                            # implemented — shared lib + both collectors
 │   ├── common/                            # author hashing, GCS writer, retry, event loader
 │   ├── reddit/                            # written; out of scope (Reddit API access refused)
+│   ├── steam/                             # second source (ADR 0001); not built yet
 │   ├── youtube/                           # live — collecting real data in GCP
 │   ├── config/                            # events.yaml + youtube_videos.yaml (API-verified ids)
 │   └── tests/

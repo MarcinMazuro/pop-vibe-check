@@ -72,9 +72,11 @@ ordering guarantee remains demonstrable rather than theoretical.
 
 ## Steam reviews as the second source
 
-**This is a scope decision and needs sign-off** — from the team and,
-given that it changes the data sources named in the thesis proposal, from
-the supervisor. It is recommended, and the rest of this plan assumes it.
+> **Decided 2026-09-20: accepted.** Steam is the second source; see
+> [ADR 0001](adr/0001-steam-replaces-reddit-as-second-source.md). Further
+> sources may be added later if one proves accessible. The supervisor
+> still needs to be told, since this changes the sources named in the
+> thesis proposal.
 
 Losing Reddit costs more than a row count. The publisher exists because
 global chronological ordering *across sources* is a hard requirement that
@@ -137,12 +139,8 @@ salt, truncated to 16 hex characters — is the project's privacy-by-design
 boundary and is not negotiable per source. Steam profile identifiers are
 personal data on the same footing.
 
-Because this changes a binding decision, it needs an ADR recording the
-substitution and its rationale alongside the code.
-
-**If sign-off does not happen**, Oskar's track collapses to B2–B4 below
-(YouTube depth only) and the thesis carries single-source collection as
-an unmitigated limitation. That is the fallback, not the plan.
+Because this changes a binding decision, it is recorded in
+[ADR 0001](adr/0001-steam-replaces-reddit-as-second-source.md).
 
 ---
 
@@ -239,7 +237,7 @@ of magnitude.
 Independent of Track A. This track decides whether the sentiment curve
 presented at the defence has four points or twelve.
 
-**B1 — Steam collector** (assuming sign-off above). New service under
+**B1 — Steam collector** (unblocked by ADR 0001). New service under
 `collectors/steam/`, following the existing pattern: entry point,
 `Dockerfile`, `cloudbuild.yaml`, README, tests, reusing
 `collectors/common/` for author hashing, the GCS writer, the event-config
@@ -327,8 +325,8 @@ whoever finishes their track first.
 
 ## Open decisions
 
-1. **Steam as the second source** — needs team and supervisor sign-off,
-   plus an ADR. Everything in Track B assumes yes.
+1. ~~**Steam as the second source**~~ — decided 2026-09-20, see
+   [ADR 0001](adr/0001-steam-replaces-reddit-as-second-source.md).
 2. **Beam windowing.** Enrich element-by-element and aggregate in
    BigQuery, or compute event-time windowed aggregates in Beam?
    Element-wise is simpler and more obviously reproducible. Windowed
