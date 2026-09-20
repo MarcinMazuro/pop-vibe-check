@@ -1,6 +1,6 @@
 # modules/bigquery
 
-Provisions the BigQuery dataset and its four tables: `raw_landing` / `raw_staging` for the replay publisher, and `events_landing` / `events` for the Dataflow streaming pipeline. Looker Studio authorized views over `events` land with the analytics PR inside this same module.
+Provisions the BigQuery analytics dataset and its four tables — `raw_landing` / `raw_staging` for the replay publisher, `events_landing` / `events` for the Dataflow streaming pipeline — plus the reporting dataset holding the authorized views Looker Studio reads.
 
 ## What this creates
 
@@ -33,6 +33,7 @@ Note: BigQuery dataset names require underscores rather than hyphens (GCP rule).
 | `publisher_sa_email` | string | yes | — | Publisher SA granted dataEditor on the dataset and jobUser on the project |
 | `dataflow_worker_sa_email` | string | yes | — | Dataflow worker SA granted dataEditor on the dataset and jobUser on the project, so the streaming pipeline can write `events_landing` |
 | `ml_trainer_sa_email` | string | yes | — | ML trainer SA granted dataViewer on the dataset and jobUser on the project (Workbench gold / own-domain reads) |
+| `report_viewer_emails` | list(string) | no | `[]` | Users who may read the reporting views (the dashboard's readers). No access to the analytics dataset |
 | `promoter_sa_email` | string | no | `null` | SA that promotes a drained replay (the Cloud Build SA); granted `dataEditor` on the dataset and `jobUser` on the project |
 | `delete_contents_on_destroy` | bool | no | `false` | One-off escape hatch for `terraform destroy` when the dataset still has tables. See "Tearing down" below. |
 
@@ -105,6 +106,31 @@ The default flips back to `false` automatically on the next normal apply — no 
 
 ## Notes
 
-- **Looker views still to come.** Authorized views over `events` for Looker Studio are added here with the analytics PR; the underlying tables now exist.
+- **Dataset grants use `google_bigquery_dataset_access`, never `google_bigquery_dataset_iam_*`.** The IAM resources write the dataset's access list through `setIamPolicy`, which cannot represent authorized views — applying one strips every view authorization from the dataset. The two are documented as incompatible. `roles/bigquery.jobUser` stays an ordinary project IAM member: it is project-scoped (BigQuery bills the querying project) and is not part of the access list.
 - **Language authority.** `raw_staging.language` is advisory (collector `langdetect`); `events.language` is authoritative (written by Dataflow). Same column type, different documented meaning — see "Schema: one source, two tables" above. Picking the detector library is the pipeline PR's call; note that Dataflow workers run without public IPs, so any detector model file must be baked into the Flex Template image rather than downloaded at runtime.
 - **Per env, per release.** `co_analytics_dev` and `co_analytics_prod` are separate datasets with separate IAM; `w4_analytics_dev` lives alongside `co_analytics_dev` in the same project without conflict.
+
+## Reporting dataset and authorized views
+
+`{name_prefix}_reporting_{env}` is the presentation layer. It holds four
+views over `events`, each **authorized** on the analytics dataset: the
+view itself carries the read permission, so a dashboard reader needs
+access only to this dataset and sees exactly what the views expose.
+
+| View | One row per | For |
+|---|---|---|
+| `v_events` | record | Drill-down behind the charts |
+| `v_sentiment_daily` | day × source × event tag | The main time series (`net_sentiment` is positives minus negatives over total, in [-1, 1]) |
+| `v_sentiment_by_event` | lifecycle event tag | The summary table: volume, split, and the window the records span |
+| `v_source_coverage` | source × language | Where each source contributes, and the language mix |
+
+**Two columns never leave the analytics dataset.** `author_hash` is
+pseudonymous personal data under GDPR — author counts are computed inside
+the aggregates, the identifiers are not exposed. `text` is the comment
+bodies themselves; a dashboard shows how sentiment moves, not what
+individuals wrote.
+
+Point a Looker Studio data source at a view in this dataset (the env
+composition outputs `reporting_dataset_id` and `report_view_ids`). Readers
+listed in `report_viewer_emails` get `dataViewer` here plus project-level
+`jobUser`, and nothing on `events`.

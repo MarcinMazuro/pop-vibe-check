@@ -137,6 +137,10 @@ module "bigquery" {
   # The replay pipeline runs the events_landing -> events MERGE as the
   # Cloud Build SA.
   promoter_sa_email = module.iam.cloud_build_sa_email
+
+  # Who may read the Looker Studio views. Deliberately not the analytics
+  # dataset: the views carry the read permission themselves.
+  report_viewer_emails = var.report_viewer_emails
 }
 
 module "pubsub" {
