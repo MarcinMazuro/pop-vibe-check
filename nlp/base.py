@@ -23,8 +23,15 @@ Two rules any implementation must honour:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
+
+# Social-media noise shared by train / eval / serve. Handles are Twitter-
+# style ``@name`` tokens, not the local-part of an email (lookbehind).
+_HANDLE_RE = re.compile(r"(?<![A-Za-z0-9_])@[A-Za-z0-9_]+")
+_URL_RE = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
+_WHITESPACE_RE = re.compile(r"\s+")
 
 # The three sentiment classes written to the events table. Any
 # implementation maps its own label space onto exactly these.
@@ -48,6 +55,28 @@ _HF_LABEL_TO_SENTIMENT: dict[str, str] = {
     "neu": "neu",
     "pos": "pos",
 }
+
+
+def normalize_text(text: str) -> str:
+    """Collapse noisy social-media tokens to a stable training form.
+
+    Replaces ``@handle`` mentions with ``@user``, URLs with ``http``,
+    non-breaking spaces (U+00A0) and repeated whitespace with a
+    single space, then strips ends. Training loaders, gold eval, and the
+    serving client all call this so the three paths see the same
+    distribution.
+
+    Args:
+        text: Raw comment or review body. May be empty.
+
+    Returns:
+        The normalised string. Whitespace-only input becomes ``""``.
+    """
+    collapsed = text.replace("\xa0", " ")
+    collapsed = _URL_RE.sub("http", collapsed)
+    collapsed = _HANDLE_RE.sub("@user", collapsed)
+    collapsed = _WHITESPACE_RE.sub(" ", collapsed)
+    return collapsed.strip()
 
 
 def normalize_predicted_label(raw: str) -> str:

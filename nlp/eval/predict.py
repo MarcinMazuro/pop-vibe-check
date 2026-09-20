@@ -21,10 +21,22 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from nlp.base import ID2LABEL
+from nlp.base import ID2LABEL, normalize_text
 from nlp.training.labels import MAX_LEN
 
 DEFAULT_BATCH = 8
+
+
+def texts_for_tokenize(rows: Sequence[dict[str, Any]]) -> list[str]:
+    """Normalise gold ``text`` fields the same way training does.
+
+    Args:
+        rows: Gold records. ``text`` may be empty.
+
+    Returns:
+        One normalised string per row, same order.
+    """
+    return [normalize_text(str(row.get("text") or "")) for row in rows]
 
 
 def label_and_score(logits: Sequence[float]) -> tuple[str, float]:
@@ -121,7 +133,7 @@ def predict_rows(
     with torch.inference_mode():
         for start in range(0, len(rows), step):
             batch = rows[start : start + step]
-            texts = [str(row.get("text") or "") for row in batch]
+            texts = texts_for_tokenize(batch)
             encoded = tokenizer(
                 texts,
                 padding=True,

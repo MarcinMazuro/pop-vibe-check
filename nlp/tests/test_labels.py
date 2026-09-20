@@ -12,6 +12,7 @@ from nlp.training.labels import (
     map_tweet_eval_label,
 )
 from nlp.training.loaders import (
+    load_gold_split,
     load_own_domain,
     mix_corpus,
     oversample_rows,
@@ -113,17 +114,45 @@ class TestOwnDomainLoader:
         assert rows[0].source == "youtube"
         assert rows[1].source == "own_domain"
 
-    def test_skips_holdout_split(self, tmp_path):
+    def test_skips_dev_and_holdout_splits(self, tmp_path):
         path = tmp_path / "gold.jsonl"
         path.write_text(
             json.dumps({"text": "train", "label": "pos", "split": "train"})
             + "\n"
             + json.dumps({"text": "hold", "label": "neg", "split": "holdout"})
+            + "\n"
+            + json.dumps({"text": "dev row", "label": "neu", "split": "dev"})
             + "\n",
             encoding="utf-8",
         )
         rows = load_own_domain(path)
         assert [r.text for r in rows] == ["train"]
+
+    def test_normalizes_text(self, tmp_path):
+        path = tmp_path / "gold.jsonl"
+        path.write_text(
+            json.dumps({"text": "hey @Alice  see https://x.com", "label": "pos"})
+            + "\n",
+            encoding="utf-8",
+        )
+        rows = load_own_domain(path)
+        assert rows[0].text == "hey @user see http"
+
+    def test_load_gold_split_keeps_dev(self, tmp_path):
+        path = tmp_path / "gold.jsonl"
+        path.write_text(
+            json.dumps({"text": "train", "label": "pos", "split": "train"})
+            + "\n"
+            + json.dumps({"text": "dev @x", "label": "neu", "split": "DEV"})
+            + "\n"
+            + json.dumps({"text": "hold", "label": "neg", "split": "holdout"})
+            + "\n",
+            encoding="utf-8",
+        )
+        rows = load_gold_split(path, "dev")
+        assert len(rows) == 1
+        assert rows[0].text == "dev @user"
+        assert rows[0].label == "neu"
 
     def test_rejects_bad_json(self, tmp_path):
         path = tmp_path / "bad.jsonl"

@@ -30,7 +30,13 @@ from tenacity import (
     wait_exponential,
 )
 
-from nlp.base import ID2LABEL, LABELS, Sentiment, normalize_predicted_label
+from nlp.base import (
+    ID2LABEL,
+    LABELS,
+    Sentiment,
+    normalize_predicted_label,
+    normalize_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -287,7 +293,7 @@ class VertexEndpointClassifier:
         """
         if not texts:
             return []
-        instances = [{"text": text} for text in texts]
+        instances = [{"text": normalize_text(text)} for text in texts]
         response = self._predict(instances)
         predictions = list(getattr(response, "predictions", None) or [])
         if len(predictions) != len(texts):

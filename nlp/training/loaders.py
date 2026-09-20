@@ -19,6 +19,7 @@ import random
 from collections.abc import Sequence
 from pathlib import Path
 
+from nlp.base import normalize_text
 from nlp.training.labels import (
     LabeledText,
     map_clapai_label,
@@ -119,7 +120,7 @@ def load_sst2(cache_dir: str | Path | None = None) -> list[LabeledText]:
     rows: list[LabeledText] = []
     for split in ("train", "validation"):
         for row in dataset[split]:
-            text = str(row["sentence"]).strip()
+            text = normalize_text(str(row["sentence"]))
             if not text:
                 continue
             rows.append(LabeledText(text, map_sst2_label(int(row["label"])), "sst2"))
@@ -142,7 +143,7 @@ def load_tweet_eval(cache_dir: str | Path | None = None) -> list[LabeledText]:
     rows: list[LabeledText] = []
     for split in dataset:
         for row in dataset[split]:
-            text = str(row["text"]).strip()
+            text = normalize_text(str(row["text"]))
             if not text:
                 continue
             rows.append(
@@ -182,7 +183,7 @@ def load_sentiment140_sample(
     pool: list[LabeledText] = []
     for split in dataset:
         for row in dataset[split]:
-            text = str(row.get("text") or "").strip()
+            text = normalize_text(str(row.get("text") or ""))
             if not text:
                 continue
             try:
@@ -246,7 +247,7 @@ def load_goemotions(cache_dir: str | Path | None = None) -> list[LabeledText]:
     rows: list[LabeledText] = []
     for split in dataset:
         for row in dataset[split]:
-            text = str(row["text"]).strip()
+            text = normalize_text(str(row["text"]))
             if not text:
                 continue
             emotions = [names[int(i)] for i in row["labels"]]
@@ -262,19 +263,72 @@ def load_own_domain(path: str | Path) -> list[LabeledText]:
 
     Each line is a JSON object with ``text`` and ``label`` (``pos`` /
     ``neu`` / ``neg``). Extra fields (``id``, ``language``, ``source``)
-    are ignored. This is the hold-in / hold-out split from the ~300 gold
-    sample — see ``nlp/eval/GUIDELINES.md``.
+    are ignored. Rows with ``split`` equal to ``holdout`` or ``dev`` are
+    skipped so they never leak into training — see
+    ``nlp/eval/GUIDELINES.md``.
 
     Args:
         path: JSONL file.
 
     Returns:
-        Mapped examples.
+        Mapped examples (text passed through :func:`nlp.base.normalize_text`).
 
     Raises:
         ValueError: If a row is missing ``text``/``label`` or the label
             is outside the three-class space.
     """
+    rows = _load_gold_jsonl(path, skip_splits=frozenset({"holdout", "dev"}))
+    logger.info("Loaded %d own-domain examples from %s.", len(rows), path)
+    return rows
+
+
+def load_gold_split(path: str | Path, split: str) -> list[LabeledText]:
+    """Load gold JSONL rows whose ``split`` field matches ``split``.
+
+    Unlike :func:`load_own_domain`, this keeps the requested split
+    (including ``dev`` and ``holdout``). Used by ``--dev-from-gold``.
+
+    Args:
+        path: JSONL file with ``text``, ``label``, and ``split``.
+        split: Split name to keep (compared case-insensitively).
+
+    Returns:
+        Mapped examples (text passed through :func:`nlp.base.normalize_text`).
+
+    Raises:
+        ValueError: If a kept row is missing ``text``/``label`` or the
+            label is outside the three-class space.
+    """
+    wanted = split.strip().lower()
+    if not wanted:
+        raise ValueError("split must be a non-empty name")
+    rows = _load_gold_jsonl(path, keep_split=wanted)
+    logger.info("Loaded %d gold %s examples from %s.", len(rows), wanted, path)
+    return rows
+
+
+def _load_gold_jsonl(
+    path: str | Path,
+    *,
+    skip_splits: frozenset[str] | None = None,
+    keep_split: str | None = None,
+) -> list[LabeledText]:
+    """Parse gold JSONL into :class:`LabeledText` rows.
+
+    Args:
+        path: JSONL file.
+        skip_splits: If set, drop rows whose ``split`` is in this set.
+        keep_split: If set, keep only rows whose ``split`` equals this
+            name (case-insensitive).
+
+    Returns:
+        Mapped examples. Text is passed through :func:`normalize_text`.
+
+    Raises:
+        ValueError: On invalid JSON, missing text/label, or (when the
+            row is kept) a label outside the three-class space.
+    """
+    skipped = skip_splits or frozenset()
     rows: list[LabeledText] = []
     with Path(path).open(encoding="utf-8") as handle:
         for line_no, line in enumerate(handle, start=1):
@@ -285,18 +339,19 @@ def load_own_domain(path: str | Path) -> list[LabeledText]:
                 payload = json.loads(raw)
             except json.JSONDecodeError as exc:
                 raise ValueError(f"{path}:{line_no}: invalid JSON") from exc
-            text = str(payload.get("text") or "").strip()
+            split = str(payload.get("split") or "").strip().lower()
+            if split in skipped:
+                continue
+            if keep_split is not None and split != keep_split:
+                continue
+            text = normalize_text(str(payload.get("text") or ""))
             label = str(payload.get("label") or "").strip()
             if not text or not label:
                 raise ValueError(
                     f"{path}:{line_no}: both 'text' and 'label' are required"
                 )
-            split = str(payload.get("split") or "").strip().lower()
-            if split == "holdout":
-                continue
             source = str(payload.get("source") or "own_domain")
             rows.append(LabeledText(text, label, source))
-    logger.info("Loaded %d own-domain examples from %s.", len(rows), path)
     return rows
 
 
@@ -435,8 +490,11 @@ def load_clapai_sample(
         class_cap = per_class.get(language)
         if class_cap is None:
             continue
-        text = str(row.get("text") or "").strip()
-        if not text or len(text) > max_chars:
+        raw_text = str(row.get("text") or "").strip()
+        if not raw_text or len(raw_text) > max_chars:
+            continue
+        text = normalize_text(raw_text)
+        if not text:
             continue
         try:
             label = map_clapai_label(str(row.get("label") or ""))
@@ -482,7 +540,7 @@ def load_tweet_sentiment_multilingual(
             continue
         for split in dataset:
             for row in dataset[split]:
-                text = str(row.get("text") or "").strip()
+                text = normalize_text(str(row.get("text") or ""))
                 if not text:
                     continue
                 try:
@@ -514,7 +572,7 @@ def load_v2_corpus(
     Args:
         cache_dir: Hugging Face datasets cache.
         seed: Sampling seed.
-        own_domain: Optional gold JSONL (holdout rows are skipped).
+        own_domain: Optional gold JSONL (holdout and dev rows are skipped).
         skip_goemotions: Drop the Reddit substitute.
         skip_clapai: Drop the clapAI subsample.
         skip_tweet_ml: Drop CardiffNLP multilingual tweets.

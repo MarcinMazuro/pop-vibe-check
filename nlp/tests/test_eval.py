@@ -1,7 +1,8 @@
 import json
 
 from nlp.eval.evaluate import classification_metrics, confusion_matrix, evaluate_files
-from nlp.eval.predict import label_and_score, parse_args as parse_predict_args
+from nlp.eval.predict import label_and_score, texts_for_tokenize
+from nlp.eval.predict import parse_args as parse_predict_args
 from nlp.eval.sample_gold import sample_records, write_jsonl
 
 
@@ -145,3 +146,9 @@ class TestPredict:
         )
         assert args.max_len == 128
         assert args.batch_size == 8
+
+    def test_texts_for_tokenize_normalises(self):
+        texts = texts_for_tokenize(
+            [{"text": "hey @x  see https://a.b"}, {"text": None}]
+        )
+        assert texts == ["hey @user see http", ""]
