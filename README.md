@@ -2,7 +2,7 @@
 
 Streaming sentiment analysis around pop-culture releases, on GCP with an MLOps pipeline. Engineering thesis project at Gdańsk University of Technology, Department of Computer Systems Architecture.
 
-> **Status:** Phase 0 complete; Phase 1 stream simulation **live**. The YouTube collector has produced the first real dataset (4228 comments across 4 lifecycle events — see [docs/phase-0-youtube-first-collection.md](docs/phase-0-youtube-first-collection.md)), the **replay publisher streams it from BigQuery staging to Pub/Sub in chronological order with time compression** (see [docs/phase-1-publisher.md](docs/phase-1-publisher.md)), and the **Dataflow pipeline classifies it into the `events` table** — the same replay run twice produces an identical set of rows (see [docs/phase-1-dataflow.md](docs/phase-1-dataflow.md)). The Reddit collector is written but **Reddit API access was refused**, so Reddit is out of scope and **Steam reviews are the second source** ([ADR 0001](docs/adr/0001-steam-replaces-reddit-as-second-source.md)); the remaining Phase 1 work and its three-way split are planned in [docs/phase-1-plan.md](docs/phase-1-plan.md).
+> **Status:** Phase 0 complete; Phase 1 stream simulation **live**. The YouTube collector has produced the dataset (**12,254 comments across 9 lifecycle events**, reveal through the 2026 anniversary update; the first 4228 are described in [docs/phase-0-youtube-first-collection.md](docs/phase-0-youtube-first-collection.md)), the **replay publisher streams it from BigQuery staging to Pub/Sub in chronological order with time compression** (see [docs/phase-1-publisher.md](docs/phase-1-publisher.md)), and the **Dataflow pipeline classifies it into the `events` table** — the same replay run twice produces an identical set of rows (see [docs/phase-1-dataflow.md](docs/phase-1-dataflow.md)). The Reddit collector is written but **Reddit API access was refused**, so Reddit is out of scope and **Steam reviews are the second source** ([ADR 0001](docs/adr/0001-steam-replaces-reddit-as-second-source.md)); the remaining Phase 1 work and its three-way split are planned in [docs/phase-1-plan.md](docs/phase-1-plan.md).
 
 ---
 
@@ -94,13 +94,13 @@ Supervisor: mgr inż. Szymon Olewniczak.
 | Cloud Run Jobs (collector jobs + replay publisher job) | ✓ Applied | [`terraform/modules/cloud_run_jobs/`](terraform/modules/cloud_run_jobs/) |
 | Pub/Sub (events topic + ordered verify subscription; Dataflow subscription + DLQ added this PR — see Dataflow infra row) | ✓ Applied | [`terraform/modules/pubsub/`](terraform/modules/pubsub/) |
 | Collector application code (common, reddit, youtube + tests) | ✓ Done | [`collectors/`](collectors/) |
-| YouTube collector: image, job wiring, first collection runs | ✓ Done — 4228 records ([details](docs/phase-0-youtube-first-collection.md)) | GCS `co-raw-archive-dev/youtube/` |
+| YouTube collector: image, job wiring, collection runs | ✓ Done — 12,254 records across 9 events ([first run](docs/phase-0-youtube-first-collection.md)) | GCS `co-raw-archive-dev/youtube/` |
 | Reddit collector: image + smoke test | ✗ **Out of scope — Reddit API access refused.** Code kept; see [ADR 0001](docs/adr/0001-steam-replaces-reddit-as-second-source.md) | `collectors/reddit/` |
 | Steam collector (second source) | ✗ To build — decided 2026-09-20 ([ADR 0001](docs/adr/0001-steam-replaces-reddit-as-second-source.md)) | `collectors/steam/` |
 | Real values in secret containers | YouTube key + salt ✓ real; Reddit ✗ placeholders | Secret Manager |
 | Replay publisher: code, image, job, first replay to Pub/Sub | ✓ Done — 4228 records replayed in order ([details](docs/phase-1-publisher.md)) | [`publisher/`](publisher/) |
 | **Dataflow streaming infra (this PR)** — `dataflow/` module + worker SA, `events` / `events_landing` + promotion MERGE, Dataflow subscription + DLQ topic/sub, dataflow-temp bucket, inter-worker firewall, launch-parameter outputs | ✓ Applied | [`terraform/modules/dataflow/`](terraform/modules/dataflow/) + extensions across `bigquery/`, `pubsub/`, `iam/`, `network/`, `storage/` |
-| Dataflow Beam pipeline + Flex Template | ✓ **Live** — 4228 records classified end-to-end, reproducibility verified ([details](docs/phase-1-dataflow.md)) | [`dataflow/`](dataflow/) |
+| Dataflow Beam pipeline + Flex Template | ✓ **Live** — 12,254 records classified end-to-end, reproducibility verified, replays run from CI ([details](docs/phase-1-dataflow.md)) | [`dataflow/`](dataflow/) |
 | NLP stub classifier + registry seam | ✓ Done | [`nlp/`](nlp/) |
 | Real NLP model via MLflow | ✗ Phase 1 (remaining) | Not yet |
 | Cloud Build CI/CD — GitHub connection; PR: Python checks, image builds, `terraform plan`; main: image push + deploy by digest, Flex Template specs, approval-gated `terraform apply` | ✓ Applied | [`terraform/modules/cloud_build/`](terraform/modules/cloud_build/) |

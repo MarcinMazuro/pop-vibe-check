@@ -270,3 +270,24 @@ launch output and addresses the job by id everywhere.
 delivers at least once, and each replay re-processes the same ids); the
 promotion MERGE collapses them to one row per `id`, which is why `events`
 holds exactly 4228 after four runs.
+
+## Full YouTube dataset (2026-09-20)
+
+The second B-track collection (nine lifecycle events instead of four) was
+loaded and replayed through the same trigger, with `_RUN_LOAD=true` so the
+build did GCS → staging first:
+
+| | |
+|---|---|
+| Rows in `raw_staging` | 12,254 across 9 event tags |
+| Rows in `events` | 12,254 — one per `id` |
+| Missing ids (coverage) | 0 |
+| Rows with no sentiment | 0 |
+| Rows in `events_landing` | 33,394 — duplicates across replays, collapsed by the MERGE |
+
+Coverage now runs from `xbox_showcase_reveal` (2024-06) to
+`anniversary_update_2026`, including the TGA sweep and the rescinded
+Indie Game Awards. The per-event sentiment split is still produced by the
+**stub** classifier, so the differences between events describe the
+plumbing, not public opinion; the numbers become meaningful only after a
+replay with `_MODEL=vertex`.
