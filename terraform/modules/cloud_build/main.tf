@@ -78,6 +78,9 @@ locals {
         "**/tests/**",
         "dataflow/*.sh",
         "dataflow/*.sql",
+        # The replay pipeline's own config: it orchestrates the image,
+        # it is not part of it.
+        "dataflow/replay.cloudbuild.yaml",
         "nlp/eval/**",
         "nlp/notebooks/**",
         "nlp/tracking/**",
