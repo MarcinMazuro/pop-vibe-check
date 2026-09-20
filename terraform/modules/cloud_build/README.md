@@ -28,6 +28,7 @@ and the secrets and IAM they need.
 | `co-sentiment-pipeline-deploy-dev` | push main | same | Cloud Build SA | same | build, push, publish template specs — **never launches a job** |
 | `co-terraform-plan-pr-dev` | PR → main | `terraform/**` | Terraform CI SA | `terraform/cloudbuild.yaml` | fmt, validate, plan |
 | `co-terraform-apply-dev` | push main | `terraform/**` | Terraform CI SA | same | **manual approval**, then plan + apply |
+| `co-replay-dev` | **manual only** | — | Cloud Build SA | `dataflow/replay.cloudbuild.yaml` | one full replay: launch, publish, wait, drain, promote, fingerprint |
 
 Markdown and test files are ignored by the image triggers; the pipeline
 image additionally ignores the NLP training, eval and notebook trees, which
@@ -42,7 +43,7 @@ tests). Collaborators' own PRs build immediately.
 
 | SA | Created in | Used for | Can |
 |---|---|---|---|
-| `co-cloud-build-sa-dev` | `modules/iam` | checks, image builds, deploys | push to Artifact Registry; `run.developer` on the YouTube and publisher jobs + actAs their SAs; write `templates/` in the dataflow-temp bucket; launch Dataflow jobs |
+| `co-cloud-build-sa-dev` | `modules/iam` | checks, image builds, deploys, replays | push to Artifact Registry; `run.developer` on the YouTube and publisher jobs + actAs their SAs; write `templates/` in the dataflow-temp bucket; launch and drain Dataflow jobs; `dataEditor` on the analytics dataset for the promotion MERGE |
 | `pvc-tf-ci-sa` | `terraform/bootstrap` | terraform plan / apply | read the tfvars secret; impersonate `pvc-tf-runner-sa` |
 
 The split is deliberate: image builds execute code from pull requests, so
@@ -111,6 +112,8 @@ Add a new version to `co-github-token-dev` (step 3). The connection reads
 | `youtube_job_name` | string | yes | — | Cloud Run Job the YouTube image is deployed to |
 | `publisher_job_name` | string | yes | — | Cloud Run Job the publisher image is deployed to |
 | `template_spec_dir` | string | yes | — | `gs://` prefix for Flex Template specs |
+| `dataflow_worker_sa_email`, `dataflow_subnetwork`, `dataflow_temp_location`, `dataflow_staging_location`, `dataflow_input_subscription`, `dataflow_events_landing_table`, `dataflow_dlq_topic` | string | yes | — | Launch parameters baked into the replay trigger (Cloud Build cannot read `terraform output`) |
+| `bq_dataset_id`, `raw_staging_table_id`, `events_landing_table_id`, `events_table_id` | string | yes | — | Table references the replay's promotion step uses |
 
 ## Outputs
 
@@ -130,5 +133,8 @@ Add a new version to `co-github-token-dev` (step 3). The connection reads
   waits up to 10 minutes (`-lock-timeout`), then fails; re-run it.
 - **Build logs stay in Cloud Logging**, not on GitHub. Plans print the
   tfvars inputs (billing account, emails) and the repository is public.
+- **The replay trigger is manual on purpose.** It starts a streaming
+  Dataflow job, which bills until drained. Its build always drains, even
+  when the replay fails.
 - **Image tags are full commit SHAs; deploys use digests.** Terraform
   ignores the job images — see `modules/cloud_run_jobs/README.md`.

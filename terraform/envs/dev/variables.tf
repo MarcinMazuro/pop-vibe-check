@@ -105,3 +105,15 @@ variable "cloud_build_approver_emails" {
   type        = list(string)
   default     = []
 }
+
+variable "dataflow_max_job_runtime_hours" {
+  description = "Hours a Dataflow job may run before the cost alert fires. Streaming jobs bill until drained; every replay here is minutes to hours."
+  type        = number
+  default     = 6
+}
+
+variable "replay_backlog_age_alert_seconds" {
+  description = "How old the oldest unacknowledged message on the Dataflow subscription may get before alerting. Must exceed the pacing of a normal replay."
+  type        = number
+  default     = 1800
+}

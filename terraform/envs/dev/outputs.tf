@@ -228,3 +228,8 @@ output "cloud_build_trigger_names" {
   description = "Names of the Cloud Build triggers; empty until github_app_installation_id is set."
   value       = module.cloud_build.trigger_names
 }
+
+output "alert_policy_names" {
+  description = "Monitoring alert policies guarding the streaming path (job failure, job left running, replay backlog, dead letters)."
+  value       = module.monitoring.alert_policy_names
+}

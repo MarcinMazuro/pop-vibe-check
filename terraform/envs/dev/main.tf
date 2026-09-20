@@ -133,6 +133,10 @@ module "bigquery" {
   publisher_sa_email       = module.iam.publisher_sa_email
   dataflow_worker_sa_email = module.iam.dataflow_worker_sa_email
   ml_trainer_sa_email      = module.iam.ml_trainer_sa_email
+
+  # The replay pipeline runs the events_landing -> events MERGE as the
+  # Cloud Build SA.
+  promoter_sa_email = module.iam.cloud_build_sa_email
 }
 
 module "pubsub" {
@@ -244,6 +248,41 @@ module "cloud_build" {
   youtube_job_name                = module.cloud_run_jobs.youtube_job_name
   publisher_job_name              = module.cloud_run_jobs.publisher_job_name
   template_spec_dir               = module.dataflow.template_spec_dir
+
+  # Replay pipeline: the launch parameters a laptop reads from
+  # `terraform output`, baked into the manual trigger instead.
+  dataflow_worker_sa_email      = module.dataflow.worker_sa_email
+  dataflow_subnetwork           = module.dataflow.subnetwork
+  dataflow_temp_location        = module.dataflow.temp_location
+  dataflow_staging_location     = module.dataflow.staging_location
+  dataflow_input_subscription   = module.dataflow.input_subscription
+  dataflow_events_landing_table = module.dataflow.events_landing_table
+  dataflow_dlq_topic            = module.dataflow.dlq_topic
+  bq_dataset_id                 = module.bigquery.dataset_id
+  raw_staging_table_id          = module.bigquery.raw_staging_table_id
+  events_landing_table_id       = module.bigquery.events_landing_table_id
+  events_table_id               = module.bigquery.events_table_id
+}
+
+# Alert policies for the streaming path: job failure, a job left running
+# (the cost guard), an ageing replay backlog, and dead-lettered records.
+# Notification channels come from the budgets module so alerts reach the
+# same recipients as budget notifications.
+module "monitoring" {
+  source = "../../modules/monitoring"
+
+  project_id  = var.project_id
+  name_prefix = var.name_prefix
+  env         = local.env
+  region      = var.region
+
+  notification_channel_ids = values(module.budgets.notification_channel_ids)
+
+  dataflow_subscription_name = module.pubsub.dataflow_subscription_name
+  dlq_subscription_name      = module.pubsub.dlq_subscription_name
+
+  max_job_runtime_hours     = var.dataflow_max_job_runtime_hours
+  backlog_age_alert_seconds = var.replay_backlog_age_alert_seconds
 }
 
 # Vertex AI Workbench + Endpoint for DistilBERT. Both gates default OFF

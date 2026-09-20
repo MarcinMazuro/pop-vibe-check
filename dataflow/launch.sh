@@ -14,6 +14,11 @@
 #
 # Drain (not cancel) lets in-flight records finish and reach BigQuery.
 #
+# Every value it needs can also be supplied through the environment
+# (REGION, WORKER_SA, SUBNETWORK, TEMP_LOCATION, STAGING_LOCATION,
+# SPEC_DIR, INPUT_SUBSCRIPTION, OUTPUT_TABLE, DLQ_TOPIC), which is how the
+# Cloud Build replay pipeline runs it without Terraform state.
+#
 # Usage:
 #   dataflow/launch.sh [--yes] [--model NAME] [--env-dir DIR] [--sha COMMIT]
 #
@@ -49,31 +54,41 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ ! -d "${ENV_DIR}" ]]; then
-  echo "Environment directory '${ENV_DIR}' not found. Run from the repo root." >&2
-  exit 1
-fi
-
+# Every launch parameter comes from `terraform output`, unless it is
+# already in the environment. Cloud Build has no Terraform state to read,
+# so the replay pipeline passes the same values in as variables; a laptop
+# sets none of them and gets the outputs.
 tf_output() {
+  local var_name="$2"
+  if [[ -n "${!var_name:-}" ]]; then
+    printf '%s' "${!var_name}"
+    return 0
+  fi
+  if [[ ! -d "${ENV_DIR}" ]]; then
+    echo "Environment directory '${ENV_DIR}' not found and ${var_name} is unset." >&2
+    exit 1
+  fi
   terraform -chdir="${ENV_DIR}" output -raw "$1"
 }
 
-REGION="$(tf_output dataflow_region)"
-WORKER_SA="$(tf_output dataflow_worker_sa_email)"
-SUBNETWORK="$(tf_output dataflow_subnetwork)"
-TEMP_LOCATION="$(tf_output dataflow_temp_location)"
-STAGING_LOCATION="$(tf_output dataflow_staging_location)"
-SPEC_DIR="$(tf_output dataflow_template_spec_dir)"
-INPUT_SUBSCRIPTION="$(tf_output dataflow_input_subscription)"
-OUTPUT_TABLE="$(tf_output dataflow_events_landing_table)"
-DLQ_TOPIC="$(tf_output dataflow_dlq_topic)"
+REGION="$(tf_output dataflow_region REGION)"
+WORKER_SA="$(tf_output dataflow_worker_sa_email WORKER_SA)"
+SUBNETWORK="$(tf_output dataflow_subnetwork SUBNETWORK)"
+TEMP_LOCATION="$(tf_output dataflow_temp_location TEMP_LOCATION)"
+STAGING_LOCATION="$(tf_output dataflow_staging_location STAGING_LOCATION)"
+SPEC_DIR="$(tf_output dataflow_template_spec_dir SPEC_DIR)"
+INPUT_SUBSCRIPTION="$(tf_output dataflow_input_subscription INPUT_SUBSCRIPTION)"
+OUTPUT_TABLE="$(tf_output dataflow_events_landing_table OUTPUT_TABLE)"
+DLQ_TOPIC="$(tf_output dataflow_dlq_topic DLQ_TOPIC)"
 
 if [[ -n "${TEMPLATE_SHA}" ]]; then
   TEMPLATE_SPEC="${SPEC_DIR}/sentiment-pipeline-${TEMPLATE_SHA}.json"
 else
   TEMPLATE_SPEC="${SPEC_DIR}/sentiment-pipeline.json"
 fi
-JOB_NAME="co-sentiment-$(date -u +%Y%m%d-%H%M%S)"
+# JOB_NAME can be set by the caller so an orchestrator knows the name
+# before the launch returns (the replay pipeline does exactly that).
+JOB_NAME="${JOB_NAME:-co-sentiment-$(date -u +%Y%m%d-%H%M%S)}"
 
 VERTEX_ENDPOINT_ID="${VERTEX_ENDPOINT_ID:-}"
 VERTEX_PROJECT="${VERTEX_PROJECT:-}"
@@ -81,13 +96,13 @@ VERTEX_LOCATION="${VERTEX_LOCATION:-europe-central2}"
 
 if [[ "${NLP_MODEL}" == "vertex" ]]; then
   if [[ -z "${VERTEX_ENDPOINT_ID}" ]]; then
-    VERTEX_ENDPOINT_ID="$(tf_output vertex_endpoint_id || true)"
+    VERTEX_ENDPOINT_ID="$(tf_output vertex_endpoint_id VERTEX_ENDPOINT_ID || true)"
   fi
   if [[ -z "${VERTEX_PROJECT}" ]]; then
-    VERTEX_PROJECT="$(tf_output vertex_project_id || true)"
+    VERTEX_PROJECT="$(tf_output vertex_project_id VERTEX_PROJECT || true)"
   fi
   if [[ "${VERTEX_LOCATION}" == "europe-central2" ]]; then
-    VERTEX_LOCATION="$(tf_output vertex_location || true)"
+    VERTEX_LOCATION="$(tf_output vertex_location VERTEX_LOCATION || true)"
     VERTEX_LOCATION="${VERTEX_LOCATION:-europe-central2}"
   fi
   if [[ -z "${VERTEX_ENDPOINT_ID}" || -z "${VERTEX_PROJECT}" ]]; then
