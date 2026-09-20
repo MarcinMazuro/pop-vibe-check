@@ -173,11 +173,11 @@ steps:
           # "everything processed". Wait until the number of landed rows
           # from this run stops growing.
           run_start=$$(cat /workspace/run_start)
-          landed_sql="SELECT COUNT(DISTINCT id) AS n FROM \`$${PROJECT_ID}.${_DATASET}.${_EVENTS_LANDING_TABLE_ID}\` WHERE processed_at >= TIMESTAMP('$$run_start')"
+          landed_sql="SELECT COUNT(DISTINCT id) AS n FROM \`${PROJECT_ID}.${_DATASET}.${_EVENTS_LANDING_TABLE_ID}\` WHERE processed_at >= TIMESTAMP('$$run_start')"
           prev=-1
           stable=0
           for _ in $$(seq 1 ${_WAIT_TIMEOUT_MINUTES}); do
-            n=$$(bq query --project_id="$$PROJECT_ID" --use_legacy_sql=false \
+            n=$$(bq query --project_id="${PROJECT_ID}" --use_legacy_sql=false \
               --format=csv "$$landed_sql" | tail -1)
             echo "landed=$$n (stable=$$stable)"
             if [ "$$n" = "$$prev" ] && [ "$$n" != "0" ]; then
@@ -237,6 +237,7 @@ steps:
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:585.0.0
     entrypoint: bash
     env:
+      - PROJECT_ID=${PROJECT_ID}
       - DATASET=${_DATASET}
       - RAW_STAGING_TABLE_ID=${_RAW_STAGING_TABLE_ID}
       - EVENTS_LANDING_TABLE_ID=${_EVENTS_LANDING_TABLE_ID}
