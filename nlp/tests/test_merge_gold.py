@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -27,7 +28,7 @@ def _gold(
     split: str = "train",
     language: str = "en",
     text: str | None = None,
-) -> dict:
+) -> dict[str, Any]:
     return {
         "id": rid,
         "text": text or f"text {rid}",
@@ -47,7 +48,7 @@ def _review(
     review_required: bool = False,
     label: str = "",
     llm_confidence: str = "high",
-) -> dict:
+) -> dict[str, Any]:
     return {
         "id": rid,
         "text": f"text {rid}",

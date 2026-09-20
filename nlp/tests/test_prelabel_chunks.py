@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -31,7 +32,7 @@ def _row(
     source: str = "youtube",
     created_utc: str | None = "2024-01-01T00:00:00Z",
     **extra: object,
-) -> dict:
+) -> dict[str, Any]:
     item = {
         "id": rid,
         "text": text,
