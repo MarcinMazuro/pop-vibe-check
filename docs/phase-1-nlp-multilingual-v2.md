@@ -1,7 +1,12 @@
 # Phase 1 — NLP multilingual v2 (XLM-RoBERTa)
 
 Recipe for replacing English DistilBERT v1 with `xlm-roberta-base`.
-Training has **not** been run yet. DistilBERT v1 numbers stay in
+The v2 export has been evaluated; measured XLM-R results and reproducible
+commands are in
+[`phase-1-nlp-evaluation-xlmr-v2.md`](phase-1-nlp-evaluation-xlmr-v2.md).
+For the continued v2 → v2.1 fine-tune, use
+[`phase-1-nlp-xlmr-v2.1-continued.md`](phase-1-nlp-xlmr-v2.1-continued.md).
+DistilBERT v1 numbers stay in
 [`phase-1-nlp-evaluation-distilbert-v1.md`](phase-1-nlp-evaluation-distilbert-v1.md)
 and the Vertex ops journal
 [`phase-1-nlp-vertex-dev.md`](phase-1-nlp-vertex-dev.md).

@@ -12,13 +12,16 @@ Weights are **not** baked into the Flex Template image. Dataflow workers
 reach `aiplatform.googleapis.com` over Private Google Access; they still
 cannot reach PyPI or Hugging Face Hub.
 
-**Current status (2026-09-15).** DistilBERT v1 train complete (best epoch 2,
+**Current status (2026-09-20).** DistilBERT v1 train complete (best epoch 2,
 hybrid acc 0.802, macro-F1 0.786) at
-`gs://co-tf-artifacts-dev/nlp/models/distilbert-sent/`. **v2 is XLM-RoBERTa
-base** (`xlm-roberta-base`), not yet trained — recipe:
-[docs/phase-1-nlp-multilingual-v2.md](../docs/phase-1-nlp-multilingual-v2.md).
-Workbench `co-nlp-workbench-dev` is **STOPPED**. Serve-replay is still
-pending. DistilBERT ops journal:
+`gs://co-tf-artifacts-dev/nlp/models/distilbert-sent/`. The XLM-R v2 export
+is evaluated in
+[docs/phase-1-nlp-evaluation-xlmr-v2.md](../docs/phase-1-nlp-evaluation-xlmr-v2.md).
+The v2 recipe is
+[docs/phase-1-nlp-multilingual-v2.md](../docs/phase-1-nlp-multilingual-v2.md);
+the continued v2 → v2.1 recipe is
+[docs/phase-1-nlp-xlmr-v2.1-continued.md](../docs/phase-1-nlp-xlmr-v2.1-continued.md).
+Serve-replay is still pending. DistilBERT ops journal:
 [docs/phase-1-nlp-vertex-dev.md](../docs/phase-1-nlp-vertex-dev.md).
 
 ## Layout
@@ -94,6 +97,35 @@ gcloud workbench instances stop co-nlp-workbench-dev \
 # or: terraform apply -var="enable_nlp_workbench=true" -var="nlp_workbench_desired_state=STOPPED"
 # or: terraform apply   # gates default false → destroys the instance
 ```
+
+### Stage 2 continued fine-tune (v2 → v2.1)
+
+Use the reviewed `gold_v3.jsonl` and start from the existing v2 export. The
+full local prelabel, human review, evaluation, and consent gates are in
+[docs/phase-1-nlp-xlmr-v2.1-continued.md](../docs/phase-1-nlp-xlmr-v2.1-continued.md).
+The Workbench training command is:
+
+```bash
+python -m nlp.training.train \
+  --init-from /home/jupyter/models/xlmr-sent \
+  --cache-dir /home/jupyter/hf-datasets \
+  --model-cache-dir /home/jupyter/hf-cache \
+  --own-domain /home/jupyter/gold/gold_v3.jsonl \
+  --dev-from-gold /home/jupyter/gold/gold_v3.jsonl \
+  --replay-n 5000 \
+  --lr 1e-5 \
+  --epochs 3 \
+  --batch-size 8 \
+  --own-domain-factor 2 \
+  --warmup-ratio 0.1 \
+  --weight-decay 0.01 \
+  --early-stopping-patience 2 \
+  --output-dir /home/jupyter/models/xlmr-sent-v2.1
+```
+
+This stage does not start from `xlm-roberta-base`, does not overwrite the v2
+artifact, and does not deploy an Endpoint. Workbench access and the later GCS
+upload each require owner GCP consent.
 
 ### Hybrid corpus (v2 default)
 
@@ -177,8 +209,11 @@ invent `neu`.
 
 ## Evaluation
 
-See [docs/phase-1-nlp-multilingual-v2.md](../docs/phase-1-nlp-multilingual-v2.md)
-(v2 recipe) and
+See [docs/phase-1-nlp-evaluation-xlmr-v2.md](../docs/phase-1-nlp-evaluation-xlmr-v2.md)
+(v2 results), [docs/phase-1-nlp-multilingual-v2.md](../docs/phase-1-nlp-multilingual-v2.md)
+(v2 recipe), and
+[docs/phase-1-nlp-xlmr-v2.1-continued.md](../docs/phase-1-nlp-xlmr-v2.1-continued.md)
+(continued v2.1 recipe).
 [docs/phase-1-nlp-evaluation-distilbert-v1.md](../docs/phase-1-nlp-evaluation-distilbert-v1.md)
 (v1 gold numbers).
 
