@@ -84,3 +84,62 @@ variable "template_spec_dir" {
   description = "gs:// prefix Flex Template specs are written under, e.g. 'gs://co-dataflow-temp-dev/templates'."
   type        = string
 }
+
+# --- Replay pipeline inputs -------------------------------------------------
+# Everything dataflow/launch.sh and promote.sh would otherwise read from
+# `terraform output`.
+
+variable "dataflow_worker_sa_email" {
+  description = "Worker SA the replayed Dataflow job runs as."
+  type        = string
+}
+
+variable "dataflow_subnetwork" {
+  description = "Subnetwork self-link the Dataflow workers run in."
+  type        = string
+}
+
+variable "dataflow_temp_location" {
+  description = "gs:// temp location for the Dataflow job."
+  type        = string
+}
+
+variable "dataflow_staging_location" {
+  description = "gs:// staging location for the Dataflow job."
+  type        = string
+}
+
+variable "dataflow_input_subscription" {
+  description = "Pub/Sub subscription the pipeline consumes."
+  type        = string
+}
+
+variable "dataflow_events_landing_table" {
+  description = "BigQuery write target in PROJECT:DATASET.TABLE form."
+  type        = string
+}
+
+variable "dataflow_dlq_topic" {
+  description = "Dead-letter topic the pipeline publishes unparseable records to."
+  type        = string
+}
+
+variable "bq_dataset_id" {
+  description = "Short BigQuery dataset id the replay promotes inside."
+  type        = string
+}
+
+variable "raw_staging_table_id" {
+  description = "Short table id of the staging table the coverage check compares against."
+  type        = string
+}
+
+variable "events_landing_table_id" {
+  description = "Short table id of the append-only Dataflow write target."
+  type        = string
+}
+
+variable "events_table_id" {
+  description = "Short table id of the analytical events table (MERGE target)."
+  type        = string
+}

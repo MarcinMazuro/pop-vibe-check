@@ -33,6 +33,7 @@ Note: BigQuery dataset names require underscores rather than hyphens (GCP rule).
 | `publisher_sa_email` | string | yes | — | Publisher SA granted dataEditor on the dataset and jobUser on the project |
 | `dataflow_worker_sa_email` | string | yes | — | Dataflow worker SA granted dataEditor on the dataset and jobUser on the project, so the streaming pipeline can write `events_landing` |
 | `ml_trainer_sa_email` | string | yes | — | ML trainer SA granted dataViewer on the dataset and jobUser on the project (Workbench gold / own-domain reads) |
+| `promoter_sa_email` | string | no | `null` | SA that promotes a drained replay (the Cloud Build SA); granted `dataEditor` on the dataset and `jobUser` on the project |
 | `delete_contents_on_destroy` | bool | no | `false` | One-off escape hatch for `terraform destroy` when the dataset still has tables. See "Tearing down" below. |
 
 ## Outputs

@@ -57,3 +57,9 @@ variable "delete_contents_on_destroy" {
   type        = bool
   default     = false
 }
+
+variable "promoter_sa_email" {
+  description = "Service account that promotes a drained replay (the Cloud Build SA running the replay pipeline). Granted dataEditor on the dataset and jobUser on the project. null skips the grants."
+  type        = string
+  default     = null
+}

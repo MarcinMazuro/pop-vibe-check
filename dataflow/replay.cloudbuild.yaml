@@ -1,0 +1,258 @@
+# One replay, end to end, as a single Cloud Build run.
+#
+#   launch Dataflow → run the publisher → wait for the pipeline to catch
+#   up → drain → promote events_landing into events → fingerprint
+#
+# Why this exists as a build rather than a runbook: every number in the
+# thesis has to be regeneratable from committed code at a known commit.
+# A build records exactly that — the commit, the parameters, and the log.
+# It also removes the failure mode the runbook cannot prevent, a replay
+# promoted before the pipeline finished: the promote step runs after the
+# job is drained, never after the publisher merely exits.
+#
+# Started by hand, from the co-replay-dev trigger:
+#
+#   gcloud builds triggers run co-replay-dev --region=europe-central2 \
+#     --branch=main --substitutions=_MODEL=stub
+#
+# COST. This starts a streaming Dataflow job, which bills until drained.
+# The drain step always runs, even when the replay fails. The one case it
+# cannot cover is the whole build timing out or being cancelled — the
+# "Dataflow job running too long" alert exists for that.
+substitutions:
+  _REGION: europe-central2
+
+  # Model: stub (deterministic, free) or vertex (needs a live Endpoint).
+  _MODEL: stub
+  _VERTEX_ENDPOINT_ID: ""
+  _VERTEX_PROJECT: ""
+  _VERTEX_LOCATION: europe-central2
+
+  # Which template to launch: empty = the current spec (refreshed on every
+  # merge to main), or a commit SHA for that commit's immutable spec.
+  _TEMPLATE_SHA: ""
+
+  # Publisher parameters. Empty values are not passed to the job at all,
+  # so it keeps its deployed defaults.
+  _RUN_LOAD: ""
+  _EVENT_ID: ""
+  _WINDOW_FROM: ""
+  _WINDOW_TO: ""
+  _SPEEDUP: ""
+  _MAX_SLEEP_SECONDS: ""
+
+  # Worker sizing (the pipeline processes a paced replay, not a firehose).
+  _MAX_WORKERS: "2"
+  _MACHINE_TYPE: e2-standard-2
+
+  # How long to wait for landed rows to stop increasing before draining.
+  _WAIT_TIMEOUT_MINUTES: "60"
+
+  # false runs the replay and drains without touching `events`.
+  _PROMOTE: "true"
+
+  # Infrastructure, supplied by the trigger from terraform output.
+  _WORKER_SA: ""
+  _SUBNETWORK: ""
+  _TEMP_LOCATION: ""
+  _STAGING_LOCATION: ""
+  _TEMPLATE_SPEC_DIR: ""
+  _INPUT_SUBSCRIPTION: ""
+  _OUTPUT_TABLE: ""
+  _DLQ_TOPIC: ""
+  _PUBLISHER_JOB: ""
+  _DATASET: ""
+  _RAW_STAGING_TABLE_ID: raw_staging
+  _EVENTS_LANDING_TABLE_ID: events_landing
+  _EVENTS_TABLE_ID: events
+
+steps:
+  # --------------------------------------------------------------------
+  # 1. Launch. launch.sh takes every value from the environment here;
+  #    on a laptop it reads the same values from `terraform output`.
+  # --------------------------------------------------------------------
+  - id: launch
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:585.0.0
+    entrypoint: bash
+    env:
+      - REGION=${_REGION}
+      - WORKER_SA=${_WORKER_SA}
+      - SUBNETWORK=${_SUBNETWORK}
+      - TEMP_LOCATION=${_TEMP_LOCATION}
+      - STAGING_LOCATION=${_STAGING_LOCATION}
+      - SPEC_DIR=${_TEMPLATE_SPEC_DIR}
+      - INPUT_SUBSCRIPTION=${_INPUT_SUBSCRIPTION}
+      - OUTPUT_TABLE=${_OUTPUT_TABLE}
+      - DLQ_TOPIC=${_DLQ_TOPIC}
+      - VERTEX_ENDPOINT_ID=${_VERTEX_ENDPOINT_ID}
+      - VERTEX_PROJECT=${_VERTEX_PROJECT}
+      - VERTEX_LOCATION=${_VERTEX_LOCATION}
+      - MAX_WORKERS=${_MAX_WORKERS}
+      - MACHINE_TYPE=${_MACHINE_TYPE}
+    args:
+      - -ec
+      - |
+        # Deterministic job name, so every later step can find the job
+        # even if the launch output is lost.
+        job_name="co-replay-$${BUILD_ID:0:8}"
+        echo "$$job_name" > /workspace/job_name
+        # The replay's own start time; the wait step counts only rows
+        # landed after it.
+        date -u +%Y-%m-%dT%H:%M:%SZ > /workspace/run_start
+
+        sha_flag=""
+        if [ -n "${_TEMPLATE_SHA}" ]; then
+          sha_flag="--sha ${_TEMPLATE_SHA}"
+        fi
+
+        JOB_NAME="$$job_name" dataflow/launch.sh --yes --model ${_MODEL} $$sha_flag
+
+        echo "Waiting for the job to start."
+        for _ in $$(seq 1 40); do
+          state=$$(gcloud dataflow jobs list --region=${_REGION} \
+            --filter="name=$$job_name" --format='value(STATE)' | head -1)
+          echo "  state=$$state"
+          case "$$state" in
+            Running) exit 0 ;;
+            Failed|Cancelled) echo "Job did not start." >&2; exit 1 ;;
+          esac
+          sleep 30
+        done
+        echo "Job did not reach Running in 20 minutes." >&2
+        exit 1
+
+  # --------------------------------------------------------------------
+  # 2. Replay: publish, then wait for the pipeline to catch up.
+  #
+  #    Failures are recorded, not raised, so the drain step below always
+  #    runs — an undrained streaming job bills indefinitely.
+  # --------------------------------------------------------------------
+  - id: replay
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:585.0.0
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -x
+        run() {
+          set -e
+          env_vars=""
+          add_env() { [ -n "$$2" ] && env_vars="$${env_vars:+$$env_vars,}$$1=$$2"; return 0; }
+          add_env RUN_LOAD "${_RUN_LOAD}"
+          add_env EVENT_ID "${_EVENT_ID}"
+          add_env WINDOW_FROM "${_WINDOW_FROM}"
+          add_env WINDOW_TO "${_WINDOW_TO}"
+          add_env SPEEDUP "${_SPEEDUP}"
+          add_env MAX_SLEEP_SECONDS "${_MAX_SLEEP_SECONDS}"
+
+          if [ -n "$$env_vars" ]; then
+            gcloud run jobs execute ${_PUBLISHER_JOB} --region=${_REGION} --wait \
+              --update-env-vars="$$env_vars"
+          else
+            gcloud run jobs execute ${_PUBLISHER_JOB} --region=${_REGION} --wait
+          fi
+
+          # The publisher exiting means "everything published", not
+          # "everything processed". Wait until the number of landed rows
+          # from this run stops growing.
+          run_start=$$(cat /workspace/run_start)
+          landed_sql="SELECT COUNT(DISTINCT id) AS n FROM \`$${PROJECT_ID}.${_DATASET}.${_EVENTS_LANDING_TABLE_ID}\` WHERE processed_at >= TIMESTAMP('$$run_start')"
+          prev=-1
+          stable=0
+          for _ in $$(seq 1 ${_WAIT_TIMEOUT_MINUTES}); do
+            n=$$(bq query --project_id="$$PROJECT_ID" --use_legacy_sql=false \
+              --format=csv "$$landed_sql" | tail -1)
+            echo "landed=$$n (stable=$$stable)"
+            if [ "$$n" = "$$prev" ] && [ "$$n" != "0" ]; then
+              stable=$$((stable + 1))
+              [ "$$stable" -ge 3 ] && break
+            else
+              stable=0
+            fi
+            prev=$$n
+            sleep 60
+          done
+          [ "$$stable" -ge 3 ]
+        }
+
+        if run; then
+          echo 0 > /workspace/replay_status
+        else
+          echo $$? > /workspace/replay_status
+          echo "Replay step failed; the job is still drained below." >&2
+        fi
+
+  # --------------------------------------------------------------------
+  # 3. Drain — always. Drain, never cancel: in-flight records still reach
+  #    BigQuery.
+  # --------------------------------------------------------------------
+  - id: drain
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:585.0.0
+    entrypoint: bash
+    args:
+      - -ec
+      - |
+        job_name=$$(cat /workspace/job_name)
+        job_id=$$(gcloud dataflow jobs list --region=${_REGION} \
+          --filter="name=$$job_name" --format='value(JOB_ID)' | head -1)
+        echo "Draining $$job_name ($$job_id)."
+        gcloud dataflow jobs drain "$$job_id" --region=${_REGION}
+
+        for _ in $$(seq 1 60); do
+          state=$$(gcloud dataflow jobs describe "$$job_id" --region=${_REGION} \
+            --format='value(currentState)')
+          echo "  state=$$state"
+          case "$$state" in
+            JOB_STATE_DRAINED|JOB_STATE_DONE|JOB_STATE_CANCELLED|JOB_STATE_FAILED) exit 0 ;;
+          esac
+          sleep 30
+        done
+        echo "Job did not finish draining in 30 minutes; check it by hand." >&2
+        exit 1
+
+  # --------------------------------------------------------------------
+  # 4. Promote: coverage check, MERGE into events, fingerprint. Skipped if
+  #    the replay failed — a partial run must not be promoted.
+  # --------------------------------------------------------------------
+  - id: promote
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:585.0.0
+    entrypoint: bash
+    env:
+      - DATASET=${_DATASET}
+      - RAW_STAGING_TABLE_ID=${_RAW_STAGING_TABLE_ID}
+      - EVENTS_LANDING_TABLE_ID=${_EVENTS_LANDING_TABLE_ID}
+      - EVENTS_TABLE_ID=${_EVENTS_TABLE_ID}
+    args:
+      - -ec
+      - |
+        status=$$(cat /workspace/replay_status 2>/dev/null || echo 1)
+        if [ "$$status" != "0" ]; then
+          echo "Replay failed; not promoting."
+          exit 0
+        fi
+        if [ "${_PROMOTE}" != "true" ]; then
+          echo "_PROMOTE=${_PROMOTE}; events_landing left unpromoted."
+          exit 0
+        fi
+        # promote.sh substitutes table names into the .sql files with
+        # envsubst, which the cloud-sdk image does not ship.
+        apt-get update -qq && apt-get install -y -qq gettext-base >/dev/null
+        dataflow/promote.sh --yes
+
+  - id: report
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:585.0.0
+    entrypoint: bash
+    args:
+      - -ec
+      - |
+        status=$$(cat /workspace/replay_status 2>/dev/null || echo 1)
+        if [ "$$status" != "0" ]; then
+          echo "Replay failed (status $$status). The job was drained." >&2
+          exit 1
+        fi
+        echo "Replay complete."
+
+timeout: 10800s
+
+options:
+  logging: CLOUD_LOGGING_ONLY

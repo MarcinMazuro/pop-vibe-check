@@ -65,6 +65,7 @@ contract a real model must honour.
 | `cloudbuild.yaml` | Builds the image and the template spec |
 | `launch.sh` | Starts a job from the built template |
 | `promote.sh` | Coverage check → MERGE → reproducibility fingerprint |
+| `replay.cloudbuild.yaml` | The whole replay as one Cloud Build run (`co-replay-dev`) |
 | `promote.sql` / `coverage.sql` / `verify.sql` | The statements `promote.sh` runs |
 
 ## The image must be self-contained
@@ -115,6 +116,41 @@ manual `_DEPLOY=true` run also overwrites the current spec.
 
 ## Run
 
+### One replay, as a build (the normal path)
+
+`co-replay-dev` runs the whole sequence — launch, publish, wait, drain,
+promote, fingerprint — as one Cloud Build run from
+[`replay.cloudbuild.yaml`](replay.cloudbuild.yaml). It is a **manual**
+trigger: a replay starts a streaming job that bills until drained, so no
+push starts one.
+
+```bash
+gcloud builds triggers run co-replay-dev --region=europe-central2 \
+  --branch=main --substitutions=_MODEL=stub
+```
+
+Useful substitutions (all optional): `_MODEL` (`stub` / `vertex`),
+`_TEMPLATE_SHA` (launch a specific commit's template instead of the
+current one), `_RUN_LOAD`, `_EVENT_ID`, `_WINDOW_FROM`, `_WINDOW_TO`,
+`_SPEEDUP`, `_MAX_SLEEP_SECONDS` (publisher parameters — anything left
+empty keeps the job's deployed default), `_MAX_WORKERS`, `_MACHINE_TYPE`,
+`_PROMOTE=false` (replay and drain without touching `events`).
+
+Two properties make this better than running the steps by hand:
+
+- **The promotion cannot run too early.** It runs after the job is
+  drained, never merely after the publisher exits — the failure this
+  ordering exists to prevent (`promote.sh`'s header explains it).
+- **The drain step always runs**, even when the replay fails, so a failed
+  run does not leave a streaming job billing. The gap it cannot close is
+  the build itself timing out or being cancelled; the "Dataflow job
+  running too long" alert covers that (`terraform/modules/monitoring/`).
+
+The build's log is the record of the run: the commit, the parameters, the
+coverage check and the fingerprint.
+
+### By hand
+
 Have the publisher put messages on the topic first (see
 `publisher/README.md`), then:
 
@@ -135,6 +171,12 @@ not need a GPU.
 Every infrastructure value — region, worker SA, subnetwork, temp and
 staging locations, subscription, table, DLQ topic — is read from
 `terraform output`, so the script cannot drift from what is deployed.
+Each one can also be supplied through the environment (`REGION`,
+`WORKER_SA`, `SUBNETWORK`, `TEMP_LOCATION`, `STAGING_LOCATION`,
+`SPEC_DIR`, `INPUT_SUBSCRIPTION`, `OUTPUT_TABLE`, `DLQ_TOPIC`), which is
+how the replay build runs the same script without Terraform state.
+`promote.sh` works the same way (`PROJECT_ID`, `DATASET`,
+`RAW_STAGING_TABLE_ID`, `EVENTS_LANDING_TABLE_ID`, `EVENTS_TABLE_ID`).
 
 ### Cost
 
@@ -221,7 +263,13 @@ from langdetect's behaviour under Dataflow's threading.
 - **No windowed aggregation.** The pipeline enriches record by record;
   per-event aggregates are computed in BigQuery. Event time is wired
   correctly, so a windowed branch can be added without reworking the read.
-- **The promotion step is a script, not infrastructure.** Whether it
-  becomes a `RUN_MERGE` mode on the publisher job or a separate one-shot
-  job is still open; the Dataflow worker SA already holds the grants
-  either would need.
+- **The launch is not a Terraform resource.** A gated
+  `google_dataflow_flex_template_job` was considered and rejected:
+  with applies going through an approval-gated Cloud Build trigger,
+  starting a job would mean editing the tfvars secret and approving an
+  apply, and stopping one would mean deleting a resource. The manual
+  `co-replay-dev` trigger does the same job with an explicit drain.
+- **Alerting covers the job, not the data.** Job failure, a job left
+  running, an ageing backlog and dead letters all alert
+  (`terraform/modules/monitoring/`). A replay that lands *wrong* rows
+  does not — that is what the coverage check and the fingerprint are for.

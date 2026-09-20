@@ -103,6 +103,7 @@ Supervisor: mgr inż. Szymon Olewniczak.
 | NLP stub classifier + registry seam | ✓ Done | [`nlp/`](nlp/) |
 | Real NLP model via MLflow | ✗ Phase 1 (remaining) | Not yet |
 | Cloud Build CI/CD — GitHub connection; PR: Python checks, image builds, `terraform plan`; main: image push + deploy by digest, Flex Template specs, approval-gated `terraform apply` | ✓ Applied | [`terraform/modules/cloud_build/`](terraform/modules/cloud_build/) |
+| Monitoring alerts (Dataflow job failure, job left running, replay backlog, dead letters) + one-button replay pipeline (`co-replay-dev`) | ✓ Applied | [`terraform/modules/monitoring/`](terraform/modules/monitoring/), [`dataflow/replay.cloudbuild.yaml`](dataflow/replay.cloudbuild.yaml) |
 
 The Dataflow infrastructure above is **applied and live** (branch `feat/tf-dataflow-infra`); nothing billable runs until PR 3 launches the pipeline explicitly. Applying it also added `roles/compute.securityAdmin` to the Terraform runner SA in `terraform/bootstrap/` — firewall rules are "security" resources that `compute.networkAdmin` alone can't create.
 

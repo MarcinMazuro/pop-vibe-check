@@ -341,3 +341,58 @@ resource "google_cloudbuild_trigger" "terraform_apply" {
     }
   }
 }
+
+# ----------------------------------------------------------------------------
+# Replay pipeline — manual trigger.
+#
+# One button that launches Dataflow, runs the publisher, waits for the
+# pipeline to catch up, drains, promotes and fingerprints. Manual, not
+# event-driven: a replay starts a streaming job that bills until drained,
+# and nobody wants a push to main to do that.
+#
+#   gcloud builds triggers run co-replay-dev --region=europe-central2 \
+#     --branch=main --substitutions=_MODEL=stub
+#
+# The infrastructure values below come from the same Terraform outputs a
+# laptop run of dataflow/launch.sh reads; Cloud Build has no state to read
+# them from, so they are baked into the trigger.
+# ----------------------------------------------------------------------------
+resource "google_cloudbuild_trigger" "replay" {
+  count = local.github_enabled ? 1 : 0
+
+  project         = var.project_id
+  location        = var.region
+  name            = "${var.name_prefix}-replay-${var.env}"
+  description     = "Manual: one full replay (launch, publish, drain, promote, fingerprint)."
+  service_account = local.cloud_build_sa_id
+
+  source_to_build {
+    repository = google_cloudbuildv2_repository.this[0].id
+    ref        = "refs/heads/main"
+    repo_type  = "GITHUB"
+  }
+
+  git_file_source {
+    repository = google_cloudbuildv2_repository.this[0].id
+    path       = "dataflow/replay.cloudbuild.yaml"
+    revision   = "refs/heads/main"
+    repo_type  = "GITHUB"
+  }
+
+  substitutions = {
+    _REGION                  = var.region
+    _WORKER_SA               = var.dataflow_worker_sa_email
+    _SUBNETWORK              = var.dataflow_subnetwork
+    _TEMP_LOCATION           = var.dataflow_temp_location
+    _STAGING_LOCATION        = var.dataflow_staging_location
+    _TEMPLATE_SPEC_DIR       = var.template_spec_dir
+    _INPUT_SUBSCRIPTION      = var.dataflow_input_subscription
+    _OUTPUT_TABLE            = var.dataflow_events_landing_table
+    _DLQ_TOPIC               = var.dataflow_dlq_topic
+    _PUBLISHER_JOB           = var.publisher_job_name
+    _DATASET                 = var.bq_dataset_id
+    _RAW_STAGING_TABLE_ID    = var.raw_staging_table_id
+    _EVENTS_LANDING_TABLE_ID = var.events_landing_table_id
+    _EVENTS_TABLE_ID         = var.events_table_id
+  }
+}

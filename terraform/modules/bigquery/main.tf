@@ -354,6 +354,31 @@ resource "google_project_iam_member" "dataflow_worker_job_user" {
 # tables. jobUser is project-scope because that is the only place it can
 # be granted, and exists solely so Workbench can run SELECT jobs.
 # ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+# Replay promoter (Cloud Build).
+#
+# The replay pipeline runs the events_landing -> events MERGE and the
+# coverage / fingerprint queries after a drain, so it needs to write to
+# the dataset and to run query jobs. dataEditor, not dataOwner: it never
+# changes table schemas.
+# ----------------------------------------------------------------------------
+resource "google_bigquery_dataset_iam_member" "promoter_data_editor" {
+  count = var.promoter_sa_email == null ? 0 : 1
+
+  project    = var.project_id
+  dataset_id = google_bigquery_dataset.analytics.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:${var.promoter_sa_email}"
+}
+
+resource "google_project_iam_member" "promoter_job_user" {
+  count = var.promoter_sa_email == null ? 0 : 1
+
+  project = var.project_id
+  role    = "roles/bigquery.jobUser"
+  member  = "serviceAccount:${var.promoter_sa_email}"
+}
+
 resource "google_bigquery_dataset_iam_member" "ml_trainer_data_viewer" {
   project    = var.project_id
   dataset_id = google_bigquery_dataset.analytics.dataset_id
