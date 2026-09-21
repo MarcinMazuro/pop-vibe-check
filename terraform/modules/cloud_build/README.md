@@ -113,6 +113,7 @@ Add a new version to `co-github-token-dev` (step 3). The connection reads
 | `publisher_job_name` | string | yes | — | Cloud Run Job the publisher image is deployed to |
 | `template_spec_dir` | string | yes | — | `gs://` prefix for Flex Template specs |
 | `dataflow_worker_sa_email`, `dataflow_subnetwork`, `dataflow_temp_location`, `dataflow_staging_location`, `dataflow_input_subscription`, `dataflow_events_landing_table`, `dataflow_dlq_topic` | string | yes | — | Launch parameters baked into the replay trigger (Cloud Build cannot read `terraform output`) |
+| `vertex_endpoint_id`, `vertex_project`, `vertex_location` | string | no | `""` / `europe-central2` | Vertex Endpoint the pipeline calls with `_MODEL=vertex`; empty while no Endpoint exists |
 | `bq_dataset_id`, `raw_staging_table_id`, `events_landing_table_id`, `events_table_id` | string | yes | — | Table references the replay's promotion step uses |
 
 ## Outputs

@@ -262,6 +262,9 @@ module "cloud_build" {
   dataflow_input_subscription   = module.dataflow.input_subscription
   dataflow_events_landing_table = module.dataflow.events_landing_table
   dataflow_dlq_topic            = module.dataflow.dlq_topic
+  vertex_endpoint_id            = module.vertex_nlp.endpoint_resource_name
+  vertex_project                = var.project_id
+  vertex_location               = module.vertex_nlp.location
   bq_dataset_id                 = module.bigquery.dataset_id
   raw_staging_table_id          = module.bigquery.raw_staging_table_id
   events_landing_table_id       = module.bigquery.events_landing_table_id
