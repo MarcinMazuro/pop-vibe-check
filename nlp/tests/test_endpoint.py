@@ -147,3 +147,73 @@ class TestRegistryVertex:
         monkeypatch.delenv("VERTEX_PROJECT", raising=False)
         with pytest.raises(RuntimeError, match="VERTEX_ENDPOINT_ID"):
             load_classifier("vertex")
+
+
+class _LengthLimitedEndpoint:
+    """Endpoint double that rejects inputs over a character limit.
+
+    Stands in for the serving container's 512-token ceiling, which
+    surfaces as a tensor-size mismatch rather than a typed error.
+    """
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        self.seen: list[list[str]] = []
+
+    def predict(self, instances, timeout=None):  # noqa: ANN001, ANN201, D102
+        texts = [instance["inputs"] for instance in instances]
+        self.seen.append(texts)
+        longest = max((len(text) for text in texts), default=0)
+        if longest > self.limit:
+            raise ValueError(
+                '400 {"error":"The expanded size of the tensor (660) must '
+                'match the existing size (514) at non-singleton dimension 1."}'
+            )
+        return SimpleNamespace(
+            predictions=[{"label": "pos", "score": 0.9} for _ in texts],
+            deployed_model_id="dm-1",
+        )
+
+
+def test_long_text_is_truncated_before_the_call():
+    endpoint = _LengthLimitedEndpoint(limit=10_000)
+    classifier = VertexEndpointClassifier(
+        endpoint_id="ep", project="p", endpoint=endpoint, max_chars=50
+    )
+
+    classifier.classify("x" * 500)
+
+    assert len(endpoint.seen[0][0]) == 50
+
+
+def test_rejected_length_is_retried_shorter():
+    # Budget starts above what this endpoint accepts, so the first call
+    # fails and the client halves until it fits.
+    endpoint = _LengthLimitedEndpoint(limit=100)
+    classifier = VertexEndpointClassifier(
+        endpoint_id="ep", project="p", endpoint=endpoint, max_chars=800
+    )
+
+    result = classifier.classify("y" * 5_000)
+
+    assert result.label == "pos"
+    assert [len(batch[0]) for batch in endpoint.seen] == [800, 400, 200, 100]
+
+
+def test_other_errors_are_not_retried_shorter():
+    class _Broken:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def predict(self, instances, timeout=None):  # noqa: ANN001, ANN201
+            self.calls += 1
+            raise ValueError('400 {"error":"bad instance shape"}')
+
+    endpoint = _Broken()
+    classifier = VertexEndpointClassifier(
+        endpoint_id="ep", project="p", endpoint=endpoint
+    )
+
+    with pytest.raises(ValueError):
+        classifier.classify("hello")
+    assert endpoint.calls == 1
