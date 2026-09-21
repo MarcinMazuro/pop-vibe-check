@@ -84,7 +84,9 @@ def upload_model(args: argparse.Namespace) -> str:
         serving_container_ports=[8080],
         labels={
             "project": "pop-vibe-check",
-            "model": args.display_name,
+            # Vertex labels reject dots; display names like xlmr-sent-v2.1
+            # still keep the versioned name in display_name / description.
+            "model": args.display_name.replace(".", "-"),
             "managed_by": "nlp-endpoint-register",
         },
         description=args.description,

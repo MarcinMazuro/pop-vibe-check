@@ -124,8 +124,15 @@ holdout slice; EN means the EN holdout slice.
 
 | Model | Holdout n | Holdout macro-F1 | Holdout neg F1 | EN holdout macro-F1 | Decision |
 |---|---:|---:|---:|---:|---|
-| v2 |  |  |  |  | baseline |
-| v2.1 |  |  |  |  |  |
+| v2 | 200 | 0.568 | 0.481 | 0.623 | baseline |
+| v2.1 | 200 | 0.600 | 0.485 | 0.677 | selected |
+
+Numbers are holdout on `gold_v3.jsonl` from Workbench eval
+(`nlp/eval/artifacts/report-xlmr-v2-goldv3.json`,
+`nlp/eval/artifacts/report-xlmr-v2.1-goldv3.json`). EN is the EN
+holdout slice (n=55). The in-repo catalog marks `xlmr-sent-v2.1` selected
+(`nlp/catalog.py`). v2 and v2.1 are in Vertex Model Registry
+(`europe-central2`); v2.1 is deployed on `co-nlp-endpoint-dev`.
 
 If any success condition fails, keep v2 as the selected artifact and record
 the result rather than promoting v2.1.

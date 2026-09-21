@@ -1,25 +1,33 @@
 # nlp — sentiment models for the Dataflow pipeline
 
 The Beam pipeline loads a classifier by name (`--nlp_model`) and never
-imports a concrete implementation. Today two names are registered:
+imports a concrete implementation. Today two **serving** names are
+registered in `nlp/registry.py`:
 
 | Name | Class | When to use |
 |---|---|---|
 | `stub` | `nlp.stub.classifier.StubClassifier` | Default. Deterministic, no GCP. First e2e replay. |
 | `vertex` | `nlp.endpoint.classifier.VertexEndpointClassifier` | Fine-tuned checkpoint on a Vertex Endpoint. Needs env + a live replica. |
 
+Trained Hugging Face exports (ids, GCS URIs, gold-holdout metrics) live
+in `nlp/catalog.py`. That catalog does **not** change `--nlp_model`.
+XLM-R v2.1 is the selected artifact after the gold_v3 holdout comparison.
+v2 and v2.1 are in Vertex Model Registry (`europe-central2`); v2.1 is
+deployed on `co-nlp-endpoint-dev`.
+
 Weights are **not** baked into the Flex Template image. Dataflow workers
 reach `aiplatform.googleapis.com` over Private Google Access; they still
 cannot reach PyPI or Hugging Face Hub.
 
-**Current status (2026-09-20).** DistilBERT v1 train complete (best epoch 2,
+**Current status (2026-09-21).** DistilBERT v1 train complete (best epoch 2,
 hybrid acc 0.802, macro-F1 0.786) at
-`gs://co-tf-artifacts-dev/nlp/models/distilbert-sent/`. The XLM-R v2 export
-is evaluated in
-[docs/phase-1-nlp-evaluation-xlmr-v2.md](../docs/phase-1-nlp-evaluation-xlmr-v2.md).
-The v2 recipe is
-[docs/phase-1-nlp-multilingual-v2.md](../docs/phase-1-nlp-multilingual-v2.md);
-the continued v2 → v2.1 recipe is
+`gs://co-tf-artifacts-dev/nlp/models/distilbert-sent/`. XLM-R v2.1
+continued fine-tune finished 2026-09-20 (gold_v3 holdout n=200: acc
+0.630 / macro-F1 0.600 vs v2 0.590 / 0.568) at
+`gs://co-tf-artifacts-dev/nlp/models/xlmr-sent-v2.1/`; v2 is kept at
+`gs://co-tf-artifacts-dev/nlp/models/xlmr-sent/`. Catalog:
+[`nlp/catalog.py`](catalog.py). Eval:
+[docs/phase-1-nlp-evaluation-xlmr-v2.md](../docs/phase-1-nlp-evaluation-xlmr-v2.md),
 [docs/phase-1-nlp-xlmr-v2.1-continued.md](../docs/phase-1-nlp-xlmr-v2.1-continued.md).
 Serve-replay is still pending. DistilBERT ops journal:
 [docs/phase-1-nlp-vertex-dev.md](../docs/phase-1-nlp-vertex-dev.md).
@@ -29,7 +37,8 @@ Serve-replay is still pending. DistilBERT ops journal:
 | Path | Purpose |
 |---|---|
 | `base.py` | `Sentiment` / `SentimentClassifier` contract (`pos`/`neu`/`neg`) |
-| `registry.py` | Name → factory. Add models here; leave the pipeline alone |
+| `registry.py` | Serving name → factory (`stub` / `vertex`). Leave the pipeline alone |
+| `catalog.py` | Trained artifact catalog (GCS URI, gold-holdout metrics, selected) |
 | `stub/` | Rule-based placeholder |
 | `endpoint/` | Vertex predict client + Model Registry upload/deploy/undeploy CLI |
 | `training/` | Hybrid corpus loaders + XLM-RoBERTa `train.py` (Workbench) |
