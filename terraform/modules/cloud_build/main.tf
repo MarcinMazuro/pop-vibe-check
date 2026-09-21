@@ -358,7 +358,9 @@ resource "google_cloudbuild_trigger" "terraform_apply" {
 #
 # The infrastructure values below come from the same Terraform outputs a
 # laptop run of dataflow/launch.sh reads; Cloud Build has no state to read
-# them from, so they are baked into the trigger.
+# them from, so they are baked into the trigger. That includes the Vertex
+# Endpoint, so `--substitutions=_MODEL=vertex` is all a real-model replay
+# needs; the values are empty while no Endpoint exists.
 # ----------------------------------------------------------------------------
 resource "google_cloudbuild_trigger" "replay" {
   count = local.github_enabled ? 1 : 0
@@ -393,6 +395,9 @@ resource "google_cloudbuild_trigger" "replay" {
     _OUTPUT_TABLE            = var.dataflow_events_landing_table
     _DLQ_TOPIC               = var.dataflow_dlq_topic
     _PUBLISHER_JOB           = var.publisher_job_name
+    _VERTEX_ENDPOINT_ID      = var.vertex_endpoint_id
+    _VERTEX_PROJECT          = var.vertex_project
+    _VERTEX_LOCATION         = var.vertex_location
     _DATASET                 = var.bq_dataset_id
     _RAW_STAGING_TABLE_ID    = var.raw_staging_table_id
     _EVENTS_LANDING_TABLE_ID = var.events_landing_table_id

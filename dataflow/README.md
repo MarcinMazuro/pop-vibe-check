@@ -129,6 +129,9 @@ gcloud builds triggers run co-replay-dev --region=europe-central2 \
   --branch=main --substitutions=_MODEL=stub
 ```
 
+`_MODEL=vertex` needs nothing else: the trigger carries the Endpoint id,
+project and region from `terraform output`.
+
 Useful substitutions (all optional): `_MODEL` (`stub` / `vertex`),
 `_TEMPLATE_SHA` (launch a specific commit's template instead of the
 current one), `_RUN_LOAD`, `_EVENT_ID`, `_WINDOW_FROM`, `_WINDOW_TO`,

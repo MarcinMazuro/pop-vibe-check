@@ -143,3 +143,21 @@ variable "events_table_id" {
   description = "Short table id of the analytical events table (MERGE target)."
   type        = string
 }
+
+variable "vertex_endpoint_id" {
+  description = "Fully-qualified Vertex AI Endpoint the pipeline calls with --model vertex. Empty while no Endpoint exists; the replay trigger passes it through as _VERTEX_ENDPOINT_ID."
+  type        = string
+  default     = ""
+}
+
+variable "vertex_project" {
+  description = "GCP project of the Vertex Endpoint."
+  type        = string
+  default     = ""
+}
+
+variable "vertex_location" {
+  description = "Region of the Vertex Endpoint."
+  type        = string
+  default     = "europe-central2"
+}
