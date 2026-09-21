@@ -131,6 +131,11 @@ steps:
   - id: replay
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:585.0.0
     entrypoint: bash
+    # allowFailure so the drain step below always runs. Without it a
+    # failing replay step aborts the build and leaves a streaming job
+    # running; the report step at the end turns a failed replay back into
+    # a failed build.
+    allowFailure: true
     args:
       - -c
       - |
@@ -138,6 +143,7 @@ steps:
         run() {
           set -e
           job_id=$$(cat /workspace/job_id)
+          run_start=$$(cat /workspace/run_start)
 
           echo "Waiting for the job to start."
           started=false
@@ -176,15 +182,12 @@ steps:
           # good enough: a pipeline that stalls (a slow or erroring model
           # endpoint, say) looks exactly like a finished one, and draining
           # then abandons the rest of the backlog — a drain stops pulling
-          # from Pub/Sub, so whatever is left is silently not replayed.
-          # So wait until every staged id has landed in this run.
-          run_start=$$(cat /workspace/run_start)
+          # from Pub/Sub. So wait until every staged id has landed.
           staged_sql="SELECT COUNT(DISTINCT id) AS n FROM \`${PROJECT_ID}.${_DATASET}.${_RAW_STAGING_TABLE_ID}\`"
-          if [ -n "${_WINDOW_FROM}" ]; then
+          if [ -n "${_WINDOW_FROM}" ] && [ -n "${_WINDOW_TO}" ]; then
+            staged_sql="$$staged_sql WHERE created_utc >= TIMESTAMP('${_WINDOW_FROM}') AND created_utc < TIMESTAMP('${_WINDOW_TO}')"
+          elif [ -n "${_WINDOW_FROM}" ]; then
             staged_sql="$$staged_sql WHERE created_utc >= TIMESTAMP('${_WINDOW_FROM}')"
-            if [ -n "${_WINDOW_TO}" ]; then
-              staged_sql="$$staged_sql AND created_utc < TIMESTAMP('${_WINDOW_TO}')"
-            fi
           elif [ -n "${_WINDOW_TO}" ]; then
             staged_sql="$$staged_sql WHERE created_utc < TIMESTAMP('${_WINDOW_TO}')"
           fi
@@ -229,16 +232,9 @@ steps:
 
           if [ "$$complete" != true ]; then
             echo "Replay did not complete within ${_WAIT_TIMEOUT_MINUTES} minutes." >&2
-            echo "Draining now would abandon the rest of the backlog; not promoting." >&2
+            echo "Draining now abandons the rest of the backlog; not promoting." >&2
             return 1
-          fi && break
-            else
-              stable=0
-            fi
-            prev=$$n
-            sleep 60
-          done
-          [ "$$stable" -ge 3 ]
+          fi
         }
 
         if run; then

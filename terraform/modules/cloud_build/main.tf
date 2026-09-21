@@ -217,7 +217,10 @@ resource "google_cloudbuild_trigger" "python_checks_pr" {
     "pyproject.toml",
     "requirements-dev.txt",
     "collectors/config/**",
-    "cloudbuild.checks.yaml",
+    # The build configs too: their embedded shell is unit-tested
+    # (dataflow/tests/test_build_configs.py), and a syntax error in one
+    # is otherwise only found by a build that has already started a job.
+    "**/cloudbuild*.yaml",
   ]
 
   repository_event_config {
