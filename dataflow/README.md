@@ -144,6 +144,16 @@ Two properties make this better than running the steps by hand:
 - **The promotion cannot run too early.** It runs after the job is
   drained, never merely after the publisher exits — the failure this
   ordering exists to prevent (`promote.sh`'s header explains it).
+- **The drain cannot run too early either.** The build waits until every
+  staged id has landed *in this run* before draining. A drain stops
+  pulling from Pub/Sub, so draining a pipeline that is still behind
+  abandons the rest of the backlog: the run looks successful, and the
+  records it never processed keep whatever labels an earlier replay gave
+  them. If the records do not all arrive within
+  `_WAIT_TIMEOUT_MINUTES`, the build drains and fails **without
+  promoting**. (An `_EVENT_ID` replay cannot compute its expected count
+  — the window comes from `events.yaml` — so it falls back to waiting for
+  the landed count to stop rising, and says so in the log.)
 - **The drain step always runs**, even when the replay fails, so a failed
   run does not leave a streaming job billing. The gap it cannot close is
   the build itself timing out or being cancelled; the "Dataflow job
