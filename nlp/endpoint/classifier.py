@@ -59,7 +59,7 @@ class PredictEndpoint(Protocol):
         """Run prediction.
 
         Args:
-            instances: Vertex instances, one ``{"text": ...}`` per row.
+            instances: Vertex instances, one ``{"inputs": ...}`` per row.
             timeout: Per-call timeout in seconds.
 
         Returns:
@@ -293,7 +293,9 @@ class VertexEndpointClassifier:
         """
         if not texts:
             return []
-        instances = [{"text": normalize_text(text)} for text in texts]
+        # Hugging Face DLC TextClassificationPipeline expects `inputs`,
+        # not `text` (that raises missing positional argument `inputs`).
+        instances = [{"inputs": normalize_text(text)} for text in texts]
         response = self._predict(instances)
         predictions = list(getattr(response, "predictions", None) or [])
         if len(predictions) != len(texts):
