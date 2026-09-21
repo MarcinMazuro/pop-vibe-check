@@ -206,8 +206,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     upload.add_argument(
         "--description",
         default=(
-            "XLM-RoBERTa 3-class multilingual sentiment "
-            "(neg/neu/pos), MAX_LEN=128."
+            "XLM-RoBERTa 3-class multilingual sentiment " "(neg/neu/pos), MAX_LEN=128."
         ),
     )
 
