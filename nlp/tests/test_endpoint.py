@@ -68,6 +68,16 @@ class TestVertexEndpointClassifier:
         with pytest.raises(RuntimeError, match="VERTEX_ENDPOINT_ID"):
             VertexEndpointClassifier()
 
+    def test_normalizes_text_before_predict(self):
+        fake = FakeEndpoint([{"label": "neg", "score": 0.6}])
+        clf = VertexEndpointClassifier(
+            endpoint_id="ep",
+            project="p",
+            endpoint=fake,
+        )
+        clf.classify("hey @Alice see https://x.com/y")
+        assert fake.calls[0][0] == [{"inputs": "hey @user see http"}]
+
     def test_reads_env(self, monkeypatch):
         monkeypatch.setenv("VERTEX_ENDPOINT_ID", "ep-from-env")
         monkeypatch.setenv("VERTEX_PROJECT", "proj-from-env")
@@ -75,7 +85,7 @@ class TestVertexEndpointClassifier:
         clf = VertexEndpointClassifier(endpoint=fake)
         result = clf.classify("terrible")
         assert result == Sentiment("neg", 0.6, "vertex/distilbert@3")
-        assert fake.calls[0][0] == [{"text": "terrible"}]
+        assert fake.calls[0][0] == [{"inputs": "terrible"}]
 
     def test_batch_order_and_count_mismatch(self):
         clf = VertexEndpointClassifier(

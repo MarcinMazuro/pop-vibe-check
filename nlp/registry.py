@@ -1,8 +1,10 @@
 """Resolve a sentiment classifier by name.
 
 The pipeline names the model it wants (``--nlp_model``) and this module
-hands back an instance. Adding a real model means registering it here; the
-pipeline is untouched.
+hands back an instance. Adding a serving client means registering it
+here; the pipeline is untouched. Trained Hugging Face exports (XLM-R v2 /
+v2.1, DistilBERT v1) live in :mod:`nlp.catalog` — they are not Dataflow
+factory names. v2.1 is deployed on Vertex Endpoint ``co-nlp-endpoint-dev``.
 
 Dataflow workers launch without public IPs. They reach Google APIs
 (``aiplatform.googleapis.com``, Pub/Sub, BigQuery, GCS) over Private

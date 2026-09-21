@@ -175,8 +175,9 @@ scratch/
 playground/
 *.scratch.*
 
-# Fine-tuned DistilBERT weights (downloaded via gsutil for local eval)
+# Fine-tuned weights (downloaded via gsutil for local eval)
 nlp/eval/artifacts/distilbert-sent/
+nlp/eval/artifacts/xlmr-sent/
 .models/
 
 # Cloud Build local outputs

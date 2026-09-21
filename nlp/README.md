@@ -1,22 +1,35 @@
 # nlp — sentiment models for the Dataflow pipeline
 
 The Beam pipeline loads a classifier by name (`--nlp_model`) and never
-imports a concrete implementation. Today two names are registered:
+imports a concrete implementation. Today two **serving** names are
+registered in `nlp/registry.py`:
 
 | Name | Class | When to use |
 |---|---|---|
 | `stub` | `nlp.stub.classifier.StubClassifier` | Default. Deterministic, no GCP. First e2e replay. |
-| `vertex` | `nlp.endpoint.classifier.VertexEndpointClassifier` | DistilBERT on a Vertex Endpoint. Needs env + a live replica. |
+| `vertex` | `nlp.endpoint.classifier.VertexEndpointClassifier` | Fine-tuned checkpoint on a Vertex Endpoint. Needs env + a live replica. |
+
+Trained Hugging Face exports (ids, GCS URIs, gold-holdout metrics) live
+in `nlp/catalog.py`. That catalog does **not** change `--nlp_model`.
+XLM-R v2.1 is the selected artifact after the gold_v3 holdout comparison.
+v2 and v2.1 are in Vertex Model Registry (`europe-central2`); v2.1 is
+deployed on `co-nlp-endpoint-dev`.
 
 Weights are **not** baked into the Flex Template image. Dataflow workers
 reach `aiplatform.googleapis.com` over Private Google Access; they still
 cannot reach PyPI or Hugging Face Hub.
 
-**Current status (2026-09-12).** DistilBERT train complete (best epoch 2,
-acc 0.802, macro-F1 0.786). Weights at
-`gs://co-tf-artifacts-dev/nlp/models/distilbert-sent/`. Workbench
-`co-nlp-workbench-dev` is **STOPPED**. Serve-replay (CPU Endpoint +
-`--model vertex`) is still pending. Details:
+**Current status (2026-09-21).** DistilBERT v1 train complete (best epoch 2,
+hybrid acc 0.802, macro-F1 0.786) at
+`gs://co-tf-artifacts-dev/nlp/models/distilbert-sent/`. XLM-R v2.1
+continued fine-tune finished 2026-09-20 (gold_v3 holdout n=200: acc
+0.630 / macro-F1 0.600 vs v2 0.590 / 0.568) at
+`gs://co-tf-artifacts-dev/nlp/models/xlmr-sent-v2.1/`; v2 is kept at
+`gs://co-tf-artifacts-dev/nlp/models/xlmr-sent/`. Catalog:
+[`nlp/catalog.py`](catalog.py). Eval:
+[docs/phase-1-nlp-evaluation-xlmr-v2.md](../docs/phase-1-nlp-evaluation-xlmr-v2.md),
+[docs/phase-1-nlp-xlmr-v2.1-continued.md](../docs/phase-1-nlp-xlmr-v2.1-continued.md).
+Serve-replay is still pending. DistilBERT ops journal:
 [docs/phase-1-nlp-vertex-dev.md](../docs/phase-1-nlp-vertex-dev.md).
 
 ## Layout
@@ -24,10 +37,11 @@ acc 0.802, macro-F1 0.786). Weights at
 | Path | Purpose |
 |---|---|
 | `base.py` | `Sentiment` / `SentimentClassifier` contract (`pos`/`neu`/`neg`) |
-| `registry.py` | Name → factory. Add models here; leave the pipeline alone |
+| `registry.py` | Serving name → factory (`stub` / `vertex`). Leave the pipeline alone |
+| `catalog.py` | Trained artifact catalog (GCS URI, gold-holdout metrics, selected) |
 | `stub/` | Rule-based placeholder |
 | `endpoint/` | Vertex predict client + Model Registry upload/deploy/undeploy CLI |
-| `training/` | Hybrid corpus loaders + DistilBERT `train.py` (Workbench) |
+| `training/` | Hybrid corpus loaders + XLM-RoBERTa `train.py` (Workbench) |
 | `tracking/` | MLflow → GCS (`mlruns/`). Not the Dataflow factory |
 | `eval/` | Gold sample, guidelines, metrics, time-window SQL, external CSVs |
 | `notebooks/` | Workbench walkthrough |
@@ -35,14 +49,16 @@ acc 0.802, macro-F1 0.786). Weights at
 ## Training on Vertex AI Workbench (CPU by default)
 
 Infra is gated **off**. A routine `terraform apply` does not create the
-VM. Default machine is `e2-standard-4` (CPU-only). For a training
-session, from `terraform/envs/dev`:
+VM. Default machine is `e2-standard-4` (CPU-only). For the XLM-R v2
+training session use **`n2-standard-16`** (or `n2-standard-8` if 16 is
+unavailable), from `terraform/envs/dev`:
 
 ```bash
 terraform apply \
   -var="enable_nlp_workbench=true" \
   -var='nlp_workbench_owners=["you@example.com"]' \
-  -var="nlp_workbench_desired_state=ACTIVE"
+  -var="nlp_workbench_desired_state=ACTIVE" \
+  -var="nlp_workbench_machine_type=n2-standard-16"
 ```
 
 Zone is `europe-central2-b`. The instance runs as `co-ml-trainer-sa-dev`,
@@ -61,21 +77,25 @@ gsutil -m rsync -r gs://co-tf-artifacts-dev/nlp/models/hf-cache/ /home/jupyter/h
 
 export HF_HUB_CACHE=/home/jupyter/hf-cache
 export HF_HOME=/home/jupyter/hf-home
-export TRANSFORMERS_OFFLINE=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1
+# First v2 session: leave Hub online (clapAI + xlm-roberta-base are not in the
+# DistilBERT v1 cache). After rsyncing new caches to GCS:
+# export TRANSFORMERS_OFFLINE=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1
 
 python -m nlp.training.train \
   --cache-dir /home/jupyter/hf-datasets \
   --model-cache-dir /home/jupyter/hf-cache \
-  --output-dir /home/jupyter/models/distilbert-sent \
+  --output-dir /home/jupyter/models/xlmr-sent \
   --batch-size 8 \
-  --own-domain /home/jupyter/gold/own_domain.jsonl   # optional
+  --own-domain /home/jupyter/gold/gold.jsonl
 ```
 
-`TrainingArguments(fp16=…)` is CUDA-only; `train.py` turns fp16 off on CPU.
-Drop `--batch-size` to 8 (or lower) if the VM OOMs; bump the machine type
-to `e2-standard-8` if you need more RAM.
+First session will hit the Hub (clapAI + XLM-R + CardiffNLP). After that,
+rsync caches back to GCS and set the `*_OFFLINE=1` flags. `train.py` turns
+fp16 off on CPU. Drop `--batch-size` to 4 if the VM OOMs.
 
-Or open `nlp/notebooks/finetune_distilbert.ipynb`.
+Holdout rows (`split=holdout`) in the gold JSONL are skipped automatically.
+
+Or open `nlp/notebooks/finetune_distilbert.ipynb` (updated for XLM-R).
 
 **Stop the instance when the run finishes.** Idle shutdown is off by
 default and will not stop this run:
@@ -87,18 +107,52 @@ gcloud workbench instances stop co-nlp-workbench-dev \
 # or: terraform apply   # gates default false → destroys the instance
 ```
 
-### Hybrid corpus
+### Stage 2 continued fine-tune (v2 → v2.1)
 
-- **SST-2** (`glue`/`sst2`, ~67k) — movie reviews, `pos`/`neg` only.
-- **Twitter ~100k** — `tweet_eval` sentiment (3-class) plus a seeded
-  Sentiment140 sample to fill the rest.
-- **Own domain** — labelled YouTube gold (`nlp/eval/GUIDELINES.md`). The
-  Reddit collector has no credentials; GoEmotions (public Reddit
-  comments) is the open-access substitute. Loaded unless
-  `--skip-goemotions`.
+Use the reviewed `gold_v3.jsonl` and start from the existing v2 export. The
+full local prelabel, human review, evaluation, and consent gates are in
+[docs/phase-1-nlp-xlmr-v2.1-continued.md](../docs/phase-1-nlp-xlmr-v2.1-continued.md).
+The Workbench training command is:
 
-Model: `distilbert-base-uncased`, 3-class head, `MAX_LEN=128`.
-English-only base; non-EN rows are measured in eval, not promised.
+```bash
+python -m nlp.training.train \
+  --init-from /home/jupyter/models/xlmr-sent \
+  --cache-dir /home/jupyter/hf-datasets \
+  --model-cache-dir /home/jupyter/hf-cache \
+  --own-domain /home/jupyter/gold/gold_v3.jsonl \
+  --dev-from-gold /home/jupyter/gold/gold_v3.jsonl \
+  --replay-n 5000 \
+  --lr 1e-5 \
+  --epochs 3 \
+  --batch-size 8 \
+  --own-domain-factor 2 \
+  --warmup-ratio 0.1 \
+  --weight-decay 0.01 \
+  --early-stopping-patience 2 \
+  --output-dir /home/jupyter/models/xlmr-sent-v2.1
+```
+
+This stage does not start from `xlm-roberta-base`, does not overwrite the v2
+artifact, and does not deploy an Endpoint. Workbench access and the later GCS
+upload each require owner GCP consent.
+
+### Hybrid corpus (v2 default)
+
+See [docs/phase-1-nlp-multilingual-v2.md](../docs/phase-1-nlp-multilingual-v2.md)
+for the table. Short version:
+
+- **clapAI MultiLingualSentiment** — stratified subsample, Steam langs
+  en/zh/ru/fr/ko plus de/es/ja.
+- **tweet_eval** — English 3-class, downsampled to 25k.
+- **CardiffNLP tweet_sentiment_multilingual** — 8 languages, all configs.
+- **GoEmotions** — Reddit substitute, downsampled to 15k.
+- **Own domain** — YouTube gold train rows, oversampled ×10. Holdout never
+  enters training.
+
+SST-2 and Sentiment140 are **off** (`--include-sst2` /
+`--include-sentiment140` restore the v1 leftovers).
+
+Model: `xlm-roberta-base`, 3-class head, `MAX_LEN=128`.
 
 ### MLflow
 
@@ -114,13 +168,13 @@ It does not upload versions or deploy replicas — those would put a
 billing replica into `terraform apply`.
 
 ```bash
-gsutil -m cp -r /home/jupyter/models/distilbert-sent \
-  gs://co-tf-artifacts-dev/nlp/models/distilbert-sent/
+gsutil -m cp -r /home/jupyter/models/xlmr-sent \
+  gs://co-tf-artifacts-dev/nlp/models/xlmr-sent/
 
 python -m nlp.endpoint.register upload \
   --project pop-vibe-check \
-  --model-dir gs://co-tf-artifacts-dev/nlp/models/distilbert-sent \
-  --display-name distilbert-sent
+  --model-dir gs://co-tf-artifacts-dev/nlp/models/xlmr-sent \
+  --display-name xlmr-sent
 
 terraform apply -var="enable_nlp_endpoint=true"
 
@@ -164,7 +218,13 @@ invent `neu`.
 
 ## Evaluation
 
-See [docs/phase-1-nlp-evaluation-distilbert-v1.md](../docs/phase-1-nlp-evaluation-distilbert-v1.md).
+See [docs/phase-1-nlp-evaluation-xlmr-v2.md](../docs/phase-1-nlp-evaluation-xlmr-v2.md)
+(v2 results), [docs/phase-1-nlp-multilingual-v2.md](../docs/phase-1-nlp-multilingual-v2.md)
+(v2 recipe), and
+[docs/phase-1-nlp-xlmr-v2.1-continued.md](../docs/phase-1-nlp-xlmr-v2.1-continued.md)
+(continued v2.1 recipe).
+[docs/phase-1-nlp-evaluation-distilbert-v1.md](../docs/phase-1-nlp-evaluation-distilbert-v1.md)
+(v1 gold numbers).
 
 ```bash
 python -m nlp.eval.sample_gold --input raw.jsonl --output gold.jsonl --n 300

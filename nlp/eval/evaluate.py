@@ -260,13 +260,32 @@ def evaluate_files(
         "confusion": confusion_matrix(gold, predicted),
     }
     if aligned and "language" in aligned[0]:
-        report["by_language"] = metrics_by_group(
-            gold, predicted, [row.get("language", "") for row in aligned]
-        )
+        languages = [row.get("language", "") for row in aligned]
+        report["by_language"] = metrics_by_group(gold, predicted, languages)
+        en_groups = ["en" if lang.lower() == "en" else "non-en" for lang in languages]
+        report["by_en"] = {}
+        for name, metrics in metrics_by_group(gold, predicted, en_groups).items():
+            n_group = sum(group == name for group in en_groups)
+            report["by_en"][name] = {"n": n_group, "metrics": metrics}
     if aligned and "source" in aligned[0]:
         report["by_source"] = metrics_by_group(
             gold, predicted, [row.get("source", "") for row in aligned]
         )
+    if aligned and "split" in aligned[0]:
+        splits = [row.get("split", "") for row in aligned]
+        report["by_split"] = {}
+        buckets: dict[str, tuple[list[str], list[str]]] = defaultdict(
+            lambda: ([], [])
+        )
+        for y_true, y_pred, split in zip(gold, predicted, splits, strict=True):
+            buckets[split][0].append(y_true)
+            buckets[split][1].append(y_pred)
+        for name, (split_gold, split_pred) in sorted(buckets.items()):
+            report["by_split"][name] = {
+                "n": len(split_gold),
+                "metrics": classification_metrics(split_gold, split_pred),
+                "confusion": confusion_matrix(split_gold, split_pred),
+            }
     return report
 
 

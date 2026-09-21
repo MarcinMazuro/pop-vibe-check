@@ -1,6 +1,6 @@
 # Gold-set annotation guidelines
 
-Hand-label ~300 comments/reviews for DistilBERT evaluation. Labels must
+Hand-label ~300 comments/reviews for sentiment evaluation. Labels must
 match the pipeline's three classes: `pos`, `neu`, `neg`.
 
 ## What you are labelling
@@ -28,9 +28,10 @@ are tie-breakers only.
    is `neg`.
 3. **Questions.** "When does it come out?" is `neu`. "Why is this so
    broken?" is `neg`.
-4. **Non-English.** Still label. DistilBERT-base-uncased is English; the
-   eval report slices by `language` so FR/ZH/RU/KO rows measure the
-   documented limit, they are not a quality promise.
+4. **Non-English.** Still label. DistilBERT v1 was English-only (a measured
+   limit). XLM-RoBERTa v2 is multilingual; FR/ZH/RU/KO slices in the eval
+   report are quality targets, not an excuse to skip. Polish is still
+   weakly represented in the public mix.
 5. **Empty / emoji-only.** `neu`, unless the emoji is unambiguously
    polarised (🔥❤️ vs 💩).
 6. **Spoilers, memes, @replies.** If they express a stance on the game,

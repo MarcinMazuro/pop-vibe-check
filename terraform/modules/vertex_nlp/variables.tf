@@ -76,7 +76,7 @@ variable "workbench_zone" {
 }
 
 variable "workbench_machine_type" {
-  description = "GCE machine type for Workbench. Default e2-standard-4 (CPU). Use e2-standard-8 if DistilBERT OOMs."
+  description = "GCE machine type for Workbench. Default e2-standard-4 (CPU). Use n2-standard-16 for XLM-R v2."
   type        = string
   default     = "e2-standard-4"
 }

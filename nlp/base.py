@@ -23,14 +23,21 @@ Two rules any implementation must honour:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
+
+# Social-media noise shared by train / eval / serve. Handles are Twitter-
+# style ``@name`` tokens, not the local-part of an email (lookbehind).
+_HANDLE_RE = re.compile(r"(?<![A-Za-z0-9_])@[A-Za-z0-9_]+")
+_URL_RE = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
+_WHITESPACE_RE = re.compile(r"\s+")
 
 # The three sentiment classes written to the events table. Any
 # implementation maps its own label space onto exactly these.
 LABELS: tuple[str, str, str] = ("pos", "neu", "neg")
 
-# DistilBERT head ids used at train and serve time. Order matches
+# Classification-head ids used at train and serve time. Order matches
 # tweet_eval sentiment (0=neg, 1=neu, 2=pos) so a checkpoint served
 # without our id2label still maps LABEL_0/1/2 in a documented way.
 LABEL2ID: dict[str, int] = {"neg": 0, "neu": 1, "pos": 2}
@@ -48,6 +55,28 @@ _HF_LABEL_TO_SENTIMENT: dict[str, str] = {
     "neu": "neu",
     "pos": "pos",
 }
+
+
+def normalize_text(text: str) -> str:
+    """Collapse noisy social-media tokens to a stable training form.
+
+    Replaces ``@handle`` mentions with ``@user``, URLs with ``http``,
+    non-breaking spaces (U+00A0) and repeated whitespace with a
+    single space, then strips ends. Training loaders, gold eval, and the
+    serving client all call this so the three paths see the same
+    distribution.
+
+    Args:
+        text: Raw comment or review body. May be empty.
+
+    Returns:
+        The normalised string. Whitespace-only input becomes ``""``.
+    """
+    collapsed = text.replace("\xa0", " ")
+    collapsed = _URL_RE.sub("http", collapsed)
+    collapsed = _HANDLE_RE.sub("@user", collapsed)
+    collapsed = _WHITESPACE_RE.sub(" ", collapsed)
+    return collapsed.strip()
 
 
 def normalize_predicted_label(raw: str) -> str:
@@ -109,8 +138,8 @@ class SentimentClassifier(Protocol):
     in ``__init__`` and must not require the public internet — Dataflow
     workers have no public IPs and cannot reach PyPI or Hugging Face Hub.
     Calling a Google API (Vertex ``Endpoint.predict`` over Private Google
-    Access) is allowed; baking a DistilBERT checkpoint into the Flex
-    Template image is not how this project serves the model.
+    Access) is allowed; baking a checkpoint into the Flex Template image
+    is not how this project serves the model.
     """
 
     @property

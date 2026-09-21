@@ -1,6 +1,8 @@
 import json
 
 from nlp.eval.evaluate import classification_metrics, confusion_matrix, evaluate_files
+from nlp.eval.predict import label_and_score, texts_for_tokenize
+from nlp.eval.predict import parse_args as parse_predict_args
 from nlp.eval.sample_gold import sample_records, write_jsonl
 
 
@@ -56,6 +58,44 @@ class TestMetrics:
         assert "en" in report["by_language"]
         assert "youtube" in report["by_source"]
 
+    def test_evaluate_files_split_and_en(self, tmp_path):
+        gold = tmp_path / "gold.jsonl"
+        pred = tmp_path / "pred.jsonl"
+        gold.write_text(
+            json.dumps(
+                {
+                    "id": "1",
+                    "label": "pos",
+                    "language": "en",
+                    "split": "holdout",
+                }
+            )
+            + "\n"
+            + json.dumps(
+                {
+                    "id": "2",
+                    "label": "neg",
+                    "language": "fr",
+                    "split": "train",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        pred.write_text(
+            json.dumps({"id": "1", "label": "pos"})
+            + "\n"
+            + json.dumps({"id": "2", "label": "pos"})
+            + "\n",
+            encoding="utf-8",
+        )
+        report = evaluate_files(gold, pred)
+        assert report["by_split"]["holdout"]["n"] == 1
+        assert report["by_split"]["holdout"]["metrics"]["accuracy"] == 1.0
+        assert report["by_split"]["train"]["metrics"]["accuracy"] == 0.0
+        assert report["by_en"]["en"]["n"] == 1
+        assert report["by_en"]["non-en"]["metrics"]["accuracy"] == 0.0
+
 
 class TestSampleGold:
     def test_stratified_cap(self, tmp_path):
@@ -85,3 +125,30 @@ class TestSampleGold:
         out = tmp_path / "gold.jsonl"
         write_jsonl(out, sampled)
         assert out.read_text(encoding="utf-8").count("\n") == 20
+
+
+class TestPredict:
+    def test_label_and_score_argmax(self):
+        label, score = label_and_score([0.1, 0.0, 5.0])
+        assert label == "pos"
+        assert score > 0.9
+
+    def test_parse_args(self, tmp_path):
+        args = parse_predict_args(
+            [
+                "--model-dir",
+                str(tmp_path / "xlmr-sent"),
+                "--gold",
+                str(tmp_path / "gold.jsonl"),
+                "--output",
+                str(tmp_path / "pred.jsonl"),
+            ]
+        )
+        assert args.max_len == 128
+        assert args.batch_size == 8
+
+    def test_texts_for_tokenize_normalises(self):
+        texts = texts_for_tokenize(
+            [{"text": "hey @x  see https://a.b"}, {"text": None}]
+        )
+        assert texts == ["hey @user see http", ""]

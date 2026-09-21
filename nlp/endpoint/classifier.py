@@ -30,7 +30,13 @@ from tenacity import (
     wait_exponential,
 )
 
-from nlp.base import ID2LABEL, LABELS, Sentiment, normalize_predicted_label
+from nlp.base import (
+    ID2LABEL,
+    LABELS,
+    Sentiment,
+    normalize_predicted_label,
+    normalize_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +59,7 @@ class PredictEndpoint(Protocol):
         """Run prediction.
 
         Args:
-            instances: Vertex instances, one ``{"text": ...}`` per row.
+            instances: Vertex instances, one ``{"inputs": ...}`` per row.
             timeout: Per-call timeout in seconds.
 
         Returns:
@@ -75,7 +81,7 @@ def _is_retryable(exc: BaseException) -> bool:
     try:
         from google.api_core import exceptions as gcp_exceptions
     except ImportError:
-        gcp_exceptions = None  # type: ignore[assignment]
+        gcp_exceptions = None
 
     if gcp_exceptions is not None and isinstance(  # noqa: UP038
         exc,
@@ -287,7 +293,9 @@ class VertexEndpointClassifier:
         """
         if not texts:
             return []
-        instances = [{"text": text} for text in texts]
+        # Hugging Face DLC TextClassificationPipeline expects `inputs`,
+        # not `text` (that raises missing positional argument `inputs`).
+        instances = [{"inputs": normalize_text(text)} for text in texts]
         response = self._predict(instances)
         predictions = list(getattr(response, "predictions", None) or [])
         if len(predictions) != len(texts):

@@ -1,9 +1,8 @@
-"""Label maps for the hybrid DistilBERT fine-tune.
+"""Label maps for the hybrid XLM-RoBERTa fine-tune.
 
 Every source dataset is reduced to the three classes written to
 ``events``: ``pos``, ``neu``, ``neg``. SST-2 is binary — it contributes
-no ``neu`` rows. Twitter sources and the own-domain notes supply the
-neutral class.
+no ``neu`` rows and is off by default in the v2 mix.
 
 The integer ids stored with the Hugging Face model are::
 
@@ -16,11 +15,13 @@ container returns the same strings the pipeline expects.
 
 from __future__ import annotations
 
+from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass
 
-from nlp.base import LABELS
+from nlp.base import LABEL2ID, LABELS
 
-MODEL_NAME = "distilbert-base-uncased"
+MODEL_NAME = "xlm-roberta-base"
 MAX_LEN = 128
 
 # GoEmotions (Reddit comments, open access) → three-class sentiment.
@@ -59,6 +60,15 @@ _GOEMOTIONS_NEG: frozenset[str] = frozenset(
     }
 )
 
+_CLAPAI_LABELS: dict[str, str] = {
+    "negative": "neg",
+    "neutral": "neu",
+    "positive": "pos",
+    "neg": "neg",
+    "neu": "neu",
+    "pos": "pos",
+}
+
 
 @dataclass(frozen=True)
 class LabeledText:
@@ -67,8 +77,8 @@ class LabeledText:
     Attributes:
         text: Raw comment or sentence.
         label: One of ``pos``, ``neu``, ``neg``.
-        source: Short dataset id (``sst2``, ``tweet_eval``,
-            ``sentiment140``, ``goemotions``, ``own_domain``).
+        source: Short dataset id (``clapai``, ``tweet_eval``,
+            ``tweet_sentiment_ml``, ``goemotions``, ``own_domain``, …).
     """
 
     text: str
@@ -148,6 +158,27 @@ def map_sentiment140_label(idx: int) -> str:
         raise ValueError(f"Sentiment140 label must be 0, 2 or 4, got {idx}.") from None
 
 
+def map_clapai_label(raw: str) -> str:
+    """Map a clapAI MultiLingualSentiment string onto the pipeline labels.
+
+    Args:
+        raw: ``positive``, ``neutral``, or ``negative`` (any case).
+
+    Returns:
+        ``pos``, ``neu``, or ``neg``.
+
+    Raises:
+        ValueError: If ``raw`` is not a clapAI sentiment string.
+    """
+    key = raw.strip().lower()
+    try:
+        return _CLAPAI_LABELS[key]
+    except KeyError:
+        raise ValueError(
+            f"clapAI label must be positive/neutral/negative, got {raw!r}."
+        ) from None
+
+
 def map_goemotions_labels(emotions: list[str]) -> str:
     """Collapse GoEmotions multi-label emotions to one sentiment class.
 
@@ -171,3 +202,28 @@ def map_goemotions_labels(emotions: list[str]) -> str:
     if has_neg and has_pos:
         return "neg"
     return "neu"
+
+
+def inverse_frequency_weights(labels: Sequence[str]) -> list[float]:
+    """Return class weights ordered by :data:`nlp.base.LABEL2ID` index.
+
+    Weight for class ``c`` is ``n / (n_classes * count_c)``. Empty
+    classes keep weight ``1.0`` so CrossEntropyLoss stays defined.
+
+    Args:
+        labels: Pipeline label strings on the training mix.
+
+    Returns:
+        Three floats: neg, neu, pos.
+    """
+    counts = Counter(labels)
+    n = len(labels)
+    n_classes = len(LABEL2ID)
+    weights = [1.0] * n_classes
+    if n == 0:
+        return weights
+    for name, idx in LABEL2ID.items():
+        count = counts.get(name, 0)
+        if count:
+            weights[idx] = n / (n_classes * count)
+    return weights

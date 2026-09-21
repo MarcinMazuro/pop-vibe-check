@@ -1,4 +1,4 @@
-r"""Upload, deploy, and undeploy DistilBERT on Vertex AI.
+r"""Upload, deploy, and undeploy the sentiment checkpoint on Vertex AI.
 
 Terraform owns the (gated) Endpoint resource. This script owns model
 *versions* — they are training artifacts, not Terraform state. Running
@@ -7,8 +7,8 @@ any subcommand talks to GCP; do not invoke it from CI.
 Usage (from the repo root, after Workbench training)::
 
     python -m nlp.endpoint.register upload \\
-        --model-dir gs://co-tf-artifacts-dev/nlp/models/distilbert-sent \\
-        --display-name distilbert-sent
+        --model-dir gs://co-tf-artifacts-dev/nlp/models/xlmr-sent \\
+        --display-name xlmr-sent
 
     python -m nlp.endpoint.register deploy \\
         --model MODEL_RESOURCE_NAME \\
@@ -84,7 +84,9 @@ def upload_model(args: argparse.Namespace) -> str:
         serving_container_ports=[8080],
         labels={
             "project": "pop-vibe-check",
-            "model": "distilbert-sent",
+            # Vertex labels reject dots; display names like xlmr-sent-v2.1
+            # still keep the versioned name in display_name / description.
+            "model": args.display_name.replace(".", "-"),
             "managed_by": "nlp-endpoint-register",
         },
         description=args.description,
@@ -113,7 +115,7 @@ def deploy_model(args: argparse.Namespace) -> None:
     model = aiplatform.Model(args.model)
     kwargs: dict[str, object] = {
         "model": model,
-        "deployed_model_display_name": args.deployed_name or "distilbert-sent",
+        "deployed_model_display_name": args.deployed_name or "xlmr-sent",
         "machine_type": args.machine_type,
         "min_replica_count": args.min_replicas,
         "max_replica_count": args.max_replicas,
@@ -198,12 +200,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=_DEFAULT_STAGING,
         help="GCS URI Vertex copies artifacts from when --model-dir is local.",
     )
-    upload.add_argument("--display-name", default="distilbert-sent")
+    upload.add_argument("--display-name", default="xlmr-sent")
     upload.add_argument("--container", default=_DEFAULT_CONTAINER)
     upload.add_argument("--version-alias", default="production")
     upload.add_argument(
         "--description",
-        default="DistilBERT 3-class sentiment (neg/neu/pos), MAX_LEN=128.",
+        default=(
+            "XLM-RoBERTa 3-class multilingual sentiment "
+            "(neg/neu/pos), MAX_LEN=128."
+        ),
     )
 
     deploy = sub.add_parser("deploy", help="Deploy a registry model onto the Endpoint.")
@@ -214,7 +219,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=os.environ.get("VERTEX_ENDPOINT_ID"),
         help="Endpoint id or resource name (VERTEX_ENDPOINT_ID).",
     )
-    deploy.add_argument("--deployed-name", default="distilbert-sent")
+    deploy.add_argument("--deployed-name", default="xlmr-sent")
     deploy.add_argument(
         "--machine-type",
         default="n1-standard-8",

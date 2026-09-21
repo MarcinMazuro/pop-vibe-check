@@ -73,7 +73,7 @@ Do **not** `terraform apply` with these gates on as part of a routine infra chan
 | `subnet_id` | string | yes | — | Subnet id for Workbench (PGA, no public IP) |
 | `enable_workbench` | bool | no | `false` | Create the Workbench instance |
 | `workbench_zone` | string | no | `europe-central2-b` | Must be `-b` or `-c` |
-| `workbench_machine_type` | string | no | `e2-standard-4` | GCE machine type (CPU). `e2-standard-8` if RAM is tight |
+| `workbench_machine_type` | string | no | `e2-standard-4` | GCE machine type (CPU). `n2-standard-16` for XLM-R v2 |
 | `workbench_accelerator_type` | string | no | `""` | Leave empty (CPU-only). Unused when count is 0 |
 | `workbench_accelerator_count` | number | no | `0` | Keep `0` — omits `accelerator_configs` (CPU-only) |
 | `workbench_idle_timeout_seconds` | number | no | `0` | Idle shutdown; `0` omits the key (disabled). Enabled: 600–86400 |
