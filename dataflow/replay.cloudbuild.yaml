@@ -170,19 +170,68 @@ steps:
           fi
 
           # The publisher exiting means "everything published", not
-          # "everything processed". Wait until the number of landed rows
-          # from this run stops growing.
+          # "everything processed". Wait for the records themselves.
+          #
+          # Waiting for the landed count to merely *stop changing* is not
+          # good enough: a pipeline that stalls (a slow or erroring model
+          # endpoint, say) looks exactly like a finished one, and draining
+          # then abandons the rest of the backlog — a drain stops pulling
+          # from Pub/Sub, so whatever is left is silently not replayed.
+          # So wait until every staged id has landed in this run.
           run_start=$$(cat /workspace/run_start)
+          staged_sql="SELECT COUNT(DISTINCT id) AS n FROM \`${PROJECT_ID}.${_DATASET}.${_RAW_STAGING_TABLE_ID}\`"
+          if [ -n "${_WINDOW_FROM}" ]; then
+            staged_sql="$$staged_sql WHERE created_utc >= TIMESTAMP('${_WINDOW_FROM}')"
+            if [ -n "${_WINDOW_TO}" ]; then
+              staged_sql="$$staged_sql AND created_utc < TIMESTAMP('${_WINDOW_TO}')"
+            fi
+          elif [ -n "${_WINDOW_TO}" ]; then
+            staged_sql="$$staged_sql WHERE created_utc < TIMESTAMP('${_WINDOW_TO}')"
+          fi
+
+          # An --event_window replay resolves its window from events.yaml,
+          # which this query cannot reproduce; fall back to the weaker
+          # "count stopped rising" rule and say so.
+          expected=""
+          if [ -z "${_EVENT_ID}" ]; then
+            expected=$$(bq query --project_id="${PROJECT_ID}" --use_legacy_sql=false \
+              --format=csv "$$staged_sql" | tail -1)
+            echo "Expecting $$expected records from staging."
+          else
+            echo "EVENT_ID replay: expected count unknown, falling back to a stability check."
+          fi
+
           landed_sql="SELECT COUNT(DISTINCT id) AS n FROM \`${PROJECT_ID}.${_DATASET}.${_EVENTS_LANDING_TABLE_ID}\` WHERE processed_at >= TIMESTAMP('$$run_start')"
           prev=-1
           stable=0
+          complete=false
           for _ in $$(seq 1 ${_WAIT_TIMEOUT_MINUTES}); do
             n=$$(bq query --project_id="${PROJECT_ID}" --use_legacy_sql=false \
               --format=csv "$$landed_sql" | tail -1)
-            echo "landed=$$n (stable=$$stable)"
-            if [ "$$n" = "$$prev" ] && [ "$$n" != "0" ]; then
+            echo "landed=$$n / $${expected:-?} (stable=$$stable)"
+            if [ -n "$$expected" ]; then
+              if [ "$$n" -ge "$$expected" ] 2>/dev/null; then
+                complete=true
+                break
+              fi
+            elif [ "$$n" = "$$prev" ] && [ "$$n" != "0" ]; then
               stable=$$((stable + 1))
-              [ "$$stable" -ge 3 ] && break
+              if [ "$$stable" -ge 3 ]; then
+                complete=true
+                break
+              fi
+            else
+              stable=0
+            fi
+            prev=$$n
+            sleep 60
+          done
+
+          if [ "$$complete" != true ]; then
+            echo "Replay did not complete within ${_WAIT_TIMEOUT_MINUTES} minutes." >&2
+            echo "Draining now would abandon the rest of the backlog; not promoting." >&2
+            return 1
+          fi && break
             else
               stable=0
             fi
