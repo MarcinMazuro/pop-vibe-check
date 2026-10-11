@@ -57,3 +57,15 @@ variable "delete_contents_on_destroy" {
   type        = bool
   default     = false
 }
+
+variable "promoter_sa_email" {
+  description = "Service account that promotes a drained replay (the Cloud Build SA running the replay pipeline). Granted dataEditor on the dataset and jobUser on the project. null skips the grants."
+  type        = string
+  default     = null
+}
+
+variable "report_viewer_emails" {
+  description = "User emails allowed to read the reporting dataset's authorized views — the Looker Studio dashboard's readers. Granted dataViewer on the reporting dataset and jobUser on the project, and nothing on the analytics dataset."
+  type        = list(string)
+  default     = []
+}

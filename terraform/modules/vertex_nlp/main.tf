@@ -123,6 +123,16 @@ resource "google_workbench_instance" "nlp" {
   }
 
   lifecycle {
+    # Workbench writes these keys into the instance metadata itself. Without
+    # ignoring them every plan proposes deleting them, and an in-place
+    # metadata update on a running instance is not a no-op.
+    ignore_changes = [
+      gce_setup[0].metadata["enable-jupyterlab4"],
+      gce_setup[0].metadata["instance-region"],
+      gce_setup[0].metadata["new-proxy-agent-enabled"],
+      gce_setup[0].metadata["resource-url"],
+    ]
+
     precondition {
       condition     = var.workbench_accelerator_count == 0 || trimspace(var.workbench_accelerator_type) != ""
       error_message = "workbench_accelerator_type is required when workbench_accelerator_count > 0."

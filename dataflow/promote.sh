@@ -20,6 +20,10 @@
 #
 # Usage:
 #   dataflow/promote.sh [--yes] [--check-only] [--env-dir DIR]
+#
+# PROJECT_ID, DATASET, RAW_STAGING_TABLE_ID, EVENTS_LANDING_TABLE_ID and
+# EVENTS_TABLE_ID override the corresponding Terraform outputs; the Cloud
+# Build replay pipeline sets them because it has no Terraform state.
 
 set -euo pipefail
 
@@ -36,22 +40,28 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ ! -d "${ENV_DIR}" ]]; then
-  echo "Environment directory '${ENV_DIR}' not found. Run from the repo root." >&2
-  exit 1
-fi
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# As in launch.sh: environment first, Terraform outputs otherwise, so the
+# same script runs from a laptop and from Cloud Build (which has no state).
 tf_output() {
+  local var_name="$2"
+  if [[ -n "${!var_name:-}" ]]; then
+    printf '%s' "${!var_name}"
+    return 0
+  fi
+  if [[ ! -d "${ENV_DIR}" ]]; then
+    echo "Environment directory '${ENV_DIR}' not found and ${var_name} is unset." >&2
+    exit 1
+  fi
   terraform -chdir="${ENV_DIR}" output -raw "$1"
 }
 
-PROJECT_ID="$(gcloud config get-value project 2>/dev/null)"
-DATASET="$(tf_output analytics_dataset_id)"
-RAW_STAGING_TABLE="${PROJECT_ID}.${DATASET}.$(tf_output raw_staging_table_id)"
-EVENTS_LANDING_TABLE="${PROJECT_ID}.${DATASET}.$(tf_output events_landing_table_id)"
-EVENTS_TABLE="${PROJECT_ID}.${DATASET}.$(tf_output events_table_id)"
+PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}"
+DATASET="$(tf_output analytics_dataset_id DATASET)"
+RAW_STAGING_TABLE="${PROJECT_ID}.${DATASET}.$(tf_output raw_staging_table_id RAW_STAGING_TABLE_ID)"
+EVENTS_LANDING_TABLE="${PROJECT_ID}.${DATASET}.$(tf_output events_landing_table_id EVENTS_LANDING_TABLE_ID)"
+EVENTS_TABLE="${PROJECT_ID}.${DATASET}.$(tf_output events_table_id EVENTS_TABLE_ID)"
 
 export RAW_STAGING_TABLE EVENTS_LANDING_TABLE EVENTS_TABLE
 

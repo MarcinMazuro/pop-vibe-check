@@ -1,0 +1,1 @@
+"""Steam reviews collector."""

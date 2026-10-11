@@ -265,9 +265,7 @@ def cohen_kappa(y1: Sequence[str], y2: Sequence[str]) -> float:
         ValueError: If the sequences differ in length.
     """
     if len(y1) != len(y2):
-        raise ValueError(
-            f"y1 ({len(y1)}) and y2 ({len(y2)}) length mismatch"
-        )
+        raise ValueError(f"y1 ({len(y1)}) and y2 ({len(y2)}) length mismatch")
     n = len(y1)
     if n == 0:
         return 0.0
@@ -393,9 +391,7 @@ def prelabel_agreement(rows: Sequence[dict[str, Any]]) -> dict[str, float | int]
         human.append(str(row["label"]))
         llm.append(llm_label)
     n = len(human)
-    accuracy = (
-        sum(a == b for a, b in zip(human, llm, strict=True)) / n if n else 0.0
-    )
+    accuracy = sum(a == b for a, b in zip(human, llm, strict=True)) / n if n else 0.0
     return {
         "n": n,
         "accuracy": accuracy,

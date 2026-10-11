@@ -27,3 +27,13 @@ output "publisher_job_id" {
   description = "Fully-qualified job resource ID for the replay publisher."
   value       = google_cloud_run_v2_job.publisher.id
 }
+
+output "steam_job_name" {
+  description = "Short name of the Steam collector job. Use in `gcloud run jobs execute`."
+  value       = google_cloud_run_v2_job.steam_collector.name
+}
+
+output "steam_job_id" {
+  description = "Fully-qualified job resource ID for the Steam collector."
+  value       = google_cloud_run_v2_job.steam_collector.id
+}

@@ -17,3 +17,8 @@ output "runner_service_account_id" {
   description = "Fully-qualified resource ID (projects/.../serviceAccounts/...) of the Terraform runner SA."
   value       = google_service_account.tf_runner.id
 }
+
+output "tf_ci_service_account_email" {
+  description = "Email of the Terraform CI service account the Cloud Build plan/apply triggers run as. It impersonates the runner SA."
+  value       = google_service_account.tf_ci.email
+}

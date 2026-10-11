@@ -46,6 +46,20 @@ _MAX_ATTEMPTS = 5
 _ENV_ENDPOINT = "VERTEX_ENDPOINT_ID"
 _ENV_PROJECT = "VERTEX_PROJECT"
 _ENV_LOCATION = "VERTEX_LOCATION"
+_ENV_MAX_CHARS = "VERTEX_MAX_CHARS"
+
+# XLM-R (like BERT) accepts at most 512 tokens. The serving container does
+# not truncate: a longer comment comes back as
+# "The expanded size of the tensor (660) must match the existing size
+# (514)", a 400 that no amount of retrying fixes. A stalled bundle then
+# retries forever and the whole replay stops — one long comment is enough.
+#
+# Characters, not tokens, because the client has no tokenizer (that is the
+# point of serving the model remotely). 1000 characters is safely under
+# 512 tokens for latin scripts; scripts where one character is one token
+# need less, which _predict_with_truncation handles by halving.
+_DEFAULT_MAX_CHARS = 1000
+_TRUNCATION_ATTEMPTS = 4
 
 
 class PredictEndpoint(Protocol):
@@ -109,6 +123,43 @@ def _is_retryable(exc: BaseException) -> bool:
     if isinstance(grpc_status, int) and grpc_status in {429, 500, 502, 503, 504}:
         return True
     return False
+
+
+def _env_max_chars() -> int:
+    """Return the per-text character budget from the environment.
+
+    Returns:
+        ``VERTEX_MAX_CHARS`` when it parses as a positive integer,
+        :data:`_DEFAULT_MAX_CHARS` otherwise.
+    """
+    raw = os.environ.get(_ENV_MAX_CHARS, "").strip()
+    if not raw:
+        return _DEFAULT_MAX_CHARS
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning("%s=%r is not an integer; ignoring.", _ENV_MAX_CHARS, raw)
+        return _DEFAULT_MAX_CHARS
+    if value <= 0:
+        logger.warning("%s=%d is not positive; ignoring.", _ENV_MAX_CHARS, value)
+        return _DEFAULT_MAX_CHARS
+    return value
+
+
+def _is_too_long(exc: BaseException) -> bool:
+    """Return whether a predict failure is the model's length limit.
+
+    The serving container reports it as a tensor-size mismatch rather than
+    anything structured, so the message is what there is to match on.
+
+    Args:
+        exc: Raised exception.
+
+    Returns:
+        ``True`` when the text should be shortened and retried.
+    """
+    message = str(exc)
+    return "expanded size of the tensor" in message or "sequence length" in message
 
 
 def parse_prediction(raw: Any) -> tuple[str, float]:
@@ -218,6 +269,7 @@ class VertexEndpointClassifier:
         location: str | None = None,
         endpoint: PredictEndpoint | None = None,
         model_version: str | None = None,
+        max_chars: int | None = None,
     ) -> None:
         """Read config from arguments or the process environment.
 
@@ -230,6 +282,9 @@ class VertexEndpointClassifier:
             endpoint: Injected client (tests). When omitted, a real
                 ``aiplatform.Endpoint`` is constructed.
             model_version: Override written to ``Sentiment.model_version``.
+            max_chars: Characters kept per text before calling the
+                endpoint. Defaults to ``VERTEX_MAX_CHARS``, else
+                :data:`_DEFAULT_MAX_CHARS`.
 
         Raises:
             RuntimeError: If endpoint id or project is missing.
@@ -249,6 +304,7 @@ class VertexEndpointClassifier:
         self._location = resolved_location
         self._model_version_override = model_version
         self._deployed_model_id = ""
+        self._max_chars = max_chars or _env_max_chars()
         if endpoint is not None:
             self._endpoint = endpoint
         else:
@@ -280,6 +336,9 @@ class VertexEndpointClassifier:
     def classify_batch(self, texts: list[str]) -> list[Sentiment]:
         """Classify a batch with one ``Endpoint.predict`` call.
 
+        Texts are truncated to ``VERTEX_MAX_CHARS`` characters first; see
+        :data:`_DEFAULT_MAX_CHARS` for why the client truncates at all.
+
         Args:
             texts: Texts to classify, in order.
 
@@ -295,8 +354,9 @@ class VertexEndpointClassifier:
             return []
         # Hugging Face DLC TextClassificationPipeline expects `inputs`,
         # not `text` (that raises missing positional argument `inputs`).
-        instances = [{"inputs": normalize_text(text)} for text in texts]
-        response = self._predict(instances)
+        response = self._predict_with_truncation(
+            [normalize_text(text) for text in texts]
+        )
         predictions = list(getattr(response, "predictions", None) or [])
         if len(predictions) != len(texts):
             raise RuntimeError(
@@ -313,6 +373,39 @@ class VertexEndpointClassifier:
                 raise RuntimeError(f"Endpoint returned non-pipeline label {label!r}.")
             results.append(Sentiment(label, score, self.model_version))
         return results
+
+    def _predict_with_truncation(self, texts: list[str]) -> Any:
+        """Predict, shortening the inputs if the model rejects their length.
+
+        The character budget is a guess — the client cannot tokenise — so
+        a rejection is met by halving it and trying again rather than by
+        failing the bundle. A comment long enough to survive four halvings
+        is not a comment; that error is re-raised.
+
+        Args:
+            texts: Normalised texts, in order.
+
+        Returns:
+            The predict response.
+
+        Raises:
+            Exception: The endpoint's error, if shortening does not help.
+        """
+        max_chars = self._max_chars
+        for attempt in range(_TRUNCATION_ATTEMPTS):
+            instances = [{"inputs": text[:max_chars]} for text in texts]
+            try:
+                return self._predict(instances)
+            except Exception as exc:  # noqa: BLE001
+                if attempt == _TRUNCATION_ATTEMPTS - 1 or not _is_too_long(exc):
+                    raise
+                max_chars = max(1, max_chars // 2)
+                logger.warning(
+                    "Endpoint rejected an input as too long; retrying at "
+                    "%d characters.",
+                    max_chars,
+                )
+        raise AssertionError("unreachable")
 
     @retry(
         retry=retry_if_exception(_is_retryable),

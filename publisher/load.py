@@ -38,6 +38,7 @@ _RECORD_FIELDS = (
     "score",
     "context_id",
     "event_tag",
+    "voted_up",
 )
 
 

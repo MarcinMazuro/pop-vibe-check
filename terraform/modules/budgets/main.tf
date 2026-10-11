@@ -31,12 +31,18 @@ resource "google_monitoring_notification_channel" "email" {
 # default, get notified. Cleaner for thesis-scale, prevents the project
 # owner inbox from getting alerts they did not opt in to.
 # ----------------------------------------------------------------------------
+# The Budgets API stores the project filter by number and returns it that
+# way, so filtering on "projects/<id>" produces a permanent in-place diff.
+data "google_project" "this" {
+  project_id = var.project_id
+}
+
 resource "google_billing_budget" "monthly" {
   billing_account = var.billing_account_id
   display_name    = "${var.name_prefix} ${var.env} monthly budget"
 
   budget_filter {
-    projects               = ["projects/${var.project_id}"]
+    projects               = ["projects/${data.google_project.this.number}"]
     credit_types_treatment = var.include_credits ? "INCLUDE_ALL_CREDITS" : "EXCLUDE_ALL_CREDITS"
   }
 

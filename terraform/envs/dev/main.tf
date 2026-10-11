@@ -31,6 +31,19 @@ module "storage" {
   # artifacts bucket. The binding lives next to the bucket.
   ml_trainer_sa_email = module.iam.ml_trainer_sa_email
 
+  # Cloud Build publishes Flex Template specs under templates/ (grant is
+  # conditioned to that prefix).
+  cloud_build_sa_email = module.iam.cloud_build_sa_email
+
+  # Manual `gcloud builds submit --gcs-source-staging-dir=gs://<artifacts>/cloudbuild/source`
+  # runs as one of these and reads its source from there. Literals: the
+  # CI SA lives in bootstrap, and a computed email would make the for_each
+  # set unplannable.
+  cloud_build_source_reader_emails = [
+    "${var.name_prefix}-cloud-build-sa-${local.env}@${var.project_id}.iam.gserviceaccount.com",
+    local.terraform_ci_sa_email,
+  ]
+
   # Raw archive grows indefinitely in dev; flip to a positive number
   # before a tear-down if you want Terraform to clean up the bucket
   # contents on the next apply.
@@ -55,6 +68,7 @@ module "secrets" {
 
   collector_reddit_sa_email  = module.iam.collector_reddit_sa_email
   collector_youtube_sa_email = module.iam.collector_youtube_sa_email
+  collector_steam_sa_email   = module.iam.collector_steam_sa_email
 }
 
 module "artifact_registry" {
@@ -76,6 +90,10 @@ module "artifact_registry" {
   reader_sa_emails = [
     module.iam.collector_reddit_sa_email,
     module.iam.collector_youtube_sa_email,
+    # Literal for the same reason as the dataflow-worker entry below: the
+    # Steam SA is created in this apply, so its computed email would make
+    # the whole for_each set unplannable.
+    "${var.name_prefix}-collector-steam-sa-${local.env}@${var.project_id}.iam.gserviceaccount.com",
     module.iam.publisher_sa_email,
     # Dataflow workers pull the Flex Template image at launch; no public
     # IPs, so they read Artifact Registry over Private Google Access.
@@ -120,6 +138,14 @@ module "bigquery" {
   publisher_sa_email       = module.iam.publisher_sa_email
   dataflow_worker_sa_email = module.iam.dataflow_worker_sa_email
   ml_trainer_sa_email      = module.iam.ml_trainer_sa_email
+
+  # The replay pipeline runs the events_landing -> events MERGE as the
+  # Cloud Build SA.
+  promoter_sa_email = module.iam.cloud_build_sa_email
+
+  # Who may read the Looker Studio views. Deliberately not the analytics
+  # dataset: the views carry the read permission themselves.
+  report_viewer_emails = var.report_viewer_emails
 }
 
 module "pubsub" {
@@ -174,6 +200,13 @@ module "budgets" {
 module "cloud_run_jobs" {
   source = "../../modules/cloud_run_jobs"
 
+  # Ordering, not data: a job's secret_key_ref is validated by Cloud Run at
+  # create time, so the workload SA must already hold secretAccessor on the
+  # secret. Passing secret_names carries no dependency on the accessor
+  # bindings, and without this the Steam job's creation lost that race
+  # ("Permission denied on secret ... for Revision service account").
+  depends_on = [module.secrets]
+
   project_id  = var.project_id
   name_prefix = var.name_prefix
   env         = local.env
@@ -183,6 +216,7 @@ module "cloud_run_jobs" {
   raw_archive_bucket_name    = module.storage.raw_archive_bucket_name
   reddit_collector_sa_email  = module.iam.collector_reddit_sa_email
   youtube_collector_sa_email = module.iam.collector_youtube_sa_email
+  steam_collector_sa_email   = module.iam.collector_steam_sa_email
   publisher_sa_email         = module.iam.publisher_sa_email
   secret_names               = module.secrets.secret_names
 
@@ -194,8 +228,82 @@ module "cloud_run_jobs" {
   # reddit_image_uri stays on the public 'pause' placeholder until the
   # Reddit container is built and pushed — e.g.:
   #   reddit_image_uri = "${module.artifact_registry.repository_url}/reddit-collector:<sha>"
+  #
+  # The YouTube and publisher images below only seed a freshly created job.
+  # After that Cloud Build deploys every merge to main by digest and the
+  # module ignores the image field — see modules/cloud_run_jobs/README.md.
   youtube_image_uri   = "europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/youtube-collector:729b1fdc5d8250915d0a59fa68d2408489b0a1f4"
   publisher_image_uri = "europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/publisher:2e209f7c654dca317b49a4afeb4d2b402193846e"
+
+  deployer_sa_email = module.iam.cloud_build_sa_email
+}
+
+# Cloud Build CI/CD: GitHub connection, Python checks, image build/deploy,
+# and terraform plan (PR) / apply (main, approval-gated) for this env.
+# The connection and triggers stay count = 0 until
+# github_app_installation_id is set — see modules/cloud_build/README.md.
+module "cloud_build" {
+  source = "../../modules/cloud_build"
+
+  project_id  = var.project_id
+  name_prefix = var.name_prefix
+  env         = local.env
+  region      = var.region
+  labels      = local.labels
+
+  github_owner               = "MarcinMazuro"
+  github_repo                = "pop-vibe-check"
+  github_app_installation_id = var.github_app_installation_id
+
+  cloud_build_sa_email      = module.iam.cloud_build_sa_email
+  terraform_ci_sa_email     = local.terraform_ci_sa_email
+  terraform_runner_sa_email = local.terraform_runner_sa_email
+  terraform_env_dir         = "terraform/envs/${local.env}"
+  approver_emails           = var.cloud_build_approver_emails
+
+  artifact_registry_repository_id = module.artifact_registry.repository_id
+  youtube_job_name                = module.cloud_run_jobs.youtube_job_name
+  steam_job_name                  = module.cloud_run_jobs.steam_job_name
+  publisher_job_name              = module.cloud_run_jobs.publisher_job_name
+  template_spec_dir               = module.dataflow.template_spec_dir
+
+  # Replay pipeline: the launch parameters a laptop reads from
+  # `terraform output`, baked into the manual trigger instead.
+  dataflow_worker_sa_email      = module.dataflow.worker_sa_email
+  dataflow_subnetwork           = module.dataflow.subnetwork
+  dataflow_temp_location        = module.dataflow.temp_location
+  dataflow_staging_location     = module.dataflow.staging_location
+  dataflow_input_subscription   = module.dataflow.input_subscription
+  dataflow_events_landing_table = module.dataflow.events_landing_table
+  dataflow_dlq_topic            = module.dataflow.dlq_topic
+  vertex_endpoint_id            = module.vertex_nlp.endpoint_resource_name
+  vertex_project                = var.project_id
+  vertex_location               = module.vertex_nlp.location
+  bq_dataset_id                 = module.bigquery.dataset_id
+  raw_staging_table_id          = module.bigquery.raw_staging_table_id
+  events_landing_table_id       = module.bigquery.events_landing_table_id
+  events_table_id               = module.bigquery.events_table_id
+}
+
+# Alert policies for the streaming path: job failure, a job left running
+# (the cost guard), an ageing replay backlog, and dead-lettered records.
+# Notification channels come from the budgets module so alerts reach the
+# same recipients as budget notifications.
+module "monitoring" {
+  source = "../../modules/monitoring"
+
+  project_id  = var.project_id
+  name_prefix = var.name_prefix
+  env         = local.env
+  region      = var.region
+
+  notification_channel_ids = values(module.budgets.notification_channel_ids)
+
+  dataflow_subscription_name = module.pubsub.dataflow_subscription_name
+  dlq_subscription_name      = module.pubsub.dlq_subscription_name
+
+  max_job_runtime_hours     = var.dataflow_max_job_runtime_hours
+  backlog_age_alert_seconds = var.replay_backlog_age_alert_seconds
 }
 
 # Vertex AI Workbench + Endpoint for DistilBERT. Both gates default OFF

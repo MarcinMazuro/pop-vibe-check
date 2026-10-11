@@ -155,7 +155,81 @@ resource "google_cloud_run_v2_job" "youtube_collector" {
   }
 
   lifecycle {
-    ignore_changes = [launch_stage]
+    # The image is deployed by Cloud Build (`gcloud run jobs update
+    # --image=...@sha256:...`) on every merge to main, not by Terraform.
+    # youtube_image_uri only seeds the job on first create. gcloud also
+    # stamps client / client_version on each update.
+    ignore_changes = [
+      launch_stage,
+      client,
+      client_version,
+      template[0].template[0].containers[0].image,
+    ]
+  }
+}
+
+# ----------------------------------------------------------------------------
+# Steam reviews collector Cloud Run Job.
+#
+# Same shape as the YouTube job with one simplification: the store review
+# endpoint needs no credentials, so the author-hash salt is the only
+# secret bound here. STEAM_APPID is a deploy-time literal because one job
+# serves one release (a second case study gets its own composition).
+# ----------------------------------------------------------------------------
+resource "google_cloud_run_v2_job" "steam_collector" {
+  project  = var.project_id
+  location = var.region
+  name     = "${var.name_prefix}-steam-collector-${var.env}"
+
+  labels = var.labels
+
+  template {
+    template {
+      service_account = var.steam_collector_sa_email
+      timeout         = var.steam_task_timeout
+      max_retries     = var.max_retries
+
+      containers {
+        image = var.steam_image_uri
+
+        resources {
+          limits = {
+            memory = var.memory
+            cpu    = var.cpu
+          }
+        }
+
+        env {
+          name  = "TARGET_BUCKET"
+          value = var.raw_archive_bucket_name
+        }
+
+        env {
+          name  = "STEAM_APPID"
+          value = var.steam_appid
+        }
+
+        env {
+          name = "AUTHOR_HASH_SALT"
+          value_source {
+            secret_key_ref {
+              secret  = var.secret_names["author-hash-salt"]
+              version = "latest"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    # Image deployed by Cloud Build, see the YouTube job above.
+    ignore_changes = [
+      launch_stage,
+      client,
+      client_version,
+      template[0].template[0].containers[0].image,
+    ]
   }
 }
 
@@ -251,7 +325,13 @@ resource "google_cloud_run_v2_job" "publisher" {
   }
 
   lifecycle {
-    ignore_changes = [launch_stage]
+    # Image deployed by Cloud Build, see the YouTube job above.
+    ignore_changes = [
+      launch_stage,
+      client,
+      client_version,
+      template[0].template[0].containers[0].image,
+    ]
   }
 }
 
@@ -276,6 +356,12 @@ resource "google_storage_bucket_iam_member" "youtube_raw_archive_writer" {
   member = "serviceAccount:${var.youtube_collector_sa_email}"
 }
 
+resource "google_storage_bucket_iam_member" "steam_raw_archive_writer" {
+  bucket = var.raw_archive_bucket_name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${var.steam_collector_sa_email}"
+}
+
 # The publisher only reads: BigQuery load jobs fetch the JSONL.gz
 # objects from GCS with the caller's identity, so objectViewer is
 # sufficient — unlike the collectors, it never writes to the archive.
@@ -283,4 +369,50 @@ resource "google_storage_bucket_iam_member" "publisher_raw_archive_reader" {
   bucket = var.raw_archive_bucket_name
   role   = "roles/storage.objectViewer"
   member = "serviceAccount:${var.publisher_sa_email}"
+}
+
+# ----------------------------------------------------------------------------
+# Image deployer (Cloud Build).
+#
+# The Cloud Build SA swaps the image on the YouTube collector and publisher
+# jobs after every merge to main. Two grants per job:
+#   - roles/run.developer on the job itself: jobs.get + jobs.update, scoped
+#     to exactly these jobs rather than the whole project;
+#   - roles/iam.serviceAccountUser on the job's runtime SA: updating a job
+#     re-attaches its service account, which requires actAs on it.
+# The Reddit job keeps its placeholder image and gets no deployer.
+# ----------------------------------------------------------------------------
+locals {
+  deployed_jobs = var.deployer_sa_email == null ? {} : {
+    youtube-collector = {
+      job_name   = google_cloud_run_v2_job.youtube_collector.name
+      runtime_sa = var.youtube_collector_sa_email
+    }
+    steam-collector = {
+      job_name   = google_cloud_run_v2_job.steam_collector.name
+      runtime_sa = var.steam_collector_sa_email
+    }
+    publisher = {
+      job_name   = google_cloud_run_v2_job.publisher.name
+      runtime_sa = var.publisher_sa_email
+    }
+  }
+}
+
+resource "google_cloud_run_v2_job_iam_member" "deployer" {
+  for_each = local.deployed_jobs
+
+  project  = var.project_id
+  location = var.region
+  name     = each.value.job_name
+  role     = "roles/run.developer"
+  member   = "serviceAccount:${var.deployer_sa_email}"
+}
+
+resource "google_service_account_iam_member" "deployer_act_as" {
+  for_each = local.deployed_jobs
+
+  service_account_id = "projects/${var.project_id}/serviceAccounts/${each.value.runtime_sa}"
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${var.deployer_sa_email}"
 }

@@ -53,6 +53,7 @@ EVENT_COLUMNS: tuple[str, ...] = (
     "score",
     "context_id",
     "event_tag",
+    "voted_up",
     "sentiment_label",
     "sentiment_score",
     "model_version",
@@ -286,6 +287,21 @@ def _as_str(value: Any) -> str | None:
     return None if value is None else str(value)
 
 
+def _as_bool(value: Any) -> bool | None:
+    """Coerce a record value to a bool, preserving "absent".
+
+    Args:
+        value: Raw value from the record.
+
+    Returns:
+        The boolean, or ``None`` when the field is absent or null — a
+        source without a thumbs up/down must not read as a thumbs down.
+    """
+    if value is None:
+        return None
+    return bool(value)
+
+
 def build_event_row(
     record: dict[str, Any],
     sentiment: Sentiment,
@@ -321,6 +337,9 @@ def build_event_row(
         "score": _as_int(record.get("score")),
         "context_id": _as_str(record.get("context_id")),
         "event_tag": _as_str(record.get("event_tag")),
+        # Passed through untouched: it is the author's own verdict, not
+        # the pipeline's. Null for sources that have no such signal.
+        "voted_up": _as_bool(record.get("voted_up")),
         "sentiment_label": sentiment.label,
         "sentiment_score": float(sentiment.score),
         "model_version": sentiment.model_version,

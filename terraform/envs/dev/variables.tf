@@ -93,3 +93,33 @@ variable "enable_nlp_endpoint" {
   type        = bool
   default     = false
 }
+
+variable "github_app_installation_id" {
+  description = "Installation ID of the Google Cloud Build GitHub App on the repository owner (the number at the end of github.com/settings/installations/<id>). null keeps the Cloud Build connection and triggers uncreated. See modules/cloud_build/README.md."
+  type        = number
+  default     = null
+}
+
+variable "cloud_build_approver_emails" {
+  description = "User emails allowed to approve the queued terraform apply build on main."
+  type        = list(string)
+  default     = []
+}
+
+variable "dataflow_max_job_runtime_hours" {
+  description = "Hours a Dataflow job may run before the cost alert fires. Streaming jobs bill until drained; every replay here is minutes to hours."
+  type        = number
+  default     = 6
+}
+
+variable "replay_backlog_age_alert_seconds" {
+  description = "How old the oldest unacknowledged message on the Dataflow subscription may get before alerting. Must exceed the pacing of a normal replay."
+  type        = number
+  default     = 1800
+}
+
+variable "report_viewer_emails" {
+  description = "User emails allowed to read the reporting dataset's authorized views (the Looker Studio dashboard's readers). They get no access to the analytics dataset."
+  type        = list(string)
+  default     = []
+}

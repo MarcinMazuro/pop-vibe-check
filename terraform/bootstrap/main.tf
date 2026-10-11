@@ -104,6 +104,11 @@ locals {
     # Cloud Build — per-service triggers scoped by included_files.
     "roles/cloudbuild.builds.editor",
 
+    # Cloud Build — the GitHub (2nd gen) connection and linked repository
+    # the triggers hang off. builds.editor covers triggers but not
+    # connections / repositories.
+    "roles/cloudbuild.connectionAdmin",
+
     # Cloud Monitoring — notification channels for budget alerts, plus
     # any future alert policies / uptime checks. Editor (not admin)
     # covers create/update/delete on channels and policies without
@@ -167,9 +172,8 @@ resource "google_storage_bucket" "tf_state" {
 # Long-lived Terraform runner service account.
 #
 # Shared across every environment and every case study, paired with the
-# universal state bucket above. Cloud Build will impersonate this SA later
-# via an iam.serviceAccountTokenCreator binding (added when the cloud_build
-# module lands). The runner SA itself is created here so its identity is
+# universal state bucket above. Cloud Build impersonates it through the
+# Terraform CI SA below. The runner SA itself is created here so its identity is
 # stable across every later apply. google_service_account does not support
 # labels in provider v5.
 # ----------------------------------------------------------------------------
@@ -209,6 +213,45 @@ resource "google_service_account_iam_member" "operator_token_creator" {
   service_account_id = google_service_account.tf_runner.name
   role               = "roles/iam.serviceAccountTokenCreator"
   member             = "user:${each.value}"
+}
+
+# ----------------------------------------------------------------------------
+# Terraform CI identity.
+#
+# The service account Cloud Build runs `terraform plan` / `apply` as. It
+# holds no project roles of its own beyond writing build logs: every
+# Terraform call impersonates the runner SA above, exactly like an operator
+# laptop does, so audit logs read "CI acting through the runner".
+#
+# Kept separate from the per-env Cloud Build SA that builds images on
+# purpose. Image builds execute Dockerfiles and tests from pull requests;
+# that identity must not be able to mint runner tokens, which amount to
+# near-admin on the project.
+#
+# Access to the env's tfvars secret is granted next to that secret, in the
+# env composition's cloud_build module.
+# ----------------------------------------------------------------------------
+resource "google_service_account" "tf_ci" {
+  project      = var.project_id
+  account_id   = "${var.name_prefix}-tf-ci-sa"
+  display_name = "Terraform CI (Cloud Build)"
+  description  = "Runs terraform plan/apply triggers in Cloud Build. Impersonates the Terraform runner SA; holds no workload permissions itself."
+
+  depends_on = [google_project_service.enabled]
+}
+
+resource "google_service_account_iam_member" "tf_ci_token_creator" {
+  service_account_id = google_service_account.tf_runner.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.tf_ci.email}"
+}
+
+# A build running as a user-specified service account needs this to write
+# its logs (the triggers use CLOUD_LOGGING_ONLY).
+resource "google_project_iam_member" "tf_ci_log_writer" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.tf_ci.email}"
 }
 
 # ----------------------------------------------------------------------------

@@ -48,6 +48,12 @@ locals {
       secret_name = "author-hash-salt"
       sa_email    = var.collector_youtube_sa_email
     }
+    # The Steam endpoint needs no credentials, so the salt is the only
+    # secret this collector touches.
+    "author-hash-salt/steam-collector" = {
+      secret_name = "author-hash-salt"
+      sa_email    = var.collector_steam_sa_email
+    }
   }
 }
 

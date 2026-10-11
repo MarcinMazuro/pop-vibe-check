@@ -1,0 +1,35 @@
+# Cloud Build config for the Python checks run on pull requests.
+#
+# Same tools and pins as a local run (requirements-dev.txt, pyproject.toml):
+# ruff, black --check, pytest across collectors, publisher, dataflow, nlp.
+# Python 3.12 to match the service images and the Dataflow workers.
+#
+# Run by hand from the repo root:
+#
+#   gcloud builds submit --region=europe-central2 \
+#     --service-account=projects/<project>/serviceAccounts/co-cloud-build-sa-dev@<project>.iam.gserviceaccount.com \
+#     --gcs-source-staging-dir=gs://co-tf-artifacts-dev/cloudbuild/source \
+#     --config cloudbuild.checks.yaml .
+steps:
+  - id: checks
+    name: python:3.12-slim
+    entrypoint: bash
+    args:
+      - -ec
+      - |
+        # Java: the BigQuery sink test expands a cross-language transform,
+        # which starts Beam's Java expansion service.
+        apt-get update -qq
+        apt-get install -y -qq --no-install-recommends default-jre-headless >/dev/null
+        pip install --no-cache-dir --quiet -r requirements-dev.txt
+        ruff check .
+        black --check .
+        pytest -q
+
+timeout: 1800s
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  # No machineType: the regional default pool in europe-central2 rejects
+  # the larger build machines on this project's quota. The default machine
+  # is slower but sufficient.

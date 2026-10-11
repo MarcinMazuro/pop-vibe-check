@@ -274,9 +274,7 @@ def evaluate_files(
     if aligned and "split" in aligned[0]:
         splits = [row.get("split", "") for row in aligned]
         report["by_split"] = {}
-        buckets: dict[str, tuple[list[str], list[str]]] = defaultdict(
-            lambda: ([], [])
-        )
+        buckets: dict[str, tuple[list[str], list[str]]] = defaultdict(lambda: ([], []))
         for y_true, y_pred, split in zip(gold, predicted, splits, strict=True):
             buckets[split][0].append(y_true)
             buckets[split][1].append(y_pred)

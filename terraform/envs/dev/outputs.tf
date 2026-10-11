@@ -63,6 +63,16 @@ output "youtube_collector_job_name" {
   value       = module.cloud_run_jobs.youtube_job_name
 }
 
+output "steam_collector_job_name" {
+  description = "Short name of the Steam reviews collector Cloud Run Job."
+  value       = module.cloud_run_jobs.steam_job_name
+}
+
+output "steam_collector_sa_email" {
+  description = "Email of the Steam collector workload SA."
+  value       = module.iam.collector_steam_sa_email
+}
+
 output "publisher_job_name" {
   description = "Short name of the replay publisher Cloud Run Job."
   value       = module.cloud_run_jobs.publisher_job_name
@@ -205,4 +215,41 @@ output "vertex_endpoint_id" {
 output "vertex_project_id" {
   description = "GCP project the Vertex Endpoint lives in. Launch env: VERTEX_PROJECT."
   value       = var.project_id
+}
+
+# --- Cloud Build -------------------------------------------------------------
+
+output "terraform_ci_sa_email" {
+  description = "Terraform CI SA (from bootstrap) the plan/apply triggers run as."
+  value       = local.terraform_ci_sa_email
+}
+
+output "github_token_secret_id" {
+  description = "Secret holding the GitHub token for the Cloud Build connection. Populate with `gcloud secrets versions add`."
+  value       = module.cloud_build.github_token_secret_id
+}
+
+output "tfvars_secret_id" {
+  description = "Secret holding this env's canonical terraform.tfvars, read by the Terraform triggers. Update with `gcloud secrets versions add --data-file=terraform.tfvars`."
+  value       = module.cloud_build.tfvars_secret_id
+}
+
+output "cloud_build_trigger_names" {
+  description = "Names of the Cloud Build triggers; empty until github_app_installation_id is set."
+  value       = module.cloud_build.trigger_names
+}
+
+output "alert_policy_names" {
+  description = "Monitoring alert policies guarding the streaming path (job failure, job left running, replay backlog, dead letters)."
+  value       = module.monitoring.alert_policy_names
+}
+
+output "reporting_dataset_id" {
+  description = "Dataset holding the Looker Studio authorized views. Point the Looker data source at this dataset, never at the analytics one."
+  value       = module.bigquery.reporting_dataset_id
+}
+
+output "report_view_ids" {
+  description = "Map of purpose → PROJECT.DATASET.VIEW for the Looker Studio data sources."
+  value       = module.bigquery.report_view_ids
 }

@@ -86,6 +86,29 @@ resource "google_storage_bucket" "tf_artifacts" {
 }
 
 # ----------------------------------------------------------------------------
+# Source tarballs for manual `gcloud builds submit`.
+#
+# A build that runs as a user-specified SA reads its uploaded source with
+# that SA's own credentials. Manual submits stage the tarball under
+# cloudbuild/source/ here (--gcs-source-staging-dir), which the 30-day
+# lifecycle rule above already sweeps. Trigger builds fetch source from
+# GitHub and never use this.
+# ----------------------------------------------------------------------------
+resource "google_storage_bucket_iam_member" "cloud_build_source_reader" {
+  for_each = toset(var.cloud_build_source_reader_emails)
+
+  bucket = google_storage_bucket.tf_artifacts.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${each.value}"
+
+  condition {
+    title       = "cloudbuild-source-only"
+    description = "Manual build source tarballs under cloudbuild/source/ only."
+    expression  = "resource.name.startsWith(\"projects/_/buckets/${google_storage_bucket.tf_artifacts.name}/objects/cloudbuild/source/\")"
+  }
+}
+
+# ----------------------------------------------------------------------------
 # ML trainer access to the artifacts bucket.
 #
 # objectAdmin (not just objectViewer) because Workbench writes the
@@ -146,4 +169,27 @@ resource "google_storage_bucket_iam_member" "dataflow_worker_object_admin" {
   bucket = google_storage_bucket.dataflow_temp.name
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${var.dataflow_worker_sa_email}"
+}
+
+# ----------------------------------------------------------------------------
+# Cloud Build access to the Flex Template specs.
+#
+# The sentiment-pipeline trigger writes a versioned spec plus the "current"
+# spec under templates/ on every merge to main, and the same SA reads it
+# back when it launches a job. objectAdmin because refreshing the current
+# spec overwrites an object (create + delete). The IAM condition keeps it
+# off staging/ and temp/, which hold live job data.
+# ----------------------------------------------------------------------------
+resource "google_storage_bucket_iam_member" "cloud_build_templates" {
+  count = var.cloud_build_sa_email == null ? 0 : 1
+
+  bucket = google_storage_bucket.dataflow_temp.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${var.cloud_build_sa_email}"
+
+  condition {
+    title       = "templates-prefix-only"
+    description = "Flex Template specs under templates/ only."
+    expression  = "resource.name.startsWith(\"projects/_/buckets/${google_storage_bucket.dataflow_temp.name}/objects/templates/\")"
+  }
 }

@@ -84,9 +84,7 @@ class TestResolveReviewRow:
         assert resolve_review_row(_review("a", "neg", review_required=True)) is None
 
     def test_required_with_human_wins(self) -> None:
-        row = resolve_review_row(
-            _review("a", "pos", review_required=True, label="neg")
-        )
+        row = resolve_review_row(_review("a", "pos", review_required=True, label="neg"))
         assert row is not None
         assert row["label"] == "neg"
         assert row["label_source"] == "human"
@@ -111,12 +109,8 @@ class TestResolveReviewRow:
 class TestSplits:
     def test_old_holdout_kept_new_fills_targets(self) -> None:
         existing = [
-            _gold(f"old-h-{i}", "pos", split="holdout", language="en")
-            for i in range(4)
-        ] + [
-            _gold(f"old-t-{i}", "neu", split="train", language="fr")
-            for i in range(3)
-        ]
+            _gold(f"old-h-{i}", "pos", split="holdout", language="en") for i in range(4)
+        ] + [_gold(f"old-t-{i}", "neu", split="train", language="fr") for i in range(3)]
         review = []
         for i in range(12):
             lang = "en" if i % 2 == 0 else "fr"

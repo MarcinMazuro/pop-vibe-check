@@ -65,6 +65,7 @@ contract a real model must honour.
 | `cloudbuild.yaml` | Builds the image and the template spec |
 | `launch.sh` | Starts a job from the built template |
 | `promote.sh` | Coverage check → MERGE → reproducibility fingerprint |
+| `replay.cloudbuild.yaml` | The whole replay as one Cloud Build run (`co-replay-dev`) |
 | `promote.sql` / `coverage.sql` / `verify.sql` | The statements `promote.sh` runs |
 
 ## The image must be self-contained
@@ -84,32 +85,84 @@ template was built from.
 
 ## Build
 
+Cloud Build builds this image automatically (see `terraform/modules/cloud_build`):
+
+- **Pull request** touching `dataflow/` or `nlp/` — image build only. The
+  Dockerfile's import check runs, nothing is pushed.
+- **Merge to `main`** — the image is pushed tagged with the full commit SHA,
+  and two template specs pinned to its **digest** are written:
+  `gs://co-dataflow-temp-dev/templates/sentiment-pipeline-<sha>.json`
+  (immutable, one per commit) and `.../sentiment-pipeline.json` (current).
+
+No build ever starts a Dataflow job. `launch.sh` uses the current spec, or
+`launch.sh --sha <commit>` to launch the template of a specific commit.
+
+Manual build from the repo root, e.g. for a branch that is not merged yet:
+
 ```bash
-gcloud builds submit --config dataflow/cloudbuild.yaml .
+gcloud builds submit --region=europe-central2 \
+  --service-account=projects/pop-vibe-check/serviceAccounts/co-cloud-build-sa-dev@pop-vibe-check.iam.gserviceaccount.com \
+
+  --gcs-source-staging-dir=gs://co-tf-artifacts-dev/cloudbuild/source \
+  --config dataflow/cloudbuild.yaml \
+  --substitutions=COMMIT_SHA=$(git rev-parse HEAD),_DEPLOY=true .
 ```
 
-**This does not work yet.** `gcloud builds submit` runs as the Compute
-Engine default service account, which holds no project roles, so the build
-fails on its own source bucket before starting. Until the `cloud_build/`
-Terraform module exists (or the build is pointed at
-`co-cloud-build-sa-dev` with `--service-account`), build and push by hand,
-which is how the collector and publisher images were deployed too:
-
-```bash
-SHA=$(git rev-parse HEAD)
-IMG=europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/sentiment-pipeline:$SHA
-docker build -f dataflow/Dockerfile -t "$IMG" .
-docker push "$IMG"
-gcloud dataflow flex-template build \
-  gs://co-dataflow-temp-dev/templates/sentiment-pipeline.json \
-  --image="$IMG" --sdk-language=PYTHON --metadata-file=dataflow/metadata.json
-```
-
-Produces the image tagged with the commit SHA and writes the template spec
-to `gs://co-dataflow-temp-dev/templates/sentiment-pipeline.json`, pinning
-that exact image.
+`--service-account` is required: without it the build runs as the Compute
+Engine default service account, which holds no project roles. The build SA
+reads its uploaded source with its own credentials, hence
+`--gcs-source-staging-dir` pointing at the prefix it can read. Note that a
+manual `_DEPLOY=true` run also overwrites the current spec.
 
 ## Run
+
+### One replay, as a build (the normal path)
+
+`co-replay-dev` runs the whole sequence — launch, publish, wait, drain,
+promote, fingerprint — as one Cloud Build run from
+[`replay.cloudbuild.yaml`](replay.cloudbuild.yaml). It is a **manual**
+trigger: a replay starts a streaming job that bills until drained, so no
+push starts one.
+
+```bash
+gcloud builds triggers run co-replay-dev --region=europe-central2 \
+  --branch=main --substitutions=_MODEL=stub
+```
+
+`_MODEL=vertex` needs nothing else: the trigger carries the Endpoint id,
+project and region from `terraform output`.
+
+Useful substitutions (all optional): `_MODEL` (`stub` / `vertex`),
+`_TEMPLATE_SHA` (launch a specific commit's template instead of the
+current one), `_RUN_LOAD`, `_EVENT_ID`, `_WINDOW_FROM`, `_WINDOW_TO`,
+`_SPEEDUP`, `_MAX_SLEEP_SECONDS` (publisher parameters — anything left
+empty keeps the job's deployed default), `_MAX_WORKERS`, `_MACHINE_TYPE`,
+`_PROMOTE=false` (replay and drain without touching `events`).
+
+Two properties make this better than running the steps by hand:
+
+- **The promotion cannot run too early.** It runs after the job is
+  drained, never merely after the publisher exits — the failure this
+  ordering exists to prevent (`promote.sh`'s header explains it).
+- **The drain cannot run too early either.** The build waits until every
+  staged id has landed *in this run* before draining. A drain stops
+  pulling from Pub/Sub, so draining a pipeline that is still behind
+  abandons the rest of the backlog: the run looks successful, and the
+  records it never processed keep whatever labels an earlier replay gave
+  them. If the records do not all arrive within
+  `_WAIT_TIMEOUT_MINUTES`, the build drains and fails **without
+  promoting**. (An `_EVENT_ID` replay cannot compute its expected count
+  — the window comes from `events.yaml` — so it falls back to waiting for
+  the landed count to stop rising, and says so in the log.)
+- **The drain step always runs**, even when the replay fails, so a failed
+  run does not leave a streaming job billing. The gap it cannot close is
+  the build itself timing out or being cancelled; the "Dataflow job
+  running too long" alert covers that (`terraform/modules/monitoring/`).
+
+The build's log is the record of the run: the commit, the parameters, the
+coverage check and the fingerprint.
+
+### By hand
 
 Have the publisher put messages on the topic first (see
 `publisher/README.md`), then:
@@ -131,6 +184,12 @@ not need a GPU.
 Every infrastructure value — region, worker SA, subnetwork, temp and
 staging locations, subscription, table, DLQ topic — is read from
 `terraform output`, so the script cannot drift from what is deployed.
+Each one can also be supplied through the environment (`REGION`,
+`WORKER_SA`, `SUBNETWORK`, `TEMP_LOCATION`, `STAGING_LOCATION`,
+`SPEC_DIR`, `INPUT_SUBSCRIPTION`, `OUTPUT_TABLE`, `DLQ_TOPIC`), which is
+how the replay build runs the same script without Terraform state.
+`promote.sh` works the same way (`PROJECT_ID`, `DATASET`,
+`RAW_STAGING_TABLE_ID`, `EVENTS_LANDING_TABLE_ID`, `EVENTS_TABLE_ID`).
 
 ### Cost
 
@@ -217,7 +276,13 @@ from langdetect's behaviour under Dataflow's threading.
 - **No windowed aggregation.** The pipeline enriches record by record;
   per-event aggregates are computed in BigQuery. Event time is wired
   correctly, so a windowed branch can be added without reworking the read.
-- **The promotion step is a script, not infrastructure.** Whether it
-  becomes a `RUN_MERGE` mode on the publisher job or a separate one-shot
-  job is still open; the Dataflow worker SA already holds the grants
-  either would need.
+- **The launch is not a Terraform resource.** A gated
+  `google_dataflow_flex_template_job` was considered and rejected:
+  with applies going through an approval-gated Cloud Build trigger,
+  starting a job would mean editing the tfvars secret and approving an
+  apply, and stopping one would mean deleting a resource. The manual
+  `co-replay-dev` trigger does the same job with an explicit drain.
+- **Alerting covers the job, not the data.** Job failure, a job left
+  running, an ageing backlog and dead letters all alert
+  (`terraform/modules/monitoring/`). A replay that lands *wrong* rows
+  does not — that is what the coverage check and the fingerprint are for.

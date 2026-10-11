@@ -341,8 +341,7 @@ def cmd_merge(args: argparse.Namespace) -> int:
     print(f"Wrote {len(merged)} rows to {args.output}")
     print("label_llm: " + format_counts([row["label_llm"] for row in merged]))
     print(
-        "language: "
-        + format_counts([str(row.get("language") or "") for row in merged])
+        "language: " + format_counts([str(row.get("language") or "") for row in merged])
     )
     return 0
 

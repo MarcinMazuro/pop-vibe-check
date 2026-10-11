@@ -32,3 +32,18 @@ output "events_table_id" {
   description = "Short table id of the deduplicated analytical events table (e.g. 'events'). MERGE target and Looker Studio source."
   value       = google_bigquery_table.events.table_id
 }
+
+output "reporting_dataset_id" {
+  description = "Short ID of the reporting dataset holding the authorized views. This is the dataset a Looker Studio data source connects to."
+  value       = google_bigquery_dataset.reporting.dataset_id
+}
+
+output "report_view_ids" {
+  description = "Map of purpose → fully-qualified view reference (PROJECT.DATASET.VIEW) for the Looker Studio data sources."
+  value = {
+    events           = "${var.project_id}.${google_bigquery_dataset.reporting.dataset_id}.${google_bigquery_table.v_events.table_id}"
+    sentiment_daily  = "${var.project_id}.${google_bigquery_dataset.reporting.dataset_id}.${google_bigquery_table.v_sentiment_daily.table_id}"
+    sentiment_events = "${var.project_id}.${google_bigquery_dataset.reporting.dataset_id}.${google_bigquery_table.v_sentiment_by_event.table_id}"
+    source_coverage  = "${var.project_id}.${google_bigquery_dataset.reporting.dataset_id}.${google_bigquery_table.v_source_coverage.table_id}"
+  }
+}

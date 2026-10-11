@@ -16,6 +16,9 @@ praw==7.8.1
 google-api-python-client==2.157.0
 google-cloud-bigquery==3.42.2
 google-cloud-pubsub==2.39.0
+# Steam collector: the review endpoint is plain HTTPS, no client library.
+# Pinned at the version apache-beam and google-api-core both accept.
+requests==2.34.2
 
 # Type stubs for static analysis.
 types-PyYAML==6.0.12.20241230
