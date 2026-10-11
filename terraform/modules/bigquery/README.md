@@ -110,6 +110,15 @@ The default flips back to `false` automatically on the next normal apply — no 
 - **Language authority.** `raw_staging.language` is advisory (collector `langdetect`); `events.language` is authoritative (written by Dataflow). Same column type, different documented meaning — see "Schema: one source, two tables" above. Picking the detector library is the pipeline PR's call; note that Dataflow workers run without public IPs, so any detector model file must be baked into the Flex Template image rather than downloaded at runtime.
 - **Per env, per release.** `co_analytics_dev` and `co_analytics_prod` are separate datasets with separate IAM; `w4_analytics_dev` lives alongside `co_analytics_dev` in the same project without conflict.
 
+## The `voted_up` column
+
+Every table carries a nullable `voted_up` BOOLEAN. It is the author's own
+thumbs up/down, which Steam reviews have and YouTube comments do not — so
+it is `NULL` for YouTube and must never be read as a thumbs down. The
+pipeline passes it through untouched; it is the author's verdict, not the
+model's, which is exactly what makes it useful for evaluating the
+classifier at scale.
+
 ## Reporting dataset and authorized views
 
 `{name_prefix}_reporting_{env}` is the presentation layer. It holds four

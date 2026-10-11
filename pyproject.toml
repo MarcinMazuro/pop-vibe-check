@@ -15,6 +15,7 @@ packages = [
     "collectors.common",
     "collectors.reddit",
     "collectors.youtube",
+    "collectors.steam",
     "publisher",
     "dataflow",
     "nlp",

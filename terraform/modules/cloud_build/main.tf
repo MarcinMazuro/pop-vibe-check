@@ -57,6 +57,19 @@ locals {
         _JOB = var.youtube_job_name
       }
     }
+    steam-collector = {
+      filename = "collectors/steam/cloudbuild.yaml"
+      included_files = [
+        "collectors/__init__.py",
+        "collectors/common/**",
+        "collectors/config/**",
+        "collectors/steam/**",
+      ]
+      ignored_files = ["**/*.md", "**/tests/**"]
+      substitutions = {
+        _JOB = var.steam_job_name
+      }
+    }
     publisher = {
       filename = "publisher/cloudbuild.yaml"
       included_files = [

@@ -77,6 +77,7 @@ def build_record(
     parent_id: str | None = None,
     language: str | None = None,
     detect_lang: bool = True,
+    voted_up: bool | None = None,
 ) -> dict[str, Any]:
     """Build one collector record following the shared schema.
 
@@ -96,6 +97,10 @@ def build_record(
             true, detection is attempted.
         detect_lang: Whether to attempt automatic language detection when
             ``language`` is not provided.
+        voted_up: The author's own thumbs up/down, where the source has
+            one. Steam reviews do; YouTube comments do not, so it stays
+            ``None`` there. It is a weak sentiment label straight from the
+            author, used to evaluate the classifier at scale.
 
     Returns:
         A dict matching the collector record schema, ready to serialise.
@@ -116,4 +121,5 @@ def build_record(
         "score": int(score),
         "context_id": context_id,
         "event_tag": event_tag,
+        "voted_up": voted_up,
     }

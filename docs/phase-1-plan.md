@@ -237,6 +237,10 @@ of magnitude.
 Independent of Track A. This track decides whether the sentiment curve
 presented at the defence has four points or twelve.
 
+> **B1 built 2026-10-11** — `collectors/steam/` with its image, Cloud Run
+> Job and the `voted_up` column the weak labels need. What remains is
+> running the collections and loading them into staging.
+
 **B1 — Steam collector** (unblocked by ADR 0001). New service under
 `collectors/steam/`, following the existing pattern: entry point,
 `Dockerfile`, `cloudbuild.yaml`, README, tests, reusing

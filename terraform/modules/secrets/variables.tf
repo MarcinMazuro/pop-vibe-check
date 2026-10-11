@@ -32,3 +32,8 @@ variable "collector_youtube_sa_email" {
   description = "Email of the YouTube collector SA — granted secretAccessor on the youtube-api-key secret and on the author-hash-salt."
   type        = string
 }
+
+variable "collector_steam_sa_email" {
+  description = "Email of the Steam collector workload SA. Granted secretAccessor on the author-hash salt only — the Steam review endpoint needs no credentials."
+  type        = string
+}

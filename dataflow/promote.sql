@@ -34,6 +34,7 @@ WHEN MATCHED AND s.processed_at > t.processed_at THEN UPDATE SET
   score           = s.score,
   context_id      = s.context_id,
   event_tag       = s.event_tag,
+  voted_up        = s.voted_up,
   sentiment_label = s.sentiment_label,
   sentiment_score = s.sentiment_score,
   model_version   = s.model_version,

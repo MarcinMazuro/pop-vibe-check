@@ -21,6 +21,10 @@ locals {
       display_name = "YouTube collector"
       description  = "Reads the YouTube Data API and writes raw JSONL to the raw archive bucket. Run as the youtube-collector Cloud Run Job."
     }
+    "collector-steam" = {
+      display_name = "Steam collector"
+      description  = "Reads the public Steam store review endpoint and writes raw JSONL to the raw archive bucket. Run as the steam-collector Cloud Run Job."
+    }
     "publisher" = {
       display_name = "Replay publisher"
       description  = "Loads the GCS raw archive into BigQuery staging and replays it chronologically to Pub/Sub with time compression. Run as the publisher Cloud Run Job."
