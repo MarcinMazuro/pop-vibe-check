@@ -186,7 +186,7 @@ resource "google_cloud_run_v2_job" "steam_collector" {
   template {
     template {
       service_account = var.steam_collector_sa_email
-      timeout         = var.task_timeout
+      timeout         = var.steam_task_timeout
       max_retries     = var.max_retries
 
       containers {

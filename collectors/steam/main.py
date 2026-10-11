@@ -29,7 +29,14 @@ from typing import Any
 
 import requests
 
-from collectors.common import build_record, hash_author, resolve_event, write_batch
+from collectors.common import (
+    Event,
+    build_record,
+    hash_author,
+    load_events,
+    resolve_event,
+    write_batch,
+)
 from collectors.common.retry import retry_transient
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -41,10 +48,17 @@ REVIEWS_URL = "https://store.steampowered.com/appreviews/{appid}"
 PAGE_SIZE = 100
 # Records per GCS object, as in the YouTube collector.
 BATCH_SIZE = 500
-# Stops a cursor that never terminates from walking the whole catalogue.
-# 100 reviews per page, so this caps one run at 50,000 reviews.
-MAX_PAGES = 500
-DEFAULT_PAGE_SLEEP_SECONDS = 1.0
+# Safety cap on one run. 100 reviews per page, and the studied release has
+# ~280,000 reviews, so a full history walk needs ~2,800 pages — see the
+# README on why a historical window cannot be fetched directly.
+DEFAULT_MAX_PAGES = 3000
+DEFAULT_PAGE_SLEEP_SECONDS = 0.5
+# EVENT_ID value that turns on per-record tagging.
+AUTO_EVENT_ID = "auto"
+# Records whose date falls near no event land here. The raw archive layout
+# allows it: {source}/{event_id_or_general}/...
+GENERAL_EVENT_ID = "general"
+DEFAULT_EVENT_WINDOW_DAYS = 3.0
 # Identifies the client honestly, as the ADR requires.
 USER_AGENT = (
     "pop-vibe-check/1.0 (engineering thesis; "
@@ -64,6 +78,9 @@ class RunConfig:
         window_to: Exclusive end of the collection window (UTC).
         appid: Steam application id to collect reviews for.
         page_sleep_seconds: Pause between pages.
+        max_pages: Safety cap on pages fetched in one run.
+        event_window_days: Half-width, in days, of the window around each
+            lifecycle event used when ``event_id`` is ``auto``.
     """
 
     target_bucket: str
@@ -73,6 +90,13 @@ class RunConfig:
     window_to: datetime
     appid: str
     page_sleep_seconds: float
+    max_pages: int
+    event_window_days: float
+
+    @property
+    def auto_tagging(self) -> bool:
+        """Whether each record is tagged by its own date rather than per run."""
+        return self.event_id == AUTO_EVENT_ID
 
 
 def _require_env(name: str) -> str:
@@ -108,6 +132,28 @@ def _parse_iso_utc(value: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
+def _float_env(name: str, default: float) -> float:
+    """Read a numeric environment variable with a default.
+
+    Args:
+        name: Environment variable name.
+        default: Value used when the variable is unset or empty.
+
+    Returns:
+        The parsed number.
+
+    Raises:
+        ValueError: If the value is set but not numeric.
+    """
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a number, got '{raw}'.") from exc
+
+
 def load_config() -> RunConfig:
     """Build the run configuration from environment variables.
 
@@ -117,15 +163,15 @@ def load_config() -> RunConfig:
     Raises:
         ValueError: If a required variable is missing or malformed.
     """
-    sleep_raw = os.environ.get("STEAM_PAGE_SLEEP_SECONDS", "").strip()
-    try:
-        page_sleep = float(sleep_raw) if sleep_raw else DEFAULT_PAGE_SLEEP_SECONDS
-    except ValueError as exc:
-        raise ValueError(
-            f"STEAM_PAGE_SLEEP_SECONDS must be a number, got '{sleep_raw}'."
-        ) from exc
+    page_sleep = _float_env("STEAM_PAGE_SLEEP_SECONDS", DEFAULT_PAGE_SLEEP_SECONDS)
     if page_sleep < 0:
         raise ValueError("STEAM_PAGE_SLEEP_SECONDS must not be negative.")
+    max_pages = int(_float_env("STEAM_MAX_PAGES", DEFAULT_MAX_PAGES))
+    if max_pages <= 0:
+        raise ValueError("STEAM_MAX_PAGES must be positive.")
+    event_window_days = _float_env("EVENT_WINDOW_DAYS", DEFAULT_EVENT_WINDOW_DAYS)
+    if event_window_days <= 0:
+        raise ValueError("EVENT_WINDOW_DAYS must be positive.")
 
     return RunConfig(
         target_bucket=_require_env("TARGET_BUCKET"),
@@ -135,6 +181,8 @@ def load_config() -> RunConfig:
         window_to=_parse_iso_utc(_require_env("WINDOW_TO")),
         appid=_require_env("STEAM_APPID"),
         page_sleep_seconds=page_sleep,
+        max_pages=max_pages,
+        event_window_days=event_window_days,
     )
 
 
@@ -185,7 +233,46 @@ def fetch_page(
     return payload
 
 
-def review_record(review: dict[str, Any], config: RunConfig) -> dict[str, Any]:
+def event_tag_for(
+    created: datetime,
+    events: dict[str, Event],
+    window_days: float,
+) -> str:
+    """Return the lifecycle event a review belongs to, by its own date.
+
+    Steam's endpoint can only be read newest-first, so a historical window
+    is reached by walking back through everything newer — ~2,800 pages for
+    this release. Doing that once per event is absurd; one walk tags each
+    review by its own date instead.
+
+    Args:
+        created: The review's creation time (UTC).
+        events: Configured events, keyed by id.
+        window_days: Half-width of the window around each event date.
+
+    Returns:
+        The id of the nearest event within the window, or
+        :data:`GENERAL_EVENT_ID` when the review falls near none. Ties go to
+        the earlier event date, then to the smaller id, so tagging is
+        deterministic across runs.
+    """
+    best: tuple[float, str, str] | None = None
+    for event in events.values():
+        event_day = datetime.fromisoformat(f"{event.date_utc}T00:00:00+00:00")
+        distance_days = abs((created - event_day).total_seconds()) / 86400.0
+        if distance_days > window_days:
+            continue
+        candidate = (distance_days, event.date_utc, event.id)
+        if best is None or candidate < best:
+            best = candidate
+    return best[2] if best is not None else GENERAL_EVENT_ID
+
+
+def review_record(
+    review: dict[str, Any],
+    config: RunConfig,
+    event_tag: str | None = None,
+) -> dict[str, Any]:
     """Map one Steam review onto the shared collector record.
 
     The author's ``steamid`` is hashed here and nothing else about them is
@@ -197,6 +284,8 @@ def review_record(review: dict[str, Any], config: RunConfig) -> dict[str, Any]:
     Args:
         review: One element of the endpoint's ``reviews`` array.
         config: The active run configuration.
+        event_tag: Event id to tag this record with. Defaults to the run's
+            ``EVENT_ID``, which is what a narrow single-event run wants.
 
     Returns:
         A collector record dict.
@@ -209,7 +298,7 @@ def review_record(review: dict[str, Any], config: RunConfig) -> dict[str, Any]:
         text=review.get("review") or "",
         score=int(review.get("votes_up", 0)),
         context_id=config.appid,
-        event_tag=config.event_id,
+        event_tag=event_tag or config.event_id,
         created_utc_epoch=float(review["timestamp_created"]),
         # Reviews are flat: there are no replies to collect.
         parent_id=None,
@@ -227,30 +316,48 @@ def collect(config: RunConfig, session: requests.Session | None = None) -> int:
     Returns:
         The total number of records written.
     """
-    resolve_event(config.event_id)  # Fail loudly on an unknown event id.
+    events: dict[str, Event] = {}
+    if config.auto_tagging:
+        events = load_events()
+        logger.info(
+            "Auto-tagging against %d events, +/- %.1f days.",
+            len(events),
+            config.event_window_days,
+        )
+    else:
+        resolve_event(config.event_id)  # Fail loudly on an unknown event id.
 
     owned_session = session is None
     http = session or requests.Session()
     http.headers.setdefault("User-Agent", USER_AGENT)
 
-    buffer: list[dict[str, Any]] = []
+    # One buffer per event tag: a page can straddle two events, and each
+    # tag is its own prefix in the raw archive.
+    buffers: dict[str, list[dict[str, Any]]] = {}
+    buffered = 0
     total_written = 0
 
-    def flush() -> None:
-        nonlocal total_written
-        if not buffer:
-            return
-        uri = write_batch(buffer, SOURCE, config.event_id, bucket=config.target_bucket)
-        logger.info("Wrote %d records to %s", len(buffer), uri)
-        total_written += len(buffer)
-        buffer.clear()
+    def flush(tag: str | None = None) -> None:
+        nonlocal total_written, buffered
+        tags = [tag] if tag is not None else list(buffers)
+        for one in tags:
+            records = buffers.get(one) or []
+            if not records:
+                continue
+            uri = write_batch(records, SOURCE, one, bucket=config.target_bucket)
+            logger.info("Wrote %d records to %s", len(records), uri)
+            total_written += len(records)
+            buffered -= len(records)
+            records.clear()
 
     try:
         cursor = "*"
         seen_cursors: set[str] = set()
         reached_window_start = False
+        pages_read = 0
 
-        for page in range(1, MAX_PAGES + 1):
+        for page in range(1, config.max_pages + 1):
+            pages_read = page
             payload = fetch_page(config.appid, cursor, http)
             reviews = payload.get("reviews") or []
             if not reviews:
@@ -267,9 +374,17 @@ def collect(config: RunConfig, session: requests.Session | None = None) -> int:
                     break
                 if created >= config.window_to:
                     continue
-                buffer.append(review_record(review, config))
-                if len(buffer) >= BATCH_SIZE:
-                    flush()
+                tag = (
+                    event_tag_for(created, events, config.event_window_days)
+                    if config.auto_tagging
+                    else config.event_id
+                )
+                buffers.setdefault(tag, []).append(
+                    review_record(review, config, event_tag=tag)
+                )
+                buffered += 1
+                if len(buffers[tag]) >= BATCH_SIZE:
+                    flush(tag)
 
             if reached_window_start:
                 logger.info("Reached the start of the window on page %d.", page)
@@ -282,14 +397,27 @@ def collect(config: RunConfig, session: requests.Session | None = None) -> int:
             seen_cursors.add(next_cursor)
             cursor = next_cursor
 
-            if page == MAX_PAGES:
-                logger.warning(
-                    "Hit the %d-page cap before reaching the window start; "
-                    "narrow the window or raise MAX_PAGES.",
-                    MAX_PAGES,
+            # Progress matters here: a full history walk is thousands of
+            # pages, and a silent job for half an hour is indistinguishable
+            # from a stuck one.
+            if page % 100 == 0:
+                logger.info(
+                    "Page %d: %d written, %d buffered, oldest read %s.",
+                    page,
+                    total_written,
+                    buffered,
+                    created.isoformat(),
                 )
             if config.page_sleep_seconds:
                 time.sleep(config.page_sleep_seconds)
+
+        if not reached_window_start and pages_read >= config.max_pages:
+            logger.warning(
+                "Hit the %d-page cap before reaching the start of the window. "
+                "Raise STEAM_MAX_PAGES or narrow the window; the records "
+                "written so far are complete from the newest end down.",
+                config.max_pages,
+            )
 
         flush()
     finally:

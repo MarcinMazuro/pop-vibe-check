@@ -12,10 +12,12 @@ from datetime import UTC, datetime
 
 import pytest
 
+from collectors.common.events_config import Event
 from collectors.steam.main import (
-    MAX_PAGES,
+    GENERAL_EVENT_ID,
     RunConfig,
     collect,
+    event_tag_for,
     review_record,
 )
 
@@ -29,6 +31,8 @@ def _config(**overrides) -> RunConfig:
         window_to=datetime(2025, 5, 1, tzinfo=UTC),
         appid="1903340",
         page_sleep_seconds=0.0,
+        max_pages=50,
+        event_window_days=3.0,
     )
     base.update(overrides)
     return RunConfig(**base)
@@ -153,10 +157,9 @@ def test_pagination_stops_when_the_cursor_repeats(written):
 
     collect(_config(), session=session)
 
-    # Second page would carry the same cursor, so the run stops instead of
-    # fetching the same page until MAX_PAGES.
+    # The second page carries the same cursor, so the run stops instead of
+    # fetching that page until the cap.
     assert session.calls == 2
-    assert session.calls < MAX_PAGES
 
 
 def test_empty_page_ends_the_run(written):
@@ -173,3 +176,72 @@ def test_endpoint_failure_is_not_silently_ignored(written):
 
     with pytest.raises(RuntimeError, match="reported failure"):
         collect(_config(), session=session)
+
+
+# --- auto tagging -----------------------------------------------------------
+
+_EVENTS = {
+    "launch": Event("launch", "Worldwide launch", "launch", "2025-04-24"),
+    "ai_textures_controversy": Event(
+        "ai_textures_controversy", "AI textures", "controversy", "2025-04-26"
+    ),
+    "tga_2025_sweep": Event("tga_2025_sweep", "TGA sweep", "award", "2025-12-11"),
+}
+
+
+@pytest.mark.parametrize(
+    "created, expected",
+    [
+        (datetime(2025, 4, 24, 12, tzinfo=UTC), "launch"),
+        # Nearer to the controversy than to launch.
+        (datetime(2025, 4, 26, 6, tzinfo=UTC), "ai_textures_controversy"),
+        (datetime(2025, 12, 11, tzinfo=UTC), "tga_2025_sweep"),
+        # Three weeks after launch: inside no window.
+        (datetime(2025, 5, 15, tzinfo=UTC), GENERAL_EVENT_ID),
+    ],
+)
+def test_auto_tag_picks_the_nearest_event(created, expected):
+    assert event_tag_for(created, _EVENTS, window_days=3.0) == expected
+
+
+def test_auto_tag_is_deterministic_on_ties():
+    # Exactly between launch (04-24) and the controversy (04-26): the tie
+    # goes to the earlier event date, every run.
+    midpoint = datetime(2025, 4, 25, tzinfo=UTC)
+
+    first = event_tag_for(midpoint, _EVENTS, window_days=3.0)
+    second = event_tag_for(midpoint, dict(reversed(list(_EVENTS.items()))), 3.0)
+
+    assert first == second == "launch"
+
+
+def test_auto_tagging_writes_one_batch_per_event(written, monkeypatch):
+    monkeypatch.setattr("collectors.steam.main.load_events", lambda: _EVENTS)
+    session = _FakeSession(
+        [
+            {
+                "success": 1,
+                "reviews": [
+                    _review("tga", datetime(2025, 12, 11, tzinfo=UTC)),
+                    _review("quiet", datetime(2025, 5, 15, tzinfo=UTC)),
+                    _review("launch-day", datetime(2025, 4, 24, 9, tzinfo=UTC)),
+                ],
+                "cursor": "end",
+            },
+            # The real endpoint ends the walk with an empty page.
+            {"success": 1, "reviews": [], "cursor": "end"},
+        ]
+    )
+    config = _config(
+        event_id="auto",
+        window_from=datetime(2025, 4, 1, tzinfo=UTC),
+        window_to=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+    total = collect(config, session=session)
+
+    assert total == 3
+    by_tag = {record["event_tag"] for batch in written for record in batch}
+    assert by_tag == {"tga_2025_sweep", GENERAL_EVENT_ID, "launch"}
+    # One object per tag, not one mixed object.
+    assert len(written) == 3

@@ -151,6 +151,12 @@ variable "steam_image_uri" {
   default     = "gcr.io/google-containers/pause"
 }
 
+variable "steam_task_timeout" {
+  description = "Hard timeout per Steam collector execution. Longer than the other collectors: Steam can only be read newest-first, so a full history walk is thousands of pages (~30 minutes for ~280,000 reviews, and growing)."
+  type        = string
+  default     = "7200s"
+}
+
 variable "steam_appid" {
   description = "Steam application id the collector reads reviews for. Default 1903340 is Clair Obscur: Expedition 33."
   type        = string
