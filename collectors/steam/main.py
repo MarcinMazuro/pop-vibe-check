@@ -20,6 +20,7 @@ in this directory).
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -28,6 +29,13 @@ from datetime import UTC, datetime
 from typing import Any
 
 import requests
+from google.cloud import storage
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from collectors.common import (
     Event,
@@ -37,7 +45,6 @@ from collectors.common import (
     resolve_event,
     write_batch,
 )
-from collectors.common.retry import retry_transient
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("collectors.steam")
@@ -52,7 +59,19 @@ BATCH_SIZE = 500
 # ~280,000 reviews, so a full history walk needs ~2,800 pages — see the
 # README on why a historical window cannot be fetched directly.
 DEFAULT_MAX_PAGES = 3000
-DEFAULT_PAGE_SLEEP_SECONDS = 0.5
+# Steam rate-limits the store endpoint hard: ~30 requests a minute is
+# tolerated, 120 earns a 429 within a few minutes. Measured the slow way.
+DEFAULT_PAGE_SLEEP_SECONDS = 2.0
+# After a 429 the pace halves itself for the rest of the run, up to here.
+MAX_PAGE_SLEEP_SECONDS = 30.0
+# Retries for one page. A 429 cooldown can last minutes, so these waits are
+# much longer than the shared retry helper's.
+RATE_LIMIT_ATTEMPTS = 8
+RATE_LIMIT_MAX_WAIT_SECONDS = 300.0
+# How often the cursor is checkpointed to GCS. A full walk is thousands of
+# pages; losing the position to a 429 storm or a task restart would mean
+# starting at today again.
+CHECKPOINT_EVERY_PAGES = 25
 # EVENT_ID value that turns on per-record tagging.
 AUTO_EVENT_ID = "auto"
 # Records whose date falls near no event land here. The raw archive layout
@@ -79,6 +98,8 @@ class RunConfig:
         appid: Steam application id to collect reviews for.
         page_sleep_seconds: Pause between pages.
         max_pages: Safety cap on pages fetched in one run.
+        resume: Whether to continue from a stored cursor when one matches
+            this appid and window.
         event_window_days: Half-width, in days, of the window around each
             lifecycle event used when ``event_id`` is ``auto``.
     """
@@ -92,6 +113,7 @@ class RunConfig:
     page_sleep_seconds: float
     max_pages: int
     event_window_days: float
+    resume: bool
 
     @property
     def auto_tagging(self) -> bool:
@@ -172,6 +194,9 @@ def load_config() -> RunConfig:
     event_window_days = _float_env("EVENT_WINDOW_DAYS", DEFAULT_EVENT_WINDOW_DAYS)
     if event_window_days <= 0:
         raise ValueError("EVENT_WINDOW_DAYS must be positive.")
+    resume_raw = (os.environ.get("STEAM_RESUME") or "true").strip().lower()
+    if resume_raw not in {"true", "false"}:
+        raise ValueError(f"STEAM_RESUME must be true or false, got '{resume_raw}'.")
 
     return RunConfig(
         target_bucket=_require_env("TARGET_BUCKET"),
@@ -183,14 +208,126 @@ def load_config() -> RunConfig:
         page_sleep_seconds=page_sleep,
         max_pages=max_pages,
         event_window_days=event_window_days,
+        resume=resume_raw == "true",
     )
 
 
-@retry_transient()
+def _status_code(exc: BaseException) -> int | None:
+    """Best-effort HTTP status code from a requests exception.
+
+    Args:
+        exc: The raised exception.
+
+    Returns:
+        The status code, or ``None`` if there is none to read.
+    """
+    response = getattr(exc, "response", None)
+    code = getattr(response, "status_code", None)
+    return code if isinstance(code, int) else None
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    """Return whether a page fetch should be retried.
+
+    Args:
+        exc: The raised exception.
+
+    Returns:
+        ``True`` for 429 and 5xx, and for connection-level failures.
+    """
+    code = _status_code(exc)
+    if code is not None:
+        return code == 429 or 500 <= code < 600
+    return isinstance(exc, requests.exceptions.RequestException)
+
+
+def _retry_after_seconds(exc: BaseException) -> float | None:
+    """Return the server's requested cooldown, when it sends one.
+
+    Args:
+        exc: The raised exception.
+
+    Returns:
+        Seconds from a ``Retry-After`` header, or ``None``.
+    """
+    response = getattr(exc, "response", None)
+    header = getattr(response, "headers", {}) or {}
+    raw = header.get("Retry-After")
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _rate_limit_wait(retry_state: Any) -> float:
+    """Wait between page attempts: the server's cooldown, else backoff.
+
+    Args:
+        retry_state: Tenacity's retry state.
+
+    Returns:
+        Seconds to sleep before the next attempt.
+    """
+    backoff = wait_exponential(
+        multiplier=5.0, min=10.0, max=RATE_LIMIT_MAX_WAIT_SECONDS
+    )(retry_state)
+    outcome = retry_state.outcome
+    exc = outcome.exception() if outcome is not None else None
+    if exc is not None:
+        requested = _retry_after_seconds(exc)
+        if requested is not None:
+            return min(max(requested, backoff), RATE_LIMIT_MAX_WAIT_SECONDS)
+    return float(backoff)
+
+
+class Pacer:
+    """Inter-page pacing that slows itself down after a rate limit.
+
+    Steam does not publish a rate limit, so the starting pace is a guess.
+    Rather than fail a thousand-page walk on that guess, every 429 halves
+    the pace for the rest of the run.
+    """
+
+    def __init__(self, sleep_seconds: float) -> None:
+        """Start at the configured pace.
+
+        Args:
+            sleep_seconds: Initial pause between pages.
+        """
+        self.sleep_seconds = sleep_seconds
+        self.rate_limits = 0
+
+    def note_rate_limit(self) -> None:
+        """Record a 429 and back the pace off."""
+        self.rate_limits += 1
+        self.sleep_seconds = min(
+            MAX_PAGE_SLEEP_SECONDS, max(1.0, self.sleep_seconds) * 2
+        )
+        logger.warning(
+            "Rate limited (%d so far); pacing pages %.1fs apart from now on.",
+            self.rate_limits,
+            self.sleep_seconds,
+        )
+
+    def wait(self) -> None:
+        """Sleep the current inter-page pause."""
+        if self.sleep_seconds:
+            time.sleep(self.sleep_seconds)
+
+
+@retry(
+    retry=retry_if_exception(_is_retryable),
+    wait=_rate_limit_wait,
+    stop=stop_after_attempt(RATE_LIMIT_ATTEMPTS),
+    reraise=True,
+)
 def fetch_page(
     appid: str,
     cursor: str,
     session: requests.Session,
+    pacer: Pacer | None = None,
 ) -> dict[str, Any]:
     """Fetch one page of reviews.
 
@@ -203,6 +340,7 @@ def fetch_page(
         appid: Steam application id.
         cursor: Pagination cursor; ``*`` for the first page.
         session: HTTP session carrying the user agent.
+        pacer: Told about rate limits so it can slow the walk down.
 
     Returns:
         The decoded JSON body.
@@ -223,6 +361,8 @@ def fetch_page(
         },
         timeout=30,
     )
+    if response.status_code == 429 and pacer is not None:
+        pacer.note_rate_limit()
     response.raise_for_status()
     payload: dict[str, Any] = response.json()
     if payload.get("success") != 1:
@@ -306,12 +446,126 @@ def review_record(
     )
 
 
-def collect(config: RunConfig, session: requests.Session | None = None) -> int:
+class Checkpoint:
+    """The walk's position, kept in GCS so a run can be resumed.
+
+    A full history walk is thousands of pages and the endpoint rate-limits
+    hard, so an interrupted run is the normal case, not the exception.
+    Without a checkpoint every interruption means starting at today again —
+    and Cloud Run's own task retry would do exactly that.
+
+    The checkpoint is keyed by appid and window, so resuming a *different*
+    window never picks up a stale cursor.
+    """
+
+    def __init__(
+        self,
+        bucket: str,
+        appid: str,
+        window_from: datetime,
+        window_to: datetime,
+        client: storage.Client | None = None,
+    ) -> None:
+        """Address the checkpoint object for one run shape.
+
+        Args:
+            bucket: Raw archive bucket.
+            appid: Steam application id.
+            window_from: Inclusive window start.
+            window_to: Exclusive window end.
+            client: Optional pre-built storage client (tests).
+        """
+        self._bucket_name = bucket
+        self._path = f"{SOURCE}/_checkpoints/{appid}.json"
+        self._client = client
+        self.key = {
+            "appid": appid,
+            "window_from": window_from.isoformat(),
+            "window_to": window_to.isoformat(),
+        }
+
+    def _blob(self) -> Any:
+        client = self._client or storage.Client()
+        return client.bucket(self._bucket_name).blob(self._path)
+
+    @property
+    def uri(self) -> str:
+        """The ``gs://`` URI of the checkpoint object."""
+        return f"gs://{self._bucket_name}/{self._path}"
+
+    def read_cursor(self) -> str | None:
+        """Return the stored cursor, if it belongs to this run shape.
+
+        Returns:
+            The cursor to resume from, or ``None`` when there is no usable
+            checkpoint. A checkpoint for another window, or an unreadable
+            one, is ignored rather than fatal: restarting the walk is
+            always correct, only slower.
+        """
+        try:
+            raw = self._blob().download_as_bytes()
+        except Exception as exc:  # noqa: BLE001 - absent or unreadable
+            logger.info("No usable checkpoint at %s (%s).", self.uri, exc)
+            return None
+        try:
+            stored = json.loads(raw)
+        except ValueError:
+            logger.warning("Checkpoint at %s is not valid JSON; ignoring.", self.uri)
+            return None
+        if {k: stored.get(k) for k in self.key} != self.key:
+            logger.info(
+                "Checkpoint at %s is for a different run (%s); ignoring.",
+                self.uri,
+                {k: stored.get(k) for k in self.key},
+            )
+            return None
+        cursor = stored.get("cursor")
+        return str(cursor) if cursor else None
+
+    def save(self, cursor: str, pages_read: int, written: int) -> None:
+        """Store the walk's position.
+
+        Args:
+            cursor: Cursor for the *next* page to fetch.
+            pages_read: Pages fetched so far, for the log.
+            written: Records written so far, for the log.
+        """
+        payload = {
+            **self.key,
+            "cursor": cursor,
+            "pages_read": pages_read,
+            "written": written,
+            "updated_at": datetime.now(UTC).isoformat(),
+        }
+        try:
+            self._blob().upload_from_string(
+                json.dumps(payload), content_type="application/json"
+            )
+        except Exception as exc:  # noqa: BLE001
+            # A lost checkpoint costs time on the next run, not data.
+            logger.warning("Could not write checkpoint %s: %s", self.uri, exc)
+
+    def clear(self) -> None:
+        """Delete the checkpoint after a completed walk."""
+        try:
+            self._blob().delete()
+        except Exception as exc:  # noqa: BLE001
+            logger.info("Could not delete checkpoint %s: %s", self.uri, exc)
+
+
+def collect(
+    config: RunConfig,
+    session: requests.Session | None = None,
+    checkpoint: Checkpoint | None = None,
+) -> int:
     """Run the collection and write batches to GCS.
 
     Args:
         config: The active run configuration.
         session: Optional injected HTTP session (tests).
+        checkpoint: Optional injected checkpoint store (tests). When
+            omitted and ``config.resume`` is on, one is built against the
+            target bucket.
 
     Returns:
         The total number of records written.
@@ -350,15 +604,28 @@ def collect(config: RunConfig, session: requests.Session | None = None) -> int:
             buffered -= len(records)
             records.clear()
 
+    pacer = Pacer(config.page_sleep_seconds)
+
+    store = checkpoint
+    if store is None and config.resume:
+        store = Checkpoint(
+            config.target_bucket, config.appid, config.window_from, config.window_to
+        )
+
     try:
         cursor = "*"
+        if store is not None:
+            resumed = store.read_cursor()
+            if resumed:
+                cursor = resumed
+                logger.info("Resuming the walk from the checkpoint at %s.", store.uri)
         seen_cursors: set[str] = set()
         reached_window_start = False
         pages_read = 0
 
         for page in range(1, config.max_pages + 1):
             pages_read = page
-            payload = fetch_page(config.appid, cursor, http)
+            payload = fetch_page(config.appid, cursor, http, pacer)
             reviews = payload.get("reviews") or []
             if not reviews:
                 logger.info("Page %d came back empty; collection complete.", page)
@@ -397,6 +664,12 @@ def collect(config: RunConfig, session: requests.Session | None = None) -> int:
             seen_cursors.add(next_cursor)
             cursor = next_cursor
 
+            # Checkpoint only what is already in GCS: flush first, so a
+            # resumed run never skips records the cursor has passed.
+            if store is not None and page % CHECKPOINT_EVERY_PAGES == 0:
+                flush()
+                store.save(cursor, pages_read=page, written=total_written)
+
             # Progress matters here: a full history walk is thousands of
             # pages, and a silent job for half an hour is indistinguishable
             # from a stuck one.
@@ -408,8 +681,7 @@ def collect(config: RunConfig, session: requests.Session | None = None) -> int:
                     buffered,
                     created.isoformat(),
                 )
-            if config.page_sleep_seconds:
-                time.sleep(config.page_sleep_seconds)
+            pacer.wait()
 
         if not reached_window_start and pages_read >= config.max_pages:
             logger.warning(
@@ -420,6 +692,13 @@ def collect(config: RunConfig, session: requests.Session | None = None) -> int:
             )
 
         flush()
+
+        # The walk finished: the next run should start at today, not where
+        # this one ended.
+        if store is not None and (
+            reached_window_start or pages_read < config.max_pages
+        ):
+            store.clear()
     finally:
         if owned_session:
             http.close()

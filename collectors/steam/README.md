@@ -43,6 +43,26 @@ short.
 Either way the collector skips reviews newer than `WINDOW_TO`, keeps what
 falls inside, and **stops as soon as it reads past `WINDOW_FROM`**.
 
+## Rate limits and resuming
+
+Steam rate-limits this endpoint and does not document the limit. Measured:
+two requests a second earns a 429 within a hundred pages; roughly thirty a
+minute is tolerated, which is the default pace (`STEAM_PAGE_SLEEP_SECONDS`,
+2s). A page is retried up to eight times with waits up to five minutes,
+honouring `Retry-After` when Steam sends one, and **every 429 doubles the
+inter-page pause for the rest of the run** — a wrong guess at the pace
+should slow a walk down, not end it.
+
+Because a full walk is thousands of pages, the cursor is **checkpointed to
+`gs://<bucket>/steam/_checkpoints/<appid>.json` every 25 pages**, after the
+pending records are flushed, so a resumed run never skips what the cursor
+has passed. An interrupted run — a 429 storm, a task restart, a timeout —
+continues where it stopped instead of starting at today again. The
+checkpoint is keyed by appid and window, so resuming a different window
+ignores it, and a completed walk deletes it.
+
+Set `STEAM_RESUME=false` to force a walk from the newest review.
+
 Pagination stops on an empty page, a missing cursor, or a cursor that
 repeats — the endpoint hands back the same cursor at the end of the list
 rather than signalling completion.
@@ -89,6 +109,7 @@ value anyway.
 | `STEAM_PAGE_SLEEP_SECONDS` | no | `0.5` | Pause between pages |
 | `STEAM_MAX_PAGES` | no | `3000` | Safety cap on pages per run (~300,000 reviews) |
 | `EVENT_WINDOW_DAYS` | no | `3` | Half-width of each event window, for `EVENT_ID=auto` |
+| `STEAM_RESUME` | no | `true` | Continue from the stored cursor when one matches this appid and window |
 
 `TARGET_BUCKET`, `STEAM_APPID` and the salt are set on the Cloud Run Job by
 Terraform; the window and event are per-execution.
