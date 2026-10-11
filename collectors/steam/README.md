@@ -18,17 +18,30 @@ just `requests`.
 
 It is also undocumented, so the collector is deliberately polite: one page
 at a time (100 reviews, the endpoint's maximum), a pause between pages
-(`STEAM_PAGE_SLEEP_SECONDS`, default 1s), an honest `User-Agent` naming the
-project, and a hard 500-page cap per run.
+(`STEAM_PAGE_SLEEP_SECONDS`, default 0.5s), an honest `User-Agent` naming
+the project, and a page cap per run (`STEAM_MAX_PAGES`).
 
-## Windowing
+## Windowing, and why `EVENT_ID=auto` exists
 
 The request sets `filter=recent`, which returns reviews in **descending
-`timestamp_created`** order. That is what makes a windowed run possible:
-the collector skips anything newer than `WINDOW_TO`, keeps what falls
-inside, and **stops as soon as it reads past `WINDOW_FROM`** instead of
-walking the whole review history. The endpoint's default ordering
-(`filter=all`, by helpfulness) would have to read everything.
+`timestamp_created`** order — the only ordering a window can be read
+against. There is no "reviews since date" parameter: a run always starts at
+today and walks backwards.
+
+For this release that is ~280,000 reviews, about 2,800 pages. Collecting
+each lifecycle event separately would re-walk those pages once per event,
+so historical collection is **one walk** with `EVENT_ID=auto`: every review
+is tagged by its own date, the nearest event within `EVENT_WINDOW_DAYS`
+(default 3) wins, and a review near no event is tagged `general` — a prefix
+the raw archive layout already allows. Ties go to the earlier event date,
+so two runs tag identically.
+
+`EVENT_ID=<id>` still works and tags the whole run with that id. That is
+the right mode for topping up a recent window, where the walk back is
+short.
+
+Either way the collector skips reviews newer than `WINDOW_TO`, keeps what
+falls inside, and **stops as soon as it reads past `WINDOW_FROM`**.
 
 Pagination stops on an empty page, a missing cursor, or a cursor that
 repeats — the endpoint hands back the same cursor at the end of the list
@@ -69,21 +82,34 @@ value anyway.
 |---|---|---|---|
 | `TARGET_BUCKET` | yes | — | Raw archive bucket |
 | `AUTHOR_HASH_SALT` | yes | — | Salt, from Secret Manager |
-| `EVENT_ID` | yes | — | Lifecycle event id; must exist in `events.yaml` |
+| `EVENT_ID` | yes | — | Lifecycle event id, or `auto` to tag each review by its own date |
 | `WINDOW_FROM` | yes | — | Inclusive ISO 8601 start |
 | `WINDOW_TO` | yes | — | Exclusive ISO 8601 end |
 | `STEAM_APPID` | yes | — | Application id; `1903340` is Clair Obscur: Expedition 33 |
-| `STEAM_PAGE_SLEEP_SECONDS` | no | `1.0` | Pause between pages |
+| `STEAM_PAGE_SLEEP_SECONDS` | no | `0.5` | Pause between pages |
+| `STEAM_MAX_PAGES` | no | `3000` | Safety cap on pages per run (~300,000 reviews) |
+| `EVENT_WINDOW_DAYS` | no | `3` | Half-width of each event window, for `EVENT_ID=auto` |
 
 `TARGET_BUCKET`, `STEAM_APPID` and the salt are set on the Cloud Run Job by
 Terraform; the window and event are per-execution.
 
 ## Run it
 
+Full history, tagged per event — the run that matters, ~30 minutes:
+
 ```bash
 gcloud run jobs execute co-steam-collector-dev \
   --region=europe-central2 \
-  --update-env-vars="EVENT_ID=launch,WINDOW_FROM=2025-04-24T00:00:00Z,WINDOW_TO=2025-05-01T00:00:00Z" \
+  --update-env-vars="EVENT_ID=auto,WINDOW_FROM=2025-04-24T00:00:00Z,WINDOW_TO=2026-12-31T00:00:00Z" \
+  --wait
+```
+
+A single recent event, where the walk back is short:
+
+```bash
+gcloud run jobs execute co-steam-collector-dev \
+  --region=europe-central2 \
+  --update-env-vars="EVENT_ID=anniversary_update_2026,WINDOW_FROM=2026-04-22T00:00:00Z,WINDOW_TO=2026-04-30T00:00:00Z" \
   --wait
 ```
 

@@ -47,6 +47,7 @@ Execution-time params are intentionally not in the template — they change ever
 | `memory` | string | no | `2Gi` | Per-task memory limit |
 | `cpu` | string | no | `1` | Per-task CPU limit |
 | `task_timeout` | string | no | `3600s` | Hard timeout per collector task execution |
+| `steam_task_timeout` | string | no | `7200s` | Hard timeout for the Steam collector, whose full history walk is thousands of pages |
 | `publisher_task_timeout` | string | no | `21600s` | Hard timeout per publisher replay execution |
 | `max_retries` | number | no | `3` | Automatic retries per collector task on failure (publisher is fixed at 0) |
 
