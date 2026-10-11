@@ -200,6 +200,13 @@ module "budgets" {
 module "cloud_run_jobs" {
   source = "../../modules/cloud_run_jobs"
 
+  # Ordering, not data: a job's secret_key_ref is validated by Cloud Run at
+  # create time, so the workload SA must already hold secretAccessor on the
+  # secret. Passing secret_names carries no dependency on the accessor
+  # bindings, and without this the Steam job's creation lost that race
+  # ("Permission denied on secret ... for Revision service account").
+  depends_on = [module.secrets]
+
   project_id  = var.project_id
   name_prefix = var.name_prefix
   env         = local.env
