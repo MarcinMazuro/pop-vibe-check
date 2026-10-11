@@ -279,17 +279,24 @@ sentiment differences are statistically meaningful rather than anecdotal.
 
 **C1–C3 as written on 2026-09-05 are out of date** (XLM-R, weights baked
 into the Flex Template, `terraform/modules/mlflow`). What shipped is
-English DistilBERT on the Vertex Agent Platform (Workbench / Model
-Registry / Endpoint). Inference is Endpoint REST, not image-baked
-weights. Status as of 2026-09-10:
-[docs/phase-1-nlp-vertex-dev.md](phase-1-nlp-vertex-dev.md).
+DistilBERT v1, then multilingual XLM-R v2 and v2.1, on the Vertex Agent
+Platform (Workbench / Model Registry / Endpoint). Inference is Endpoint
+REST, not image-baked weights.
 
-**C1 — XLM-RoBERTa v2**, behind the same interface as Marcin's stub.
+> **Status 2026-10-11.** XLM-R v2.1 is the selected model and **has
+> classified all 12,254 rows in `events`** (Vertex replay of 2026-09-21).
+> The Endpoint has since been deleted. What remains for Track C is the
+> Steam weak-label evaluation and the dashboard. Details:
+> [docs/phase-1-nlp-vertex-dev.md](phase-1-nlp-vertex-dev.md).
+
+**C1 — XLM-RoBERTa v2 → v2.1** (done), behind the same interface as Marcin's stub.
 `xlm-roberta-base`, 3-class (`pos`/`neu`/`neg`). DistilBERT v1 remains
 the trained English baseline; v2 recipe:
 [`docs/phase-1-nlp-multilingual-v2.md`](phase-1-nlp-multilingual-v2.md).
+v2.1 continued fine-tune:
+[`docs/phase-1-nlp-xlmr-v2.1-continued.md`](phase-1-nlp-xlmr-v2.1-continued.md).
 Dataflow `--nlp_model vertex` calls a Vertex Endpoint; `stub` is still the
-default and is what classified the 4228 production rows. Weights are
+pipeline default, but `events` was produced by v2.1 through `vertex`. Weights are
 **not** baked into the Flex Template. Training and Endpoint serving are
 CPU-only (`n2-standard-16` Workbench for v2; `n1-standard-8` replica, no
 accelerator).
@@ -297,16 +304,20 @@ accelerator).
 **C2 — Evaluation.** Unchanged in intent: ~300 gold labels, accuracy and
 F1; Steam `voted_up` as a weak-label set. DistilBERT v1 gold metrics:
 [`docs/phase-1-nlp-evaluation-distilbert-v1.md`](phase-1-nlp-evaluation-distilbert-v1.md).
-Harness in `nlp/eval/`. Time-window / Looker slices wait on the first
-Vertex replay (CPU Endpoint deploy — still **pending**).
+XLM-R v2 / v2.1 gold metrics:
+[`docs/phase-1-nlp-evaluation-xlmr-v2.md`](phase-1-nlp-evaluation-xlmr-v2.md),
+[`docs/phase-1-nlp-xlmr-v2.1-continued.md`](phase-1-nlp-xlmr-v2.1-continued.md).
+Harness in `nlp/eval/`. Gold-set evaluation is done; the Steam
+`voted_up` weak-label evaluation is still **pending** — it needs the
+Steam reviews loaded into staging and replayed through `vertex`.
 
 **C3 — MLflow.** Not Cloud Run + Cloud SQL. Tracking is a file store on
 the Workbench VM; artifacts go to `gs://co-tf-artifacts-dev/nlp/mlruns`.
 Experiment `xlmr-sentiment` (v2) / `distilbert-sentiment` (v1). There is no `terraform/modules/mlflow`.
 
-**C4 — Presentation.** Looker Studio dashboard and the BigQuery
-authorised views it reads through — listed as outstanding in the
-`bigquery` module README.
+**C4 — Presentation.** The BigQuery authorised views are done (dataset
+`co_reporting_dev`, PR #35). The Looker Studio dashboard on top of them
+is outstanding.
 
 ---
 

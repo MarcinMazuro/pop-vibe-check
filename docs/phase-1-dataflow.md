@@ -287,7 +287,11 @@ build did GCS → staging first:
 
 Coverage now runs from `xbox_showcase_reveal` (2024-06) to
 `anniversary_update_2026`, including the TGA sweep and the rescinded
-Indie Game Awards. The per-event sentiment split is still produced by the
-**stub** classifier, so the differences between events describe the
-plumbing, not public opinion; the numbers become meaningful only after a
-replay with `_MODEL=vertex`.
+Indie Game Awards. The per-event sentiment split was then still produced
+by the **stub** classifier, so the differences between events described
+the plumbing, not public opinion.
+
+> **Update 2026-09-21.** The replay with `_MODEL=vertex` has run: all
+> 12,254 rows in `events` are now classified by XLM-R v2.1. Per-event
+> numbers and the run-to-run comparison are in
+> [`phase-1-nlp-vertex-dev.md`](phase-1-nlp-vertex-dev.md#serve-replay-xlm-r-v21-21-sep-2026).

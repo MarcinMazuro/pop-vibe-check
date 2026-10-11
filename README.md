@@ -2,7 +2,7 @@
 
 Streaming sentiment analysis around pop-culture releases, on GCP with an MLOps pipeline. Engineering thesis project at Gdańsk University of Technology, Department of Computer Systems Architecture.
 
-> **Status:** Phase 0 complete; Phase 1 stream simulation **live**. The YouTube collector has produced the dataset (**12,254 comments across 9 lifecycle events**, reveal through the 2026 anniversary update; the first 4228 are described in [docs/phase-0-youtube-first-collection.md](docs/phase-0-youtube-first-collection.md)), the **replay publisher streams it from BigQuery staging to Pub/Sub in chronological order with time compression** (see [docs/phase-1-publisher.md](docs/phase-1-publisher.md)), and the **Dataflow pipeline classifies it into the `events` table** — the same replay run twice produces an identical set of rows (see [docs/phase-1-dataflow.md](docs/phase-1-dataflow.md)). The Reddit collector is written but **Reddit API access was refused**, so Reddit is out of scope and **Steam reviews are the second source** ([ADR 0001](docs/adr/0001-steam-replaces-reddit-as-second-source.md)); the remaining Phase 1 work and its three-way split are planned in [docs/phase-1-plan.md](docs/phase-1-plan.md).
+> **Status:** Phase 0 complete; Phase 1 stream simulation **live**. The YouTube collector has produced the dataset (**12,254 comments across 9 lifecycle events**, reveal through the 2026 anniversary update; the first 4228 are described in [docs/phase-0-youtube-first-collection.md](docs/phase-0-youtube-first-collection.md)), the **replay publisher streams it from BigQuery staging to Pub/Sub in chronological order with time compression** (see [docs/phase-1-publisher.md](docs/phase-1-publisher.md)), and the **Dataflow pipeline classifies it into the `events` table with the real multilingual model (XLM-R v2.1 on a Vertex Endpoint)** ([details](docs/phase-1-nlp-vertex-dev.md)) — the same replay run twice produces an identical set of rows (demonstrated with the stub classifier, see [docs/phase-1-dataflow.md](docs/phase-1-dataflow.md); through the Vertex Endpoint, 3 of 10,811 re-classified ids changed label). The Reddit collector is written but **Reddit API access was refused**, so Reddit is out of scope and **Steam reviews are the second source** ([ADR 0001](docs/adr/0001-steam-replaces-reddit-as-second-source.md)); the remaining Phase 1 work and its three-way split are planned in [docs/phase-1-plan.md](docs/phase-1-plan.md).
 
 ---
 
@@ -102,7 +102,7 @@ Supervisor: mgr inż. Szymon Olewniczak.
 | **Dataflow streaming infra (this PR)** — `dataflow/` module + worker SA, `events` / `events_landing` + promotion MERGE, Dataflow subscription + DLQ topic/sub, dataflow-temp bucket, inter-worker firewall, launch-parameter outputs | ✓ Applied | [`terraform/modules/dataflow/`](terraform/modules/dataflow/) + extensions across `bigquery/`, `pubsub/`, `iam/`, `network/`, `storage/` |
 | Dataflow Beam pipeline + Flex Template | ✓ **Live** — 12,254 records classified end-to-end, reproducibility verified, replays run from CI ([details](docs/phase-1-dataflow.md)) | [`dataflow/`](dataflow/) |
 | NLP stub classifier + registry seam | ✓ Done | [`nlp/`](nlp/) |
-| Real NLP model via MLflow | ✗ Phase 1 (remaining) | Not yet |
+| Real NLP model — XLM-R v2.1 on Vertex (trained on Workbench, tracked in MLflow) | ✓ **Live in `events`** — all 12,254 rows classified 2026-09-21; Endpoint since deleted ([details](docs/phase-1-nlp-vertex-dev.md)) | [`nlp/`](nlp/) |
 | Cloud Build CI/CD — GitHub connection; PR: Python checks, image builds, `terraform plan`; main: image push + deploy by digest, Flex Template specs, approval-gated `terraform apply` | ✓ Applied | [`terraform/modules/cloud_build/`](terraform/modules/cloud_build/) |
 | Monitoring alerts (Dataflow job failure, job left running, replay backlog, dead letters) + one-button replay pipeline (`co-replay-dev`) | ✓ Applied | [`terraform/modules/monitoring/`](terraform/modules/monitoring/), [`dataflow/replay.cloudbuild.yaml`](dataflow/replay.cloudbuild.yaml) |
 
@@ -149,14 +149,17 @@ After collectors produce raw JSONL reliably:
 4. ✓ `dataflow/` module — **this PR** applied the infrastructure: worker `dataflow.worker` grant, launcher `dataflow.admin` + actAs grants, the dataflow-temp bucket, the inter-worker firewall rule, and the launch-parameter outputs PR 3 reads from `terraform output`. The Beam **Flex Template** (image + spec) and any Dataflow job resource are **PR 3** — `terraform apply` never starts a streaming job.
 5. ✓ `cloud_run_jobs/` extension — publisher job (BigQuery → Pub/Sub bridge with time compression), deployed and verified ([docs/phase-1-publisher.md](docs/phase-1-publisher.md))
 6. ✓ `cloud_build/` module — GitHub (2nd gen) connection, per-service triggers, Terraform plan/apply as `pvc-tf-ci-sa` impersonating the runner SA. **Dev applies now go through CI**; see [`terraform/envs/dev/README.md`](terraform/envs/dev/README.md)
-7. Application: ✓ `publisher/`; ✓ `dataflow/` Beam pipeline + Flex Template; ✓ `nlp/` contract, stub and
-   registry seam; remaining: a real model registered through MLflow
+7. Application: ✓ `publisher/`; ✓ `dataflow/` Beam pipeline + Flex Template; ✓ `nlp/` contract, stub,
+   registry seam and the real model (XLM-R v2.1 on a Vertex Endpoint)
 
 **Where to pick up next.** The end-to-end path works: collectors → GCS → BigQuery
 staging → publisher → Pub/Sub → Dataflow → `events`, with the reproducibility
 guarantee demonstrated ([docs/phase-1-dataflow.md](docs/phase-1-dataflow.md)). The
-frontier is now the two tracks that run alongside it — **more data** and a **real NLP
-model** — planned in [docs/phase-1-plan.md](docs/phase-1-plan.md). Images and dev
+real model (XLM-R v2.1) has classified the full YouTube dataset
+([docs/phase-1-nlp-vertex-dev.md](docs/phase-1-nlp-vertex-dev.md)). The frontier is
+now **Steam data** (collect, load into staging, replay through `vertex`), the
+`voted_up` weak-label evaluation, and the Looker Studio dashboard — planned in
+[docs/phase-1-plan.md](docs/phase-1-plan.md). Images and dev
 infrastructure are built and applied by Cloud Build
 ([`terraform/modules/cloud_build/`](terraform/modules/cloud_build/)).
 

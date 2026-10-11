@@ -132,7 +132,10 @@ Numbers are holdout on `gold_v3.jsonl` from Workbench eval
 `nlp/eval/artifacts/report-xlmr-v2.1-goldv3.json`). EN is the EN
 holdout slice (n=55). The in-repo catalog marks `xlmr-sent-v2.1` selected
 (`nlp/catalog.py`). v2 and v2.1 are in Vertex Model Registry
-(`europe-central2`); v2.1 is deployed on `co-nlp-endpoint-dev`.
+(`europe-central2`). v2.1 was deployed on `co-nlp-endpoint-dev` and
+classified the full `events` table on 2026-09-21; the Endpoint has since
+been deleted — see
+[`phase-1-nlp-vertex-dev.md`](phase-1-nlp-vertex-dev.md).
 
 If any success condition fails, keep v2 as the selected artifact and record
 the result rather than promoting v2.1.
