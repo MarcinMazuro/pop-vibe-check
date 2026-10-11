@@ -178,6 +178,7 @@ playground/
 # Fine-tuned weights (downloaded via gsutil for local eval)
 nlp/eval/artifacts/distilbert-sent/
 nlp/eval/artifacts/xlmr-sent/
+nlp/eval/artifacts/xlmr-sent-v2.1/
 .models/
 
 # Cloud Build local outputs
