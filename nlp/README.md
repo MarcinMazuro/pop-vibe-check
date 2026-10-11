@@ -12,14 +12,15 @@ registered in `nlp/registry.py`:
 Trained Hugging Face exports (ids, GCS URIs, gold-holdout metrics) live
 in `nlp/catalog.py`. That catalog does **not** change `--nlp_model`.
 XLM-R v2.1 is the selected artifact after the gold_v3 holdout comparison.
-v2 and v2.1 are in Vertex Model Registry (`europe-central2`); v2.1 is
-deployed on `co-nlp-endpoint-dev`.
+v2 and v2.1 are in Vertex Model Registry (`europe-central2`). v2.1 was
+served from `co-nlp-endpoint-dev` for the 2026-09-21 replay; that
+Endpoint has since been deleted.
 
 Weights are **not** baked into the Flex Template image. Dataflow workers
 reach `aiplatform.googleapis.com` over Private Google Access; they still
 cannot reach PyPI or Hugging Face Hub.
 
-**Current status (2026-09-21).** DistilBERT v1 train complete (best epoch 2,
+**Current status (2026-10-11).** DistilBERT v1 train complete (best epoch 2,
 hybrid acc 0.802, macro-F1 0.786) at
 `gs://co-tf-artifacts-dev/nlp/models/distilbert-sent/`. XLM-R v2.1
 continued fine-tune finished 2026-09-20 (gold_v3 holdout n=200: acc
@@ -29,7 +30,10 @@ continued fine-tune finished 2026-09-20 (gold_v3 holdout n=200: acc
 [`nlp/catalog.py`](catalog.py). Eval:
 [docs/phase-1-nlp-evaluation-xlmr-v2.md](../docs/phase-1-nlp-evaluation-xlmr-v2.md),
 [docs/phase-1-nlp-xlmr-v2.1-continued.md](../docs/phase-1-nlp-xlmr-v2.1-continued.md).
-Serve-replay is still pending. DistilBERT ops journal:
+Serve-replay is done: all 12,254 rows in `events` were classified by
+v2.1 (`model_version = vertex/5203216677101109248`, the deployed-model
+id). No Endpoint exists now; redeploy before the next `vertex` replay.
+Ops journal (DistilBERT, XLM-R, serve-replay):
 [docs/phase-1-nlp-vertex-dev.md](../docs/phase-1-nlp-vertex-dev.md).
 
 ## Layout

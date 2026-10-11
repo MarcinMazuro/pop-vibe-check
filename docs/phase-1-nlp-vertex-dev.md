@@ -1,14 +1,25 @@
 # Phase 1 — NLP Vertex ops journal
 
-Operational record for Track C on GCP through 2026-09-12 (CEST): what
+Operational record for Track C on GCP through 2026-09-21 (CEST): what
 ran, where artifacts live, what bills, what is still pending. Commands
 live in [`nlp/README.md`](../nlp/README.md) and
 [`terraform/modules/vertex_nlp/README.md`](../terraform/modules/vertex_nlp/README.md).
 Evaluation numbers for DistilBERT v1:
 [`phase-1-nlp-evaluation-distilbert-v1.md`](phase-1-nlp-evaluation-distilbert-v1.md).
 
-Date: 2026-09-12. Multilingual v2 recipe (XLM-RoBERTa, not yet trained):
-[`phase-1-nlp-multilingual-v2.md`](phase-1-nlp-multilingual-v2.md).
+Date: 2026-09-12, updated 2026-10-11 against the live project. XLM-R
+recipes and results:
+[`phase-1-nlp-multilingual-v2.md`](phase-1-nlp-multilingual-v2.md) (v2),
+[`phase-1-nlp-evaluation-xlmr-v2.md`](phase-1-nlp-evaluation-xlmr-v2.md)
+(v2 eval),
+[`phase-1-nlp-xlmr-v2.1-continued.md`](phase-1-nlp-xlmr-v2.1-continued.md)
+(v2.1).
+
+> **State on 2026-10-11.** `events` holds **12,254 rows, all classified
+> by XLM-R v2.1** through the Vertex Endpoint (replay of 2026-09-21). The
+> stub no longer has a row in `events`. The Endpoint has since been
+> deleted, so nothing serves and nothing bills. See
+> [Serve-replay](#serve-replay-xlm-r-v21-21-sep-2026).
 
 ---
 
@@ -20,9 +31,9 @@ named XLM-R, weights baked into the Flex Template, and a
 
 | Decision | What is in the repo |
 |---|---|
-| Model | English DistilBERT v1 (`distilbert-base-uncased`), 3-class head (`pos`/`neu`/`neg`). Non-EN is a measured limit — see the evaluation doc. |
+| Model | Multilingual **XLM-R v2.1** (`xlm-roberta-base` → v2 → continued fine-tune), 3-class head (`pos`/`neu`/`neg`). English DistilBERT v1 remains the trained baseline. |
 | Serving | Vertex Endpoint REST from Dataflow (`--nlp_model vertex`). Weights are **not** `COPY`'d into the Flex Template image. |
-| Registry | `stub` (default) and `vertex`. Production replay of 4228 rows is still the stub. DistilBERT v1 is **uploaded** to Model Registry; **no Endpoint replica**. |
+| Registry | `stub` (default) and `vertex`. `events` was produced with `vertex` (XLM-R v2.1). DistilBERT v1, XLM-R v2 and v2.1 are uploaded to Model Registry; **no Endpoint exists today**. |
 | Platform | Vertex AI Workbench / Model Registry / Endpoint (thesis Agent Platform). Console labels say Vertex AI; APIs are `aiplatform.googleapis.com` and `notebooks.googleapis.com`. |
 | MLflow | File store on the Workbench VM + GCS artifacts. Not Cloud SQL, not Cloud Run, no `terraform/modules/mlflow`. |
 
@@ -183,12 +194,103 @@ TorchServe `pytorch-cpu` rejected the HF directory layout (expects
 
 ---
 
-## Pending — serve-replay
+## Model Registry — XLM-R (21 Sep 2026)
 
-CPU Endpoint deploy (`n1-standard-8`, no accelerator) → Dataflow
-`--model vertex` → undeploy after drain. Do not treat
-`events.model_version` as `vertex/…` until that lands. Production
-classification remains the stub on 4228 rows.
+| displayName | Model id | Versions | Artifact URI |
+|---|---|---|---|
+| `xlmr-sent` (v2) | `1068281099500650496` | 1 | `gs://co-tf-artifacts-dev/nlp/models/xlmr-sent` |
+| `xlmr-sent-v2.1` | `406814904230608896` | 1, **2 (`default`)** | `gs://co-tf-artifacts-dev/nlp/models/xlmr-sent-v2.1` |
+
+Both versions of `xlmr-sent-v2.1` point at the same artifact; version 2
+is the one that was deployed. Selection rationale (gold_v3 holdout,
+macro-F1 0.600 vs 0.568 for v2) is in
+[`phase-1-nlp-xlmr-v2.1-continued.md`](phase-1-nlp-xlmr-v2.1-continued.md).
+
+---
+
+## Serve-replay: XLM-R v2.1 (21 Sep 2026)
+
+Verified on 2026-10-11 from the audit log, the Dataflow job list and
+BigQuery.
+
+**Endpoint.** `co-nlp-endpoint-dev` was created at 10:44 UTC and
+`xlmr-sent-v2.1@2` deployed on it (CPU, no accelerator). The audit log
+shows `DeployModel` called several times between 10:45 and 11:10 UTC.
+
+**Replays.** Four `co-replay-*` Dataflow jobs with `--model vertex` ran
+between 19:00 and 20:47 UTC, all ending `Drained`:
+
+| Job id | Created (UTC) |
+|---|---|
+| `2026-09-21_12_00_28-6503329829357441921` | 19:00 |
+| `2026-09-21_12_26_41-12065803480988340445` | 19:26 |
+| `2026-09-21_12_53_57-9372713233434302653` | 19:53 |
+| `2026-09-21_13_28_48-7203928717638566170` | 20:28 |
+
+**Result in BigQuery.**
+
+| | |
+|---|---|
+| Rows in `events` | 12,254 — one per `id`, all `model_version = vertex/5203216677101109248` |
+| Rows in `events` from the stub | 0 (the MERGE replaced them; stub rows remain only in `events_landing`) |
+| Label split | 5923 `pos` / 4034 `neu` / 2297 `neg` (48 / 33 / 19 %) |
+| Vertex rows in `events_landing` | 24,995 over 12,254 ids (the four runs overlap) |
+| Ids classified more than once | 10,811 |
+| …of which with a different label between runs | **3** |
+
+`vertex/5203216677101109248` is the Endpoint's **deployed-model id**
+(`VertexEndpointClassifier.model_version`, taken from the predict
+response), not the Model Registry id. It maps to `xlmr-sent-v2.1@2`
+through the deploy above. A future redeploy gets a new deployed-model id,
+so `model_version` changes even if the weights do not.
+
+The three disagreeing ids mean Endpoint inference is near-deterministic
+but not bit-exact (cause not investigated). The reproducibility fingerprint in
+[`phase-1-dataflow.md`](phase-1-dataflow.md) was demonstrated with the
+stub; with the real model, expect a handful of borderline flips per
+replay.
+
+Per event:
+
+| event_tag | n | pos | neu | neg |
+|---|---:|---:|---:|---:|
+| `xbox_showcase_reveal` | 1711 | 1039 | 585 | 87 |
+| `gameplay_trailer_flying_waters` | 1257 | 679 | 473 | 105 |
+| `xbox_developer_direct` | 292 | 190 | 86 | 16 |
+| `launch` | 909 | 491 | 313 | 105 |
+| `one_million_sales_milestone` | 477 | 276 | 129 | 72 |
+| `critical_acclaim_wave` | 351 | 153 | 134 | 64 |
+| `tga_2025_sweep` | 3328 | 1832 | 1046 | 450 |
+| `indie_game_awards_rescinded` | 3502 | 966 | 1187 | 1349 |
+| `anniversary_update_2026` | 427 | 297 | 81 | 49 |
+
+`indie_game_awards_rescinded` is the only event where `neg` leads — the
+first per-event difference in this project that reflects the model rather
+than the plumbing.
+
+**Language detection is noisy on short comments.** Of the 12,254 rows,
+133 are tagged `af` and 73 `tl`; most are short English texts. The model
+is multilingual, so classification is unaffected, but per-language
+slices should treat the long tail with care.
+
+**After the replay.** The Endpoint no longer exists in `europe-central2`
+(checked 2026-10-11), so there is no replica billing. Workbench
+`co-nlp-workbench-dev` is `STOPPED`. `nlp/catalog.py` still records
+`co-nlp-endpoint-dev` as v2.1's Endpoint — that is where it was served,
+not a live resource.
+
+---
+
+## Pending
+
+- **Steam data.** `raw_staging` is still YouTube-only. Once Steam reviews
+  are loaded, the next `vertex` replay needs the Endpoint recreated
+  (`enable_nlp_endpoint=true`), v2.1 redeployed, and undeployed after the
+  drain — the replay trigger
+  (`co-replay-dev`, `--substitutions=_MODEL=vertex`) reads the Endpoint
+  from Terraform and passes an empty value while none exists.
+- **Weak-label evaluation (C2).** Steam `voted_up` against the model's
+  labels — blocked on the Steam data above.
 
 ---
 
@@ -199,5 +301,5 @@ classification remains the stub on 4228 rows.
 | [`nlp/README.md`](../nlp/README.md) | Train, register, deploy, launch |
 | [`terraform/modules/vertex_nlp/README.md`](../terraform/modules/vertex_nlp/README.md) | Gates, IAM, IAP SSH, cost runbook |
 | [`phase-1-nlp-evaluation-distilbert-v1.md`](phase-1-nlp-evaluation-distilbert-v1.md) | DistilBERT v1 gold metrics |
-| [`phase-1-dataflow.md`](phase-1-dataflow.md) | Stub replay that is still in `events` |
+| [`phase-1-dataflow.md`](phase-1-dataflow.md) | Pipeline, MERGE and reproducibility (demonstrated with the stub) |
 | [`phase-1-plan.md`](phase-1-plan.md) | Track C (C1–C3 superseded; pointer here) |
