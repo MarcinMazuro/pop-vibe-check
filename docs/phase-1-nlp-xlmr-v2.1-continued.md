@@ -140,6 +140,34 @@ been deleted — see
 If any success condition fails, keep v2 as the selected artifact and record
 the result rather than promoting v2.1.
 
+## `neg` threshold tuning (2026-10-11)
+
+v2.1 under-predicts `neg` (holdout recall 0.39). We tried replacing argmax
+with "`neg` if p(neg) ≥ T, else argmax(neu, pos)", choosing T on the dev
+split (80 rows, 28 `neg`) and scoring it once on the holdout:
+
+```bash
+python -m nlp.eval.predict   --model-dir nlp/eval/artifacts/xlmr-sent-v2.1   --gold nlp/eval/artifacts/gold_v3.jsonl   --output nlp/eval/artifacts/pred-xlmr-v2.1-goldv3.jsonl
+
+python -m nlp.eval.tune_threshold   --gold nlp/eval/artifacts/gold_v3.jsonl   --pred nlp/eval/artifacts/pred-xlmr-v2.1-goldv3.jsonl   --output nlp/eval/artifacts/threshold-xlmr-v2.1-goldv3.json
+```
+
+Local CPU predictions reproduce the Workbench holdout macro-F1 (0.600).
+
+| Rule | Dev macro-F1 | Dev neg R | Holdout macro-F1 | Holdout neg P / R / F1 |
+|---|---:|---:|---:|---|
+| argmax | 0.538 | 0.250 | **0.600** | 0.640 / 0.390 / **0.485** |
+| T = 0.10 (best on dev) | 0.550 | 0.321 | 0.580 | 0.472 / 0.415 / 0.442 |
+
+**Rejected — serving stays argmax.** The dev curve is flat from 0.10 to
+0.50, and the dev-best value makes the holdout worse. The missed negatives are
+not borderline: of the 46 missed `neg` rows in dev+holdout, the median p(neg)
+is 0.012 and only 3 reach 0.10, while the winning class has a median
+probability of 0.96. They are mostly implicit or slang negativity ("Best rpg is
+kcd2 not e33", "Overglaze", "AI slop", "Stolen from silksong"), so the model is
+confidently wrong rather than miscalibrated. More `neg` training data of this
+kind is the lever; a decision threshold is not.
+
 ## Artifact upload
 
 Only after the evaluation decision, upload the new model under a new prefix:

@@ -39,6 +39,38 @@ def texts_for_tokenize(rows: Sequence[dict[str, Any]]) -> list[str]:
     return [normalize_text(str(row.get("text") or "")) for row in rows]
 
 
+def softmax(logits: Sequence[float]) -> list[float]:
+    """Numerically stable softmax.
+
+    Args:
+        logits: Class scores.
+
+    Returns:
+        Probabilities in the same order, summing to 1.
+
+    Raises:
+        ValueError: If ``logits`` is empty.
+    """
+    if not logits:
+        raise ValueError("logits must be non-empty")
+    peak = max(logits)
+    exps = [math.exp(value - peak) for value in logits]
+    total = sum(exps)
+    return [value / total for value in exps]
+
+
+def label_probs(logits: Sequence[float]) -> dict[str, float]:
+    """Map a 3-class logit vector to ``{label: probability}``.
+
+    Args:
+        logits: Class scores in ``neg`` / ``neu`` / ``pos`` id order.
+
+    Returns:
+        Softmax probability per pipeline label.
+    """
+    return {ID2LABEL[index]: prob for index, prob in enumerate(softmax(logits))}
+
+
 def label_and_score(logits: Sequence[float]) -> tuple[str, float]:
     """Map a 3-class logit vector to ``(label, softmax confidence)``.
 
@@ -51,12 +83,7 @@ def label_and_score(logits: Sequence[float]) -> tuple[str, float]:
     Raises:
         ValueError: If ``logits`` is empty.
     """
-    if not logits:
-        raise ValueError("logits must be non-empty")
-    peak = max(logits)
-    exps = [math.exp(value - peak) for value in logits]
-    total = sum(exps)
-    probs = [value / total for value in exps]
+    probs = softmax(logits)
     index = max(range(len(probs)), key=probs.__getitem__)
     label = ID2LABEL.get(index)
     if label is None:
@@ -93,7 +120,7 @@ def write_pred_jsonl(path: Path, rows: Sequence[dict[str, Any]]) -> None:
 
     Args:
         path: Destination.
-        rows: Objects with ``id``, ``label``, ``score``, ``text``.
+        rows: Objects with ``id``, ``label``, ``score``, ``probs``, ``text``.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
@@ -150,6 +177,7 @@ def predict_rows(
                         "id": row.get("id", ""),
                         "label": label,
                         "score": score,
+                        "probs": label_probs(logit),
                         "text": row.get("text", ""),
                     }
                 )
@@ -177,7 +205,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--output",
         required=True,
         type=Path,
-        help="Prediction JSONL (id/label/score/text).",
+        help="Prediction JSONL (id/label/score/probs/text).",
     )
     parser.add_argument("--max-len", type=int, default=MAX_LEN)
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH)
