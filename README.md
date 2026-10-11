@@ -96,7 +96,7 @@ Supervisor: mgr inż. Szymon Olewniczak.
 | Collector application code (common, reddit, youtube + tests) | ✓ Done | [`collectors/`](collectors/) |
 | YouTube collector: image, job wiring, collection runs | ✓ Done — 12,254 records across 9 events ([first run](docs/phase-0-youtube-first-collection.md)) | GCS `co-raw-archive-dev/youtube/` |
 | Reddit collector: image + smoke test | ✗ **Out of scope — Reddit API access refused.** Code kept; see [ADR 0001](docs/adr/0001-steam-replaces-reddit-as-second-source.md) | `collectors/reddit/` |
-| Steam collector (second source) | ✗ To build — decided 2026-09-20 ([ADR 0001](docs/adr/0001-steam-replaces-reddit-as-second-source.md)) | `collectors/steam/` |
+| Steam collector (second source) | ✓ Built — collector, image, Cloud Run Job; collection runs pending | [`collectors/steam/`](collectors/steam/) |
 | Real values in secret containers | YouTube key + salt ✓ real; Reddit ✗ placeholders | Secret Manager |
 | Replay publisher: code, image, job, first replay to Pub/Sub | ✓ Done — 4228 records replayed in order ([details](docs/phase-1-publisher.md)) | [`publisher/`](publisher/) |
 | **Dataflow streaming infra (this PR)** — `dataflow/` module + worker SA, `events` / `events_landing` + promotion MERGE, Dataflow subscription + DLQ topic/sub, dataflow-temp bucket, inter-worker firewall, launch-parameter outputs | ✓ Applied | [`terraform/modules/dataflow/`](terraform/modules/dataflow/) + extensions across `bigquery/`, `pubsub/`, `iam/`, `network/`, `storage/` |
@@ -419,7 +419,7 @@ A and (B or C) can start in parallel; the other waits a day for A's common libra
 ├── collectors/                            # implemented — shared lib + both collectors
 │   ├── common/                            # author hashing, GCS writer, retry, event loader
 │   ├── reddit/                            # written; out of scope (Reddit API access refused)
-│   ├── steam/                             # second source (ADR 0001); not built yet
+│   ├── steam/                             # second source (ADR 0001): reviews, no API key needed
 │   ├── youtube/                           # live — collecting real data in GCP
 │   ├── config/                            # events.yaml + youtube_videos.yaml (API-verified ids)
 │   └── tests/

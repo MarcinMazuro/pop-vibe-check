@@ -94,6 +94,12 @@ locals {
       mode        = "NULLABLE"
       description = "Lifecycle event id the collection run targeted."
     },
+    {
+      name        = "voted_up"
+      type        = "BOOLEAN"
+      mode        = "NULLABLE"
+      description = "The author's own thumbs up/down, where the source has one. Steam reviews do; YouTube comments do not and leave it NULL. A weak sentiment label straight from the author, used to evaluate the classifier at scale."
+    },
   ]
 
   # Shared schema string for raw_landing and raw_staging. jsonencode is
@@ -464,6 +470,7 @@ resource "google_bigquery_table" "v_events" {
         event_tag,
         language,
         score,
+        voted_up,
         sentiment_label,
         sentiment_score,
         model_version

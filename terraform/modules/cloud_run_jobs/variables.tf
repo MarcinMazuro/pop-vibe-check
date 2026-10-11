@@ -139,3 +139,20 @@ variable "deployer_sa_email" {
   type        = string
   default     = null
 }
+
+variable "steam_collector_sa_email" {
+  description = "Runtime identity for the Steam collector job; granted objectAdmin on the raw archive and secretAccessor on the author-hash salt."
+  type        = string
+}
+
+variable "steam_image_uri" {
+  description = "Image the Steam collector job is created with; ignored afterwards (Cloud Build deploys it). Default is the public 'pause' placeholder."
+  type        = string
+  default     = "gcr.io/google-containers/pause"
+}
+
+variable "steam_appid" {
+  description = "Steam application id the collector reads reviews for. Default 1903340 is Clair Obscur: Expedition 33."
+  type        = string
+  default     = "1903340"
+}

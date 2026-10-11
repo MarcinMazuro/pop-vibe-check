@@ -75,6 +75,11 @@ variable "youtube_job_name" {
   type        = string
 }
 
+variable "steam_job_name" {
+  description = "Cloud Run Job the steam-collector image is deployed to."
+  type        = string
+}
+
 variable "publisher_job_name" {
   description = "Cloud Run Job the publisher image is deployed to."
   type        = string

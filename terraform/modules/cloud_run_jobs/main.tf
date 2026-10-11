@@ -169,6 +169,71 @@ resource "google_cloud_run_v2_job" "youtube_collector" {
 }
 
 # ----------------------------------------------------------------------------
+# Steam reviews collector Cloud Run Job.
+#
+# Same shape as the YouTube job with one simplification: the store review
+# endpoint needs no credentials, so the author-hash salt is the only
+# secret bound here. STEAM_APPID is a deploy-time literal because one job
+# serves one release (a second case study gets its own composition).
+# ----------------------------------------------------------------------------
+resource "google_cloud_run_v2_job" "steam_collector" {
+  project  = var.project_id
+  location = var.region
+  name     = "${var.name_prefix}-steam-collector-${var.env}"
+
+  labels = var.labels
+
+  template {
+    template {
+      service_account = var.steam_collector_sa_email
+      timeout         = var.task_timeout
+      max_retries     = var.max_retries
+
+      containers {
+        image = var.steam_image_uri
+
+        resources {
+          limits = {
+            memory = var.memory
+            cpu    = var.cpu
+          }
+        }
+
+        env {
+          name  = "TARGET_BUCKET"
+          value = var.raw_archive_bucket_name
+        }
+
+        env {
+          name  = "STEAM_APPID"
+          value = var.steam_appid
+        }
+
+        env {
+          name = "AUTHOR_HASH_SALT"
+          value_source {
+            secret_key_ref {
+              secret  = var.secret_names["author-hash-salt"]
+              version = "latest"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    # Image deployed by Cloud Build, see the YouTube job above.
+    ignore_changes = [
+      launch_stage,
+      client,
+      client_version,
+      template[0].template[0].containers[0].image,
+    ]
+  }
+}
+
+# ----------------------------------------------------------------------------
 # Replay publisher Cloud Run Job.
 #
 # Loads the GCS raw archive into BigQuery (landing → MERGE → staging)
@@ -291,6 +356,12 @@ resource "google_storage_bucket_iam_member" "youtube_raw_archive_writer" {
   member = "serviceAccount:${var.youtube_collector_sa_email}"
 }
 
+resource "google_storage_bucket_iam_member" "steam_raw_archive_writer" {
+  bucket = var.raw_archive_bucket_name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${var.steam_collector_sa_email}"
+}
+
 # The publisher only reads: BigQuery load jobs fetch the JSONL.gz
 # objects from GCS with the caller's identity, so objectViewer is
 # sufficient — unlike the collectors, it never writes to the archive.
@@ -316,6 +387,10 @@ locals {
     youtube-collector = {
       job_name   = google_cloud_run_v2_job.youtube_collector.name
       runtime_sa = var.youtube_collector_sa_email
+    }
+    steam-collector = {
+      job_name   = google_cloud_run_v2_job.steam_collector.name
+      runtime_sa = var.steam_collector_sa_email
     }
     publisher = {
       job_name   = google_cloud_run_v2_job.publisher.name

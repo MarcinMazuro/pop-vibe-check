@@ -8,6 +8,11 @@ output "collector_youtube_sa_email" {
   value       = google_service_account.workload["collector-youtube"].email
 }
 
+output "collector_steam_sa_email" {
+  description = "Email of the Steam collector workload SA."
+  value       = google_service_account.workload["collector-steam"].email
+}
+
 output "publisher_sa_email" {
   description = "Email of the replay publisher workload SA."
   value       = google_service_account.workload["publisher"].email

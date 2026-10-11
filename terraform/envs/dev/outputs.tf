@@ -63,6 +63,16 @@ output "youtube_collector_job_name" {
   value       = module.cloud_run_jobs.youtube_job_name
 }
 
+output "steam_collector_job_name" {
+  description = "Short name of the Steam reviews collector Cloud Run Job."
+  value       = module.cloud_run_jobs.steam_job_name
+}
+
+output "steam_collector_sa_email" {
+  description = "Email of the Steam collector workload SA."
+  value       = module.iam.collector_steam_sa_email
+}
+
 output "publisher_job_name" {
   description = "Short name of the replay publisher Cloud Run Job."
   value       = module.cloud_run_jobs.publisher_job_name

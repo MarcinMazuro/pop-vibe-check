@@ -68,6 +68,7 @@ module "secrets" {
 
   collector_reddit_sa_email  = module.iam.collector_reddit_sa_email
   collector_youtube_sa_email = module.iam.collector_youtube_sa_email
+  collector_steam_sa_email   = module.iam.collector_steam_sa_email
 }
 
 module "artifact_registry" {
@@ -89,6 +90,10 @@ module "artifact_registry" {
   reader_sa_emails = [
     module.iam.collector_reddit_sa_email,
     module.iam.collector_youtube_sa_email,
+    # Literal for the same reason as the dataflow-worker entry below: the
+    # Steam SA is created in this apply, so its computed email would make
+    # the whole for_each set unplannable.
+    "${var.name_prefix}-collector-steam-sa-${local.env}@${var.project_id}.iam.gserviceaccount.com",
     module.iam.publisher_sa_email,
     # Dataflow workers pull the Flex Template image at launch; no public
     # IPs, so they read Artifact Registry over Private Google Access.
@@ -204,6 +209,7 @@ module "cloud_run_jobs" {
   raw_archive_bucket_name    = module.storage.raw_archive_bucket_name
   reddit_collector_sa_email  = module.iam.collector_reddit_sa_email
   youtube_collector_sa_email = module.iam.collector_youtube_sa_email
+  steam_collector_sa_email   = module.iam.collector_steam_sa_email
   publisher_sa_email         = module.iam.publisher_sa_email
   secret_names               = module.secrets.secret_names
 
@@ -250,6 +256,7 @@ module "cloud_build" {
 
   artifact_registry_repository_id = module.artifact_registry.repository_id
   youtube_job_name                = module.cloud_run_jobs.youtube_job_name
+  steam_job_name                  = module.cloud_run_jobs.steam_job_name
   publisher_job_name              = module.cloud_run_jobs.publisher_job_name
   template_spec_dir               = module.dataflow.template_spec_dir
 
