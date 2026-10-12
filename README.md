@@ -177,7 +177,7 @@ records why Reddit is out of scope; [ADR 0001](docs/adr/0001-steam-replaces-redd
 
 ### Phase 2 — Polish, prod env, defence
 - `terraform/envs/prod/` composition (same shape as dev)
-- Pre-commit hooks (`terraform fmt`, `tflint`, `tfsec`)
+- ✓ Pre-commit hooks ([`.pre-commit-config.yaml`](.pre-commit-config.yaml)) — same checks and pins as the PR builds; `tflint` / `tfsec` still to add
 - Architecture diagram for the thesis document
 - Looker Studio dashboard
 
