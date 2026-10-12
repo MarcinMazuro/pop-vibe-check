@@ -1,0 +1,24 @@
+project_id = "your-gcp-project-id"
+
+# MUST be the billing account the project is linked to
+# (`gcloud billing projects describe <project_id>`), or the budget sees
+# $0 spend and never alerts.
+billing_account_id = "XXXXXX-YYYYYY-ZZZZZZ"
+
+# prod is idle except during a demonstration, so this is a tripwire.
+monthly_budget_amount = 20
+
+notification_emails = [
+  # "you@example.com",
+]
+
+# Dashboard readers. They see the reporting views and nothing else.
+report_viewer_emails = [
+  # "you@example.com",
+]
+
+# Point these at Artifact Registry digests to run the jobs; there are no
+# prod image triggers yet, so they default to the 'pause' placeholder.
+# youtube_image_uri   = "europe-central2-docker.pkg.dev/<project>/co-images-dev/youtube-collector@sha256:..."
+# steam_image_uri     = "europe-central2-docker.pkg.dev/<project>/co-images-dev/steam-collector@sha256:..."
+# publisher_image_uri = "europe-central2-docker.pkg.dev/<project>/co-images-dev/publisher@sha256:..."
