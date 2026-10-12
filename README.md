@@ -16,6 +16,9 @@ Ingests user opinions about pop-culture releases from YouTube and Steam, classif
 
 ## Architecture
 
+Narrative version, with the reasoning behind each hop:
+[docs/architecture.md](docs/architecture.md).
+
 ```
 Reddit API ─┐
             ├──► Cloud Run Jobs (collectors) ──► GCS bucket "raw archive"
