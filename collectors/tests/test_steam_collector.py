@@ -15,6 +15,7 @@ import pytest
 from collectors.common.events_config import Event
 from collectors.steam.main import (
     GENERAL_EVENT_ID,
+    Checkpoint,
     RunConfig,
     collect,
     event_tag_for,
@@ -33,6 +34,7 @@ def _config(**overrides) -> RunConfig:
         page_sleep_seconds=0.0,
         max_pages=50,
         event_window_days=3.0,
+        resume=False,
     )
     base.update(overrides)
     return RunConfig(**base)
@@ -62,9 +64,11 @@ class _FakeSession:
     def __init__(self, pages: list[dict]) -> None:
         self.pages = pages
         self.calls = 0
+        self.cursors: list[str | None] = []
         self.headers: dict[str, str] = {}
 
     def get(self, url, params=None, timeout=None):  # noqa: ANN001, ANN201
+        self.cursors.append((params or {}).get("cursor"))
         page = self.pages[min(self.calls, len(self.pages) - 1)]
         self.calls += 1
         return _FakeResponse(page)
@@ -74,6 +78,8 @@ class _FakeSession:
 
 
 class _FakeResponse:
+    status_code = 200
+
     def __init__(self, payload: dict) -> None:
         self._payload = payload
 
@@ -245,3 +251,96 @@ def test_auto_tagging_writes_one_batch_per_event(written, monkeypatch):
     assert by_tag == {"tga_2025_sweep", GENERAL_EVENT_ID, "launch"}
     # One object per tag, not one mixed object.
     assert len(written) == 3
+
+
+# --- checkpointing ----------------------------------------------------------
+
+
+class _FakeCheckpoint:
+    """Checkpoint double recording what the walk stored."""
+
+    uri = "gs://bucket/steam/_checkpoints/1903340.json"
+
+    def __init__(self, cursor: str | None = None) -> None:
+        self.cursor = cursor
+        self.saved: list[str] = []
+        self.cleared = False
+
+    def read_cursor(self) -> str | None:
+        return self.cursor
+
+    def save(self, cursor: str, pages_read: int, written: int) -> None:
+        self.saved.append(cursor)
+
+    def clear(self) -> None:
+        self.cleared = True
+
+
+def test_a_stored_cursor_resumes_the_walk(written):
+    checkpoint = _FakeCheckpoint(cursor="half-way")
+    session = _FakeSession(
+        [
+            {
+                "success": 1,
+                "reviews": [_review("r1", datetime(2025, 4, 26, tzinfo=UTC))],
+                "cursor": "next",
+            },
+            {"success": 1, "reviews": [], "cursor": "next"},
+        ]
+    )
+
+    collect(_config(), session=session, checkpoint=checkpoint)
+
+    # First request carries the stored cursor, not the start-of-list "*".
+    assert session.cursors[0] == "half-way"
+
+
+def test_a_finished_walk_clears_the_checkpoint(written):
+    checkpoint = _FakeCheckpoint()
+    session = _FakeSession([{"success": 1, "reviews": [], "cursor": "end"}])
+
+    collect(_config(), session=session, checkpoint=checkpoint)
+
+    assert checkpoint.cleared is True
+
+
+def test_checkpoint_rejects_another_windows_cursor(monkeypatch):
+    stored = {
+        "appid": "1903340",
+        "window_from": "2025-04-24T00:00:00+00:00",
+        "window_to": "2025-05-01T00:00:00+00:00",
+        "cursor": "stale",
+    }
+
+    class _Blob:
+        def download_as_bytes(self):  # noqa: ANN201
+            import json as _json
+
+            return _json.dumps(stored).encode()
+
+    class _Bucket:
+        def blob(self, path):  # noqa: ANN001, ANN201
+            return _Blob()
+
+    class _Client:
+        def bucket(self, name):  # noqa: ANN001, ANN201
+            return _Bucket()
+
+    same = Checkpoint(
+        "bucket",
+        "1903340",
+        datetime(2025, 4, 24, tzinfo=UTC),
+        datetime(2025, 5, 1, tzinfo=UTC),
+        client=_Client(),
+    )
+    other = Checkpoint(
+        "bucket",
+        "1903340",
+        datetime(2025, 4, 24, tzinfo=UTC),
+        # A different window end: the stored cursor is meaningless here.
+        datetime(2026, 1, 1, tzinfo=UTC),
+        client=_Client(),
+    )
+
+    assert same.read_cursor() == "stale"
+    assert other.read_cursor() is None
