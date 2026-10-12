@@ -276,6 +276,9 @@ from langdetect's behaviour under Dataflow's threading.
 - **No windowed aggregation.** The pipeline enriches record by record;
   per-event aggregates are computed in BigQuery. Event time is wired
   correctly, so a windowed branch can be added without reworking the read.
+- **Why a replay is a build at all**, and why the drain waits for
+  completeness rather than for quiet:
+  [ADR 0002](../docs/adr/0002-replay-runs-as-one-build-with-a-completeness-gate.md).
 - **The launch is not a Terraform resource.** A gated
   `google_dataflow_flex_template_job` was considered and rejected:
   with applies going through an approval-gated Cloud Build trigger,
