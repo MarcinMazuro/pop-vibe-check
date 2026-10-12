@@ -35,6 +35,9 @@ def _config(**overrides) -> RunConfig:
         max_pages=50,
         event_window_days=3.0,
         resume=False,
+        review_filter="recent",
+        review_type="all",
+        language="all",
     )
     base.update(overrides)
     return RunConfig(**base)
@@ -65,10 +68,12 @@ class _FakeSession:
         self.pages = pages
         self.calls = 0
         self.cursors: list[str | None] = []
+        self.params: list[dict] = []
         self.headers: dict[str, str] = {}
 
     def get(self, url, params=None, timeout=None):  # noqa: ANN001, ANN201
         self.cursors.append((params or {}).get("cursor"))
+        self.params.append(dict(params or {}))
         page = self.pages[min(self.calls, len(self.pages) - 1)]
         self.calls += 1
         return _FakeResponse(page)
@@ -344,3 +349,61 @@ def test_checkpoint_rejects_another_windows_cursor(monkeypatch):
 
     assert same.read_cursor() == "stale"
     assert other.read_cursor() is None
+
+
+# --- query partitions -------------------------------------------------------
+
+
+def test_partition_parameters_reach_the_endpoint(written):
+    session = _FakeSession([{"success": 1, "reviews": [], "cursor": "end"}])
+    config = _config(review_filter="updated", review_type="negative", language="french")
+
+    collect(config, session=session)
+
+    assert session.params[0]["filter"] == "updated"
+    assert session.params[0]["review_type"] == "negative"
+    assert session.params[0]["language"] == "french"
+
+
+def test_a_non_chronological_stream_does_not_stop_at_an_old_record(written):
+    # filter=updated interleaves old and new, so an out-of-window record
+    # says nothing about the rest of the page.
+    session = _FakeSession(
+        [
+            {
+                "success": 1,
+                "reviews": [
+                    _review("old", datetime(2025, 1, 1, tzinfo=UTC)),
+                    _review("inside", datetime(2025, 4, 26, tzinfo=UTC)),
+                ],
+                "cursor": "end",
+            },
+            {"success": 1, "reviews": [], "cursor": "end"},
+        ]
+    )
+
+    total = collect(_config(review_filter="updated"), session=session)
+
+    assert total == 1
+    assert [r["id"] for r in written[0]] == ["steam:inside"]
+
+
+def test_a_chronological_stream_still_stops_early(written):
+    session = _FakeSession(
+        [
+            {
+                "success": 1,
+                "reviews": [
+                    _review("inside", datetime(2025, 4, 26, tzinfo=UTC)),
+                    _review("old", datetime(2025, 1, 1, tzinfo=UTC)),
+                    _review("never-read", datetime(2024, 12, 1, tzinfo=UTC)),
+                ],
+                "cursor": "next",
+            }
+        ]
+    )
+
+    total = collect(_config(), session=session)
+
+    assert total == 1
+    assert session.calls == 1
