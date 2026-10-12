@@ -40,12 +40,42 @@ terraform plan
 terraform apply
 ```
 
+**One step comes between plan and apply the first time.** Terraform owns
+the secret *containers* but never their values, and Cloud Run resolves a
+job's `secret_key_ref` when the job is **created** — so an apply against
+secrets that have no version fails three times over:
+
+```
+Error waiting to create Job: Secret .../co-author-hash-salt-prod/versions/latest was not found
+```
+
+Give each one a version first. Placeholders are enough to stand the
+environment up; real values are only needed before a collection actually
+runs here:
+
+```bash
+for s in co-reddit-client-id-prod co-reddit-client-secret-prod \
+         co-reddit-user-agent-prod co-youtube-api-key-prod \
+         co-author-hash-salt-prod; do
+  printf 'PLACEHOLDER - replace before any prod collection run' \
+    | gcloud secrets versions add "$s" --project=<PROJECT_ID> --data-file=-
+done
+```
+
+Before collecting in prod, replace the YouTube key and — deliberately —
+decide what the **author-hash salt** should be. A salt different from
+dev's means author identities do not line up across the two environments;
+the same salt means they do. Neither is wrong, but it is a choice, and
+rotating it later invalidates author continuity in whatever has already
+been collected.
+
 You need `roles/iam.serviceAccountTokenCreator` on `pvc-tf-runner-sa`;
 `roles/owner` alone does **not** grant impersonation. See
 [`../dev/README.md`](../dev/README.md) for that grant and for the one-time
 auth steps.
 
-A first apply on an empty state creates the whole environment. Nothing in
+A first apply on an empty state creates the whole environment (94
+resources, verified 2026-10-12). Nothing in
 it costs money while idle: the buckets and tables are empty, the jobs are
 placeholders that never execute on their own, and no Dataflow job exists —
 `terraform apply` never starts one, here or in dev.
