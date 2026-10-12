@@ -237,6 +237,12 @@ query fails outright. The sum is cast to `NUMERIC`.
 
 ## Reproduced from CI (2026-09-20)
 
+> The rules this run established — a completeness gate before the drain, no
+> promotion of an incomplete replay, and a drain that always runs — are
+> recorded in
+> [ADR 0002](adr/0002-replay-runs-as-one-build-with-a-completeness-gate.md).
+
+
 The run below repeats the result above through a completely different
 execution path: `co-replay-dev`, started from commit `7a5a48b`, launching
 the Flex Template that CI built (image pinned by **digest**, not by tag),
