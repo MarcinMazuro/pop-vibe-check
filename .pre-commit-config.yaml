@@ -1,0 +1,49 @@
+# Local pre-commit hooks. Install once:
+#
+#   pip install pre-commit && pre-commit install
+#
+# These are the same checks Cloud Build runs on a pull request
+# (cloudbuild.checks.yaml, terraform/cloudbuild.yaml), with the same pinned
+# versions, so a hook passing locally means the build passes too. CI stays
+# the authority — a hook can be skipped, a required check cannot.
+#
+# Run across everything, not just staged files:
+#
+#   pre-commit run --all-files
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+      - id: check-yaml
+        # The Cloud Build configs are YAML with ${_SUBSTITUTIONS} in them,
+        # which parse fine; nothing here needs multi-document support.
+        args: [--allow-multiple-documents]
+      - id: check-added-large-files
+        # The NLP gold sets and prediction artifacts are legitimately
+        # chunky; the guard is against a stray model checkpoint.
+        args: [--maxkb=5120]
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.96.2
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_validate
+        # Validate the compositions, not each module in isolation: a module
+        # on its own has no provider configuration and fails on that alone.
+        files: ^terraform/(envs|bootstrap)/
+        args:
+          - --tf-init-args=-backend=false
