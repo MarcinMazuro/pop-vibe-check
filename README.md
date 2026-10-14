@@ -175,6 +175,14 @@ run alongside it (data completeness, and the NLP model with MLflow) split across
 three contributors — is in **[docs/phase-1-plan.md](docs/phase-1-plan.md)**. It also
 records why Reddit is out of scope; [ADR 0001](docs/adr/0001-steam-replaces-reddit-as-second-source.md) records Steam replacing it.
 
+### Phase 3 — second release, real-time analysis
+Confirmed scope, not started — what each one actually involves is in
+[docs/phase-3-plan.md](docs/phase-3-plan.md). Short version: switching
+releases is mostly un-baking `events.yaml` / `youtube_videos.yaml` from
+the collector images, and real-time is scheduled incremental collection
+plus the one thing every cost guard here exists to prevent — a
+permanently running Dataflow job.
+
 ### Phase 2 — Polish, prod env, defence
 - `terraform/envs/prod/` composition (same shape as dev)
 - ✓ Pre-commit hooks ([`.pre-commit-config.yaml`](.pre-commit-config.yaml)) — same checks and pins as the PR builds; `tflint` / `tfsec` still to add
