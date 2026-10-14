@@ -86,6 +86,7 @@ DEFAULT_EVENT_WINDOW_DAYS = 3.0
 # several narrower streams whose ids the staging MERGE unions.
 FILTER_CHOICES = ("recent", "updated", "all")
 REVIEW_TYPE_CHOICES = ("all", "positive", "negative")
+PURCHASE_TYPE_CHOICES = ("all", "steam", "non_steam_purchase")
 # Only `recent` is ordered by creation time, so only `recent` can stop
 # early once it reads past the window; the others must walk to the end of
 # their stream and filter per record.
@@ -116,6 +117,10 @@ class RunConfig:
             ``updated`` (by last edit) or ``all`` (by helpfulness).
         review_type: ``all``, ``positive`` or ``negative``.
         language: Steam language name, or ``all``.
+        purchase_type: ``all``, ``steam`` or ``non_steam_purchase``. The
+            only axis left for splitting English, whose single stream
+            (140,654 reviews) exceeds the endpoint's cap: steam 103,218
+            and non_steam_purchase 37,411 both fit under it.
         event_window_days: Half-width, in days, of the window around each
             lifecycle event used when ``event_id`` is ``auto``.
     """
@@ -133,6 +138,7 @@ class RunConfig:
     review_filter: str
     review_type: str
     language: str
+    purchase_type: str
 
     @property
     def chronological(self) -> bool:
@@ -239,6 +245,12 @@ def load_config() -> RunConfig:
             f"got '{review_type}'."
         )
     language = (os.environ.get("STEAM_LANGUAGE") or "all").strip() or "all"
+    purchase_type = (os.environ.get("STEAM_PURCHASE_TYPE") or "all").strip()
+    if purchase_type not in PURCHASE_TYPE_CHOICES:
+        raise ValueError(
+            f"STEAM_PURCHASE_TYPE must be one of {PURCHASE_TYPE_CHOICES}, "
+            f"got '{purchase_type}'."
+        )
 
     return RunConfig(
         target_bucket=_require_env("TARGET_BUCKET"),
@@ -254,6 +266,7 @@ def load_config() -> RunConfig:
         review_filter=review_filter,
         review_type=review_type,
         language=language,
+        purchase_type=purchase_type,
     )
 
 
@@ -376,6 +389,7 @@ def fetch_page(
     review_filter: str = CHRONOLOGICAL_FILTER,
     review_type: str = "all",
     language: str = "all",
+    purchase_type: str = "all",
 ) -> dict[str, Any]:
     """Fetch one page of reviews.
 
@@ -392,6 +406,7 @@ def fetch_page(
         review_filter: Endpoint ordering (``recent`` / ``updated`` / ``all``).
         review_type: ``all`` / ``positive`` / ``negative``.
         language: Steam language name, or ``all``.
+        purchase_type: ``all`` / ``steam`` / ``non_steam_purchase``.
 
     Returns:
         The decoded JSON body.
@@ -405,7 +420,7 @@ def fetch_page(
             "json": "1",
             "filter": review_filter,
             "language": language,
-            "purchase_type": "all",
+            "purchase_type": purchase_type,
             "review_type": review_type,
             "num_per_page": str(PAGE_SIZE),
             "cursor": cursor,
@@ -622,10 +637,12 @@ def collect(
         The total number of records written.
     """
     logger.info(
-        "Stream: filter=%s review_type=%s language=%s (chronological=%s).",
+        "Stream: filter=%s review_type=%s language=%s purchase_type=%s "
+        "(chronological=%s).",
         config.review_filter,
         config.review_type,
         config.language,
+        config.purchase_type,
         config.chronological,
     )
 
@@ -693,6 +710,7 @@ def collect(
                 review_filter=config.review_filter,
                 review_type=config.review_type,
                 language=config.language,
+                purchase_type=config.purchase_type,
             )
             reviews = payload.get("reviews") or []
             if not reviews:

@@ -38,6 +38,7 @@ def _config(**overrides) -> RunConfig:
         review_filter="recent",
         review_type="all",
         language="all",
+        purchase_type="all",
     )
     base.update(overrides)
     return RunConfig(**base)
@@ -363,6 +364,15 @@ def test_partition_parameters_reach_the_endpoint(written):
     assert session.params[0]["filter"] == "updated"
     assert session.params[0]["review_type"] == "negative"
     assert session.params[0]["language"] == "french"
+    assert session.params[0]["purchase_type"] == "all"
+
+
+def test_purchase_type_reaches_the_endpoint(written):
+    session = _FakeSession([{"success": 1, "reviews": [], "cursor": "end"}])
+
+    collect(_config(purchase_type="non_steam_purchase"), session=session)
+
+    assert session.params[0]["purchase_type"] == "non_steam_purchase"
 
 
 def test_a_non_chronological_stream_does_not_stop_at_an_old_record(written):
