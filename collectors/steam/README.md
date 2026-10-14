@@ -59,11 +59,23 @@ overlap harmlessly):
 |---|---|---|
 | `STEAM_REVIEW_TYPE` | `all` / `positive` / `negative` | Negatives are ~13,000 of 280,000, so a negative pass reaches launch comfortably |
 | `STEAM_LANGUAGE` | `all` or a Steam language name (`english`, `schinese`, …) | Each language is its own stream with its own cap |
+| `STEAM_PURCHASE_TYPE` | `all` / `steam` / `non_steam_purchase` | The only axis left for English, whose 140,654 reviews exceed the cap: 103,218 + 37,411 both fit |
 | `STEAM_FILTER` | `recent` / `updated` / `all` | A different ordering is a different stream: `updated` reaches April 2025 reviews on its first page |
 
 Two things that do **not** help, both checked: `day_range` is clamped to
 roughly 365 days, so it cannot reach an 18-month-old launch; and raising
 `STEAM_MAX_PAGES` does nothing, because the stream ends before the cap.
+`filter=updated` turned out to be a 400-record stream — a useful sample of
+edited reviews, not a route to volume.
+
+**The pass set is the dataset.** It lives in
+[`collect_history.sh`](collect_history.sh), together with the measured
+review count behind every pass, and runs them one at a time:
+
+```bash
+collectors/steam/collect_history.sh --dry-run   # see the plan
+collectors/steam/collect_history.sh             # ~2h, 14 passes
+```
 
 Only `filter=recent` is ordered by creation time, so only `recent` stops
 early once it reads past `WINDOW_FROM`. `updated` and `all` interleave old
@@ -141,6 +153,7 @@ value anyway.
 | `STEAM_FILTER` | no | `recent` | Endpoint ordering: `recent` (creation time), `updated` (last edit), `all` (helpfulness) |
 | `STEAM_REVIEW_TYPE` | no | `all` | `all`, `positive` or `negative` |
 | `STEAM_LANGUAGE` | no | `all` | Steam language name, or `all` |
+| `STEAM_PURCHASE_TYPE` | no | `all` | `all`, `steam` or `non_steam_purchase` |
 
 `TARGET_BUCKET`, `STEAM_APPID` and the salt are set on the Cloud Run Job by
 Terraform; the window and event are per-execution.
