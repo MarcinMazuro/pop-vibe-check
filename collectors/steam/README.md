@@ -43,6 +43,34 @@ short.
 Either way the collector skips reviews newer than `WINDOW_TO`, keeps what
 falls inside, and **stops as soon as it reads past `WINDOW_FROM`**.
 
+## The endpoint caps a result stream, not the data
+
+Measured on appid `1903340` (2026-10-12): a `filter=recent` walk ended on
+its own at **page 1243 — 124,187 of 280,699 reviews**, with the oldest
+record reaching only **September 2025** for a game that launched in April.
+The page came back empty; nothing failed. Steam simply stops paginating a
+given result stream long before the data runs out.
+
+So full history is not one walk, it is **several narrower streams whose
+ids the staging MERGE unions** (every review's id is stable, so passes
+overlap harmlessly):
+
+| Variable | Values | Why it helps |
+|---|---|---|
+| `STEAM_REVIEW_TYPE` | `all` / `positive` / `negative` | Negatives are ~13,000 of 280,000, so a negative pass reaches launch comfortably |
+| `STEAM_LANGUAGE` | `all` or a Steam language name (`english`, `schinese`, …) | Each language is its own stream with its own cap |
+| `STEAM_FILTER` | `recent` / `updated` / `all` | A different ordering is a different stream: `updated` reaches April 2025 reviews on its first page |
+
+Two things that do **not** help, both checked: `day_range` is clamped to
+roughly 365 days, so it cannot reach an 18-month-old launch; and raising
+`STEAM_MAX_PAGES` does nothing, because the stream ends before the cap.
+
+Only `filter=recent` is ordered by creation time, so only `recent` stops
+early once it reads past `WINDOW_FROM`. `updated` and `all` interleave old
+and new, so they walk their whole stream and filter per record — slower,
+but the only way to reach what `recent` will not serve. Each pass logs the
+oldest record it wrote, which is the coverage number worth recording.
+
 ## Rate limits and resuming
 
 Steam rate-limits this endpoint and does not document the limit. Measured:
@@ -110,6 +138,9 @@ value anyway.
 | `STEAM_MAX_PAGES` | no | `3000` | Safety cap on pages per run (~300,000 reviews) |
 | `EVENT_WINDOW_DAYS` | no | `3` | Half-width of each event window, for `EVENT_ID=auto` |
 | `STEAM_RESUME` | no | `true` | Continue from the stored cursor when one matches this appid and window |
+| `STEAM_FILTER` | no | `recent` | Endpoint ordering: `recent` (creation time), `updated` (last edit), `all` (helpfulness) |
+| `STEAM_REVIEW_TYPE` | no | `all` | `all`, `positive` or `negative` |
+| `STEAM_LANGUAGE` | no | `all` | Steam language name, or `all` |
 
 `TARGET_BUCKET`, `STEAM_APPID` and the salt are set on the Cloud Run Job by
 Terraform; the window and event are per-execution.

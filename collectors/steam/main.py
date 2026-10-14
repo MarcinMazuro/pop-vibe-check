@@ -78,6 +78,18 @@ AUTO_EVENT_ID = "auto"
 # allows it: {source}/{event_id_or_general}/...
 GENERAL_EVENT_ID = "general"
 DEFAULT_EVENT_WINDOW_DAYS = 3.0
+# Query partitions. Steam ends `filter=recent` pagination well before the
+# end of a popular game's history — measured on appid 1903340: page 1243
+# came back empty after 124,187 of 280,699 reviews, reaching only
+# September 2025 for a game that launched in April. The endpoint caps a
+# *result stream*, not the data, so the way to reach older reviews is
+# several narrower streams whose ids the staging MERGE unions.
+FILTER_CHOICES = ("recent", "updated", "all")
+REVIEW_TYPE_CHOICES = ("all", "positive", "negative")
+# Only `recent` is ordered by creation time, so only `recent` can stop
+# early once it reads past the window; the others must walk to the end of
+# their stream and filter per record.
+CHRONOLOGICAL_FILTER = "recent"
 # Identifies the client honestly, as the ADR requires.
 USER_AGENT = (
     "pop-vibe-check/1.0 (engineering thesis; "
@@ -100,6 +112,10 @@ class RunConfig:
         max_pages: Safety cap on pages fetched in one run.
         resume: Whether to continue from a stored cursor when one matches
             this appid and window.
+        review_filter: Endpoint ordering — ``recent`` (by creation time),
+            ``updated`` (by last edit) or ``all`` (by helpfulness).
+        review_type: ``all``, ``positive`` or ``negative``.
+        language: Steam language name, or ``all``.
         event_window_days: Half-width, in days, of the window around each
             lifecycle event used when ``event_id`` is ``auto``.
     """
@@ -114,6 +130,20 @@ class RunConfig:
     max_pages: int
     event_window_days: float
     resume: bool
+    review_filter: str
+    review_type: str
+    language: str
+
+    @property
+    def chronological(self) -> bool:
+        """Whether the stream is ordered by creation time.
+
+        Returns:
+            ``True`` when a run may stop as soon as it reads past
+            ``window_from``. Any other ordering has to be walked to the
+            end of its stream, filtering per record.
+        """
+        return self.review_filter == CHRONOLOGICAL_FILTER
 
     @property
     def auto_tagging(self) -> bool:
@@ -197,6 +227,18 @@ def load_config() -> RunConfig:
     resume_raw = (os.environ.get("STEAM_RESUME") or "true").strip().lower()
     if resume_raw not in {"true", "false"}:
         raise ValueError(f"STEAM_RESUME must be true or false, got '{resume_raw}'.")
+    review_filter = (os.environ.get("STEAM_FILTER") or CHRONOLOGICAL_FILTER).strip()
+    if review_filter not in FILTER_CHOICES:
+        raise ValueError(
+            f"STEAM_FILTER must be one of {FILTER_CHOICES}, got '{review_filter}'."
+        )
+    review_type = (os.environ.get("STEAM_REVIEW_TYPE") or "all").strip()
+    if review_type not in REVIEW_TYPE_CHOICES:
+        raise ValueError(
+            f"STEAM_REVIEW_TYPE must be one of {REVIEW_TYPE_CHOICES}, "
+            f"got '{review_type}'."
+        )
+    language = (os.environ.get("STEAM_LANGUAGE") or "all").strip() or "all"
 
     return RunConfig(
         target_bucket=_require_env("TARGET_BUCKET"),
@@ -209,6 +251,9 @@ def load_config() -> RunConfig:
         max_pages=max_pages,
         event_window_days=event_window_days,
         resume=resume_raw == "true",
+        review_filter=review_filter,
+        review_type=review_type,
+        language=language,
     )
 
 
@@ -328,6 +373,9 @@ def fetch_page(
     cursor: str,
     session: requests.Session,
     pacer: Pacer | None = None,
+    review_filter: str = CHRONOLOGICAL_FILTER,
+    review_type: str = "all",
+    language: str = "all",
 ) -> dict[str, Any]:
     """Fetch one page of reviews.
 
@@ -341,6 +389,9 @@ def fetch_page(
         cursor: Pagination cursor; ``*`` for the first page.
         session: HTTP session carrying the user agent.
         pacer: Told about rate limits so it can slow the walk down.
+        review_filter: Endpoint ordering (``recent`` / ``updated`` / ``all``).
+        review_type: ``all`` / ``positive`` / ``negative``.
+        language: Steam language name, or ``all``.
 
     Returns:
         The decoded JSON body.
@@ -352,10 +403,10 @@ def fetch_page(
         REVIEWS_URL.format(appid=appid),
         params={
             "json": "1",
-            "filter": "recent",
-            "language": "all",
+            "filter": review_filter,
+            "language": language,
             "purchase_type": "all",
-            "review_type": "all",
+            "review_type": review_type,
             "num_per_page": str(PAGE_SIZE),
             "cursor": cursor,
         },
@@ -570,6 +621,14 @@ def collect(
     Returns:
         The total number of records written.
     """
+    logger.info(
+        "Stream: filter=%s review_type=%s language=%s (chronological=%s).",
+        config.review_filter,
+        config.review_type,
+        config.language,
+        config.chronological,
+    )
+
     events: dict[str, Event] = {}
     if config.auto_tagging:
         events = load_events()
@@ -622,10 +681,19 @@ def collect(
         seen_cursors: set[str] = set()
         reached_window_start = False
         pages_read = 0
+        oldest_written: datetime | None = None
 
         for page in range(1, config.max_pages + 1):
             pages_read = page
-            payload = fetch_page(config.appid, cursor, http, pacer)
+            payload = fetch_page(
+                config.appid,
+                cursor,
+                http,
+                pacer,
+                review_filter=config.review_filter,
+                review_type=config.review_type,
+                language=config.language,
+            )
             reviews = payload.get("reviews") or []
             if not reviews:
                 logger.info("Page %d came back empty; collection complete.", page)
@@ -636,9 +704,14 @@ def collect(
                     float(review["timestamp_created"]), tz=UTC
                 )
                 if created < config.window_from:
-                    # Descending order: everything after this is older.
-                    reached_window_start = True
-                    break
+                    if config.chronological:
+                        # Descending by creation time: everything after
+                        # this is older still.
+                        reached_window_start = True
+                        break
+                    # Any other ordering interleaves old and new, so an
+                    # out-of-window record says nothing about the rest.
+                    continue
                 if created >= config.window_to:
                     continue
                 tag = (
@@ -650,6 +723,8 @@ def collect(
                     review_record(review, config, event_tag=tag)
                 )
                 buffered += 1
+                if oldest_written is None or created < oldest_written:
+                    oldest_written = created
                 if len(buffers[tag]) >= BATCH_SIZE:
                     flush(tag)
 
@@ -692,6 +767,11 @@ def collect(
             )
 
         flush()
+        if oldest_written is not None:
+            logger.info(
+                "Oldest record written by this pass: %s.",
+                oldest_written.isoformat(),
+            )
 
         # The walk finished: the next run should start at today, not where
         # this one ended.
