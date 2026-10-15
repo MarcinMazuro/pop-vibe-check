@@ -110,13 +110,27 @@ stop the serving bill), and then a throughput decision:
 
 the last Vertex replay classified 12,254 records in ~35 minutes on one
 `n1-standard-8` replica. Linearly, 263,893 records is **12 hours** — too
-long to be useful. Three levers, in order of cost:
+long to be useful.
 
-1. **Batch size.** The pipeline already takes `max_batch_size`; the last
-   run used the default. Measuring a larger batch costs nothing and may be
-   enough on its own.
-2. **More replicas** on the Endpoint for the duration of the replay.
-3. **Replay a subset** — the event windows only (~58k records) — and treat
-   `general` as a BigQuery-side aggregate rather than a classified stream.
+**Batching is not the lever.** `max_batch_size` defaults to 200 and the
+last replay already used it, so those 35 minutes were ~62 predict calls of
+200 instances each — about 34 seconds per call, or ~170 ms per review.
+That is CPU inference time for XLM-R on an 8-vCPU replica, not call
+overhead, so a larger batch moves almost nothing.
 
-Measure (1) first; it is free.
+What is left is parallelism or less work:
+
+1. **More replicas for the duration of the replay.** Time divides by
+   replica count, cost multiplies by it, and the cost is small: an
+   `n1-standard-8` replica is roughly $0.38/h, so four replicas for three
+   hours is about $5. This is the recommended option — it needs no code
+   change, only `min_replica_count` on the deploy, and it is reversible by
+   deleting the Endpoint afterwards as before.
+2. **Replay the event windows only** (~58k records) and treat `general` as
+   a BigQuery-side aggregate rather than a classified stream. Cheaper
+   still, but it means `events` no longer holds the whole dataset, which
+   costs the "one table, no joins for the dashboard" property.
+
+A GPU replica would beat both on time, but the project deliberately went
+CPU-only for serving; four CPU replicas for an afternoon is the smaller
+deviation.
