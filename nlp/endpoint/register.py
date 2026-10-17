@@ -13,7 +13,17 @@ Usage (from the repo root, after Workbench training)::
     python -m nlp.endpoint.register deploy \\
         --model MODEL_RESOURCE_NAME \\
         --endpoint "$VERTEX_ENDPOINT_ID" \\
-        --machine-type n1-standard-8
+        --machine-type n2-standard-8
+
+Serving CPU quota is counted **per machine family**, so one model can be
+served from two families at once for twice the throughput — and a family
+whose quota is stuck (ours held 8/8 of the N1 pool for a week after an
+endpoint was deleted) can simply be stepped around::
+
+    python -m nlp.endpoint.register deploy --machine-type n2-standard-8 \\
+        --traffic-percentage 50 ...
+    python -m nlp.endpoint.register deploy --machine-type n2d-standard-8 \\
+        --traffic-percentage 50 ...
 
     python -m nlp.endpoint.register undeploy \\
         --endpoint "$VERTEX_ENDPOINT_ID"
@@ -119,17 +129,19 @@ def deploy_model(args: argparse.Namespace) -> None:
         "machine_type": args.machine_type,
         "min_replica_count": args.min_replicas,
         "max_replica_count": args.max_replicas,
-        "traffic_percentage": 100,
+        "traffic_percentage": args.traffic_percentage,
         "sync": True,
     }
     if args.accelerator:
         kwargs["accelerator_type"] = args.accelerator
         kwargs["accelerator_count"] = args.accelerator_count
     logger.info(
-        "Deploying %s onto %s (%s, accelerator=%s). This bills until undeploy.",
+        "Deploying %s onto %s (%s, %d%% traffic, accelerator=%s). "
+        "This bills until undeploy.",
         args.model,
         args.endpoint,
         args.machine_type,
+        args.traffic_percentage,
         args.accelerator or "none",
     )
     endpoint.deploy(**kwargs)
@@ -232,6 +244,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     deploy.add_argument("--accelerator-count", type=int, default=1)
     deploy.add_argument("--min-replicas", type=int, default=1)
     deploy.add_argument("--max-replicas", type=int, default=1)
+    deploy.add_argument(
+        "--traffic-percentage",
+        type=int,
+        default=100,
+        help=(
+            "Share of endpoint traffic this deployment takes; the rest is "
+            "left to deployments already there. Use it to serve one model "
+            "from two machine families at once — Vertex counts serving "
+            "CPUs per family, so N2 and N2D have separate quotas and two "
+            "deployments give twice the throughput of one."
+        ),
+    )
 
     undeploy = sub.add_parser(
         "undeploy", help="Remove every replica (stop serving billing)."

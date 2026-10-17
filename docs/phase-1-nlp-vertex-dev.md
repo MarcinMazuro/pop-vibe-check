@@ -303,3 +303,37 @@ not a live resource.
 | [`phase-1-nlp-evaluation-distilbert-v1.md`](phase-1-nlp-evaluation-distilbert-v1.md) | DistilBERT v1 gold metrics |
 | [`phase-1-dataflow.md`](phase-1-dataflow.md) | Pipeline, MERGE and reproducibility (demonstrated with the stub) |
 | [`phase-1-plan.md`](phase-1-plan.md) | Track C (C1–C3 superseded; pointer here) |
+
+## Serving CPU quota is per machine family (2026-10-17)
+
+Deploying a replica for the full two-source replay failed on every
+machine size, down to 2 vCPU:
+
+```
+429 CustomModelServingCPUsPerProjectPerRegion 8: quota exceeded
+```
+
+Nothing was deployed at the time. Monitoring showed the allocation pinned
+at **8 of 8 since 10 October** — it never came back after the Endpoint
+was deleted on the 12th. No orphaned deployment is visible through the
+API, so the allocation is stuck on Google's side and only a quota request
+or support ticket would clear it.
+
+**It did not have to be cleared.** Vertex counts serving CPUs *per
+machine family*, and the project has separate, untouched pools:
+
+| Quota | Limit | State |
+|---|---|---|
+| Custom model serving CPUs (N1 / aggregate) | 8 | stuck at 8/8 |
+| Custom model serving **N2** CPUs | 8 | free |
+| Custom model serving **N2D** CPUs | 8 | free |
+
+An `n2-standard-4` deployed immediately. Beyond unblocking, this is also
+how to go faster than the original setup: one model served from **two
+families at once** — `n2-standard-8` and `n2d-standard-8` at 50% traffic
+each — is 16 vCPU against the 8 vCPU of the single `n1-standard-8` used
+for the first replay. Both serve identical weights, so a split changes
+throughput and nothing else.
+
+`nlp/endpoint/register.py` takes `--traffic-percentage` for exactly this.
+Undeploy both when the replay drains; an empty Endpoint does not bill.
