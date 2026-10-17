@@ -45,8 +45,12 @@ substitutions:
   _MAX_WORKERS: "2"
   _MACHINE_TYPE: e2-standard-2
 
-  # How long to wait for landed rows to stop increasing before draining.
-  _WAIT_TIMEOUT_MINUTES: "60"
+  # Minutes to wait for every staged id to land before giving up. The
+  # full two-source dataset is 263,893 records and the model serves
+  # roughly 12,000 an hour per 8 vCPU, so a complete replay is hours, not
+  # minutes. The build drains and fails without promoting if this runs
+  # out, so a generous value costs nothing on a short replay.
+  _WAIT_TIMEOUT_MINUTES: "600"
 
   # false runs the replay and drains without touching `events`.
   _PROMOTE: "true"
@@ -317,7 +321,9 @@ steps:
         fi
         echo "Replay complete."
 
-timeout: 10800s
+# 12 hours: the replay's own wait can run for _WAIT_TIMEOUT_MINUTES, and a
+# build that times out is the one case the always-drain rule cannot cover.
+timeout: 43200s
 
 options:
   logging: CLOUD_LOGGING_ONLY
