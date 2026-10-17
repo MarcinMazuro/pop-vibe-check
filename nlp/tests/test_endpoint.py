@@ -217,3 +217,49 @@ def test_other_errors_are_not_retried_shorter():
     with pytest.raises(ValueError):
         classifier.classify("hello")
     assert endpoint.calls == 1
+
+
+# --- nothing to classify ----------------------------------------------------
+
+
+class _CountingEndpoint:
+    """Endpoint double that records how many instances it was sent."""
+
+    def __init__(self) -> None:
+        self.batches: list[list[str]] = []
+
+    def predict(self, instances, timeout=None):  # noqa: ANN001, ANN201
+        texts = [instance["inputs"] for instance in instances]
+        self.batches.append(texts)
+        return SimpleNamespace(
+            predictions=[{"label": "pos", "score": 0.9} for _ in texts],
+            deployed_model_id="dm-1",
+        )
+
+
+def test_whitespace_only_text_is_not_sent_to_the_model():
+    endpoint = _CountingEndpoint()
+    classifier = VertexEndpointClassifier(
+        endpoint_id="ep", project="p", endpoint=endpoint
+    )
+
+    results = classifier.classify_batch(["", "   ", "\n\t"])
+
+    assert endpoint.batches == []
+    assert [r.label for r in results] == ["neu", "neu", "neu"]
+    # Exactly zero: no softmax produces it, so it marks "not consulted".
+    assert [r.score for r in results] == [0.0, 0.0, 0.0]
+
+
+def test_a_mixed_batch_keeps_input_order():
+    endpoint = _CountingEndpoint()
+    classifier = VertexEndpointClassifier(
+        endpoint_id="ep", project="p", endpoint=endpoint
+    )
+
+    results = classifier.classify_batch(["", "good game", "  ", "also good"])
+
+    # Only the two real texts reached the endpoint.
+    assert endpoint.batches == [["good game", "also good"]]
+    assert [r.label for r in results] == ["neu", "pos", "neu", "pos"]
+    assert [r.score for r in results] == [0.0, 0.9, 0.0, 0.9]
