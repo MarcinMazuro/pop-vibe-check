@@ -187,17 +187,36 @@ def test_long_text_is_truncated_before_the_call():
 
 
 def test_rejected_length_is_retried_shorter():
-    # Budget starts above what this endpoint accepts, so the first call
-    # fails and the client halves until it fits.
-    endpoint = _LengthLimitedEndpoint(limit=100)
+    # The token budget starts above what this endpoint accepts, so the
+    # first call fails and the client halves the budget until it fits.
+    # Latin text costs about a quarter token per character, so 480 tokens
+    # is ~1920 characters, then 960, then 480.
+    endpoint = _LengthLimitedEndpoint(limit=500)
     classifier = VertexEndpointClassifier(
-        endpoint_id="ep", project="p", endpoint=endpoint, max_chars=800
+        endpoint_id="ep", project="p", endpoint=endpoint, max_chars=8_000
     )
 
     result = classifier.classify("y" * 5_000)
 
     assert result.label == "pos"
-    assert [len(batch[0]) for batch in endpoint.seen] == [800, 400, 200, 100]
+    lengths = [len(batch[0]) for batch in endpoint.seen]
+    assert lengths == sorted(lengths, reverse=True), lengths
+    assert lengths[-1] <= 500
+
+
+def test_cjk_is_truncated_harder_than_latin():
+    # One token per CJK character against one per four latin characters,
+    # so the same token budget buys about four times less Chinese.
+    endpoint = _LengthLimitedEndpoint(limit=10_000)
+    classifier = VertexEndpointClassifier(
+        endpoint_id="ep", project="p", endpoint=endpoint, max_chars=8_000
+    )
+
+    classifier.classify_batch(["a" * 4_000, "字" * 4_000])
+
+    latin, cjk = (len(text) for text in endpoint.seen[0])
+    assert cjk < latin
+    assert cjk <= 500
 
 
 def test_other_errors_are_not_retried_shorter():
