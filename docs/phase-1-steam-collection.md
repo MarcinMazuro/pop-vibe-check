@@ -102,6 +102,51 @@ written outside a ±3-day event window. Event-window analysis runs on the
 ~46k tagged Steam records; `general` is the baseline the windows are
 compared against.
 
+## Data quality, checked before spending a replay on it
+
+| Check | Steam | YouTube |
+|---|---|---|
+| Duplicate ids | 0 (251,639 rows, 251,639 ids) | 0 |
+| Author hash not 16 chars | 0 | 0 |
+| `voted_up` present | 251,639 — all | 0 — none, by design |
+| `created_utc` in the future | 0 | 0 |
+| Missing `collected_at` | 0 | 0 |
+| Mean text length | 248 chars | 123 chars |
+
+Two edge cases the replay has to survive, both found here rather than
+eight hours into a run:
+
+- **816 whitespace-only reviews.** The Vertex client now answers these
+  without calling the endpoint — `neu` with a score of exactly 0.0, which
+  no softmax produces and so marks "model not consulted". Sending empty
+  input risked the same class of 400 that long inputs produced, and a
+  non-retryable 400 stalls a bundle forever. Their `voted_up` is intact,
+  so they still count as weak-label data.
+- **14,350 reviews longer than 1,000 characters** (5.4%) are truncated
+  client-side before the call, which is what keeps XLM-R's 512-token limit
+  from rejecting them.
+
+A further 11,277 reviews are one to three characters long (`gg`, `:)`, an
+emoji). Those *are* sent to the model: they contain a token, and a low
+confidence on them is information rather than noise.
+
+Language mix, which is the evidence for choosing a multilingual model:
+
+| language | reviews |
+|---|---|
+| en | 106,073 |
+| zh-cn | 30,881 |
+| fr | 18,659 |
+| ko | 14,417 |
+| ru | 13,172 |
+| de | 9,051 |
+| es | 8,483 |
+| (detection failed) | 6,826 |
+
+Detection fails mostly on the one-to-three-character reviews, where there
+is nothing to detect. Dataflow overwrites this column with its own
+detection anyway; the collector's value is advisory.
+
 ## What is next, and the one number that decides it
 
 `events` still holds only the 12,254 YouTube rows. Replaying 263,893

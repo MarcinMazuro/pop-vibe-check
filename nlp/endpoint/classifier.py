@@ -61,6 +61,15 @@ _ENV_MAX_CHARS = "VERTEX_MAX_CHARS"
 _DEFAULT_MAX_CHARS = 1000
 _TRUNCATION_ATTEMPTS = 4
 
+# Score written for input there is nothing to classify in. A real softmax
+# never returns exactly zero, so this doubles as the marker that the model
+# was not consulted. 816 of the 251,639 collected Steam reviews are
+# whitespace-only, and sending those to the endpoint risks the same kind
+# of 400 that long inputs produced — a stalled bundle, retried forever,
+# for a record carrying no opinion to read.
+_UNCLASSIFIABLE_SCORE = 0.0
+_UNCLASSIFIABLE_LABEL = "neu"
+
 
 class PredictEndpoint(Protocol):
     """Subset of ``google.cloud.aiplatform.Endpoint`` used here."""
@@ -352,27 +361,48 @@ class VertexEndpointClassifier:
         """
         if not texts:
             return []
+
+        # Whitespace-only input is not sent to the model: the contract in
+        # nlp.base requires a result for every input, and there is nothing
+        # here to classify. Done per element so one such review does not
+        # cost the rest of its batch.
+        normalised = [normalize_text(text) for text in texts]
+        classifiable = [i for i, text in enumerate(normalised) if text]
+        if not classifiable:
+            return [self._unclassifiable() for _ in texts]
+
         # Hugging Face DLC TextClassificationPipeline expects `inputs`,
         # not `text` (that raises missing positional argument `inputs`).
-        response = self._predict_with_truncation(
-            [normalize_text(text) for text in texts]
-        )
+        response = self._predict_with_truncation([normalised[i] for i in classifiable])
         predictions = list(getattr(response, "predictions", None) or [])
-        if len(predictions) != len(texts):
+        if len(predictions) != len(classifiable):
             raise RuntimeError(
                 f"Vertex Endpoint returned {len(predictions)} predictions "
-                f"for {len(texts)} texts (endpoint={self._endpoint_id})."
+                f"for {len(classifiable)} texts (endpoint={self._endpoint_id})."
             )
         deployed = str(getattr(response, "deployed_model_id", "") or "")
         if deployed:
             self._deployed_model_id = deployed
-        results: list[Sentiment] = []
-        for raw in predictions:
+        # Rebuild the batch in input order, filling the gaps.
+        results: list[Sentiment] = [self._unclassifiable() for _ in texts]
+        for index, raw in zip(classifiable, predictions, strict=True):
             label, score = parse_prediction(raw)
             if label not in LABELS:
                 raise RuntimeError(f"Endpoint returned non-pipeline label {label!r}.")
-            results.append(Sentiment(label, score, self.model_version))
+            results[index] = Sentiment(label, score, self.model_version)
         return results
+
+    def _unclassifiable(self) -> Sentiment:
+        """Return the result for input with nothing to classify.
+
+        Returns:
+            A neutral result with score 0.0, which no softmax produces, so
+            a reader can tell the model was never consulted. The row's
+            own signals — ``voted_up`` on a Steam review — are unaffected.
+        """
+        return Sentiment(
+            _UNCLASSIFIABLE_LABEL, _UNCLASSIFIABLE_SCORE, self.model_version
+        )
 
     def _predict_with_truncation(self, texts: list[str]) -> Any:
         """Predict, shortening the inputs if the model rejects their length.

@@ -18,7 +18,11 @@ Two rules any implementation must honour:
    result for any input, including empty or whitespace-only text. Records
    that cannot be classified are still valid records; only records that
    cannot be *parsed* go to the dead-letter path, and that decision is
-   made upstream of the classifier.
+   made upstream of the classifier. An implementation may answer without
+   consulting its model when there is nothing to classify — the Vertex
+   client does this for whitespace-only text, returning ``neu`` with a
+   score of exactly 0.0, which no softmax produces and so marks the
+   result as "model not consulted".
 """
 
 from __future__ import annotations
