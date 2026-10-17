@@ -1,0 +1,20 @@
+# tfsec configuration.
+#
+# Two exclusions, each with its reasoning here rather than as inline
+# ignores scattered through the modules. Everything else must pass.
+exclude:
+  # Customer-managed encryption keys for GCS. Google-managed encryption is
+  # the documented choice for this project: CMEK would add a key, a
+  # rotation policy and a failure mode where a disabled key makes the raw
+  # archive unreadable. It is a deliberate decision, not an oversight, and
+  # would be its own change with its own ADR.
+  - google-storage-bucket-encryption-customer-key
+
+  # Project-level actAs on the Terraform runner SA. The runner attaches
+  # workload service accounts to Cloud Run Jobs, Dataflow jobs and Cloud
+  # Build triggers, and serviceAccountAdmin alone does not grant
+  # impersonation. Narrowing it to one binding per workload SA is a real
+  # improvement and a separate change; until then the grant is scoped to
+  # a single automation identity that no human uses interactively, and
+  # the reasoning sits next to the grant in terraform/bootstrap/main.tf.
+  - google-iam-no-project-level-service-account-impersonation

@@ -185,7 +185,7 @@ permanently running Dataflow job.
 
 ### Phase 2 — Polish, prod env, defence
 - `terraform/envs/prod/` composition (same shape as dev)
-- ✓ Pre-commit hooks ([`.pre-commit-config.yaml`](.pre-commit-config.yaml)) — same checks and pins as the PR builds; `tflint` / `tfsec` still to add
+- ✓ Pre-commit hooks ([`.pre-commit-config.yaml`](.pre-commit-config.yaml)) and `tflint` + `tfsec` in the PR build — same checks and pins locally and in CI
 - Architecture diagram for the thesis document
 - Looker Studio dashboard
 

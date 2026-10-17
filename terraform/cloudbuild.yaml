@@ -38,6 +38,22 @@ steps:
         terraform -chdir=terraform/bootstrap init -backend=false -input=false
         terraform -chdir=terraform/bootstrap validate
 
+  # Lint and security scan before planning: both read the HCL only, so
+  # they fail in seconds rather than after a plan has talked to GCP.
+  # Neither blocks on credentials, which is why they run before `init`.
+  - id: tflint
+    name: ghcr.io/terraform-linters/tflint:v0.55.0
+    entrypoint: sh
+    args:
+      - -ec
+      - |
+        tflint --init --chdir=terraform
+        tflint --chdir=terraform --recursive --format=compact
+
+  - id: tfsec
+    name: aquasec/tfsec:v1.28.14
+    args: [terraform, --config-file, .tfsec.yml, --concise-output]
+
   - id: init
     name: hashicorp/terraform:${_TF_VERSION}
     entrypoint: sh
