@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+import re
 from typing import Any, Protocol
 
 from tenacity import (
@@ -54,11 +55,29 @@ _ENV_MAX_CHARS = "VERTEX_MAX_CHARS"
 # (514)", a 400 that no amount of retrying fixes. A stalled bundle then
 # retries forever and the whole replay stops — one long comment is enough.
 #
-# Characters, not tokens, because the client has no tokenizer (that is the
-# point of serving the model remotely). 1000 characters is safely under
-# 512 tokens for latin scripts; scripts where one character is one token
-# need less, which _predict_with_truncation handles by halving.
-_DEFAULT_MAX_CHARS = 1000
+# The budget is in characters because the client has no tokenizer — that
+# is the point of serving the model remotely — but characters buy very
+# different numbers of tokens per script. Roughly one token per CJK
+# character against roughly one per four latin characters, so a flat
+# character cap either truncates English far too early or sends Chinese
+# over the 512-token limit. _estimate_tokens applies both rates, and the
+# cap below only bounds how much text is considered at all.
+_DEFAULT_MAX_CHARS = 4000
+# Measured against the live endpoint rather than assumed: 480 still drew
+# rejections, 240 did not. XLM-R's SentencePiece vocabulary splits many
+# words into several pieces, so the real cost per character is higher
+# than a naive estimate — the budget sits where the endpoint stopped
+# complaining, with the retry ladder as the backstop.
+_MAX_TOKENS = 240
+# Characters that cost about one token each: CJK ideographs, kana, hangul.
+_CJK_RE = re.compile(
+    r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff]"
+)
+_LATIN_CHARS_PER_TOKEN = 4.0
+# Cyrillic and Greek tokenise far worse than latin — closer to two
+# characters per token than four.
+_DENSE_RE = re.compile(r"[\u0370-\u03ff\u0400-\u04ff]")
+_DENSE_CHARS_PER_TOKEN = 2.0
 _TRUNCATION_ATTEMPTS = 4
 
 # Score written for input there is nothing to classify in. A real softmax
@@ -153,6 +172,51 @@ def _env_max_chars() -> int:
         logger.warning("%s=%d is not positive; ignoring.", _ENV_MAX_CHARS, value)
         return _DEFAULT_MAX_CHARS
     return value
+
+
+def _estimate_tokens(text: str) -> float:
+    """Estimate the token count of a text without a tokenizer.
+
+    Args:
+        text: Normalised text.
+
+    Returns:
+        An estimate: one token per CJK character, one per two Cyrillic
+        or Greek characters, one per four characters of anything else.
+        Deliberately crude — it only has to keep inputs under the model's
+        limit, and the endpoint's own rejection is the backstop when it
+        is wrong.
+    """
+    cjk = len(_CJK_RE.findall(text))
+    dense = len(_DENSE_RE.findall(text))
+    other = len(text) - cjk - dense
+    return cjk + dense / _DENSE_CHARS_PER_TOKEN + other / _LATIN_CHARS_PER_TOKEN
+
+
+def _fit_to_tokens(text: str, max_tokens: float) -> str:
+    """Cut a text down to roughly ``max_tokens`` tokens.
+
+    Args:
+        text: Normalised text.
+        max_tokens: Token budget.
+
+    Returns:
+        The text, truncated at the character where the estimate reaches
+        the budget. Short texts are returned untouched.
+    """
+    if _estimate_tokens(text) <= max_tokens:
+        return text
+    budget = max_tokens
+    for index, char in enumerate(text):
+        if _CJK_RE.match(char):
+            budget -= 1.0
+        elif _DENSE_RE.match(char):
+            budget -= 1.0 / _DENSE_CHARS_PER_TOKEN
+        else:
+            budget -= 1.0 / _LATIN_CHARS_PER_TOKEN
+        if budget <= 0:
+            return text[:index]
+    return text
 
 
 def _is_too_long(exc: BaseException) -> bool:
@@ -421,19 +485,22 @@ class VertexEndpointClassifier:
         Raises:
             Exception: The endpoint's error, if shortening does not help.
         """
-        max_chars = self._max_chars
+        max_tokens = float(_MAX_TOKENS)
         for attempt in range(_TRUNCATION_ATTEMPTS):
-            instances = [{"inputs": text[:max_chars]} for text in texts]
+            instances = [
+                {"inputs": _fit_to_tokens(text[: self._max_chars], max_tokens)}
+                for text in texts
+            ]
             try:
                 return self._predict(instances)
             except Exception as exc:  # noqa: BLE001
                 if attempt == _TRUNCATION_ATTEMPTS - 1 or not _is_too_long(exc):
                     raise
-                max_chars = max(1, max_chars // 2)
+                max_tokens = max(16.0, max_tokens / 2)
                 logger.warning(
                     "Endpoint rejected an input as too long; retrying at "
-                    "%d characters.",
-                    max_chars,
+                    "~%.0f tokens.",
+                    max_tokens,
                 )
         raise AssertionError("unreachable")
 
