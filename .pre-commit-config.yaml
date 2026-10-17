@@ -41,6 +41,14 @@ repos:
     rev: v1.96.2
     hooks:
       - id: terraform_fmt
+      # tflint and tfsec read the HCL only, so they are fast and need no
+      # credentials. Same versions as the PR build.
+      - id: terraform_tflint
+        args:
+          - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
+      - id: terraform_tfsec
+        args:
+          - --args=--config-file=__GIT_WORKING_DIR__/.tfsec.yml
       - id: terraform_validate
         # Validate the compositions, not each module in isolation: a module
         # on its own has no provider configuration and fails on that alone.
