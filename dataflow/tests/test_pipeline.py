@@ -6,6 +6,7 @@ exercised here — they need real endpoints; these tests cover the logic
 between them.
 """
 
+import argparse
 import json
 
 import pytest
@@ -294,3 +295,32 @@ class TestBuildPipeline:
         assert seen["method"] == "STREAMING_INSERTS"
         assert "use_at_least_once" not in seen
         assert seen["insert_retry_strategy"] == "RETRY_ON_TRANSIENT_ERROR"
+
+
+def test_every_pipeline_option_is_declared_in_the_template():
+    """A Flex Template rejects parameters its metadata does not declare.
+
+    vertex_model_version was added as a pipeline option and threaded
+    through launch.sh and the replay trigger, but not declared here — so
+    the launch failed with "Unrecognized parameter" after the image had
+    already been rebuilt. The two lists have to agree.
+    """
+    import json
+    from pathlib import Path
+
+    from dataflow.options import SentimentOptions
+
+    metadata = json.loads(
+        (Path(__file__).resolve().parents[1] / "metadata.json").read_text()
+    )
+    declared = {p["name"] for p in metadata["parameters"]}
+
+    parser = argparse.ArgumentParser()
+    SentimentOptions._add_argparse_args(parser)  # noqa: SLF001
+    options = {
+        action.dest
+        for action in parser._actions  # noqa: SLF001
+        if action.dest != "help"
+    }
+
+    assert options <= declared, f"undeclared in metadata.json: {options - declared}"
