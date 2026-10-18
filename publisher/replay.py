@@ -23,6 +23,7 @@ from typing import Any
 from google.cloud import bigquery
 
 from publisher.config import RunConfig
+from publisher.load import RECORD_FIELDS
 
 logger = logging.getLogger("publisher.replay")
 
@@ -115,21 +116,10 @@ def build_replay_query(
     Returns:
         A ``(sql, parameters)`` tuple ready for a BigQuery query job.
     """
-    field_list = ", ".join(
-        (
-            "id",
-            "source",
-            "parent_id",
-            "created_utc",
-            "collected_at",
-            "author_hash",
-            "text",
-            "language",
-            "score",
-            "context_id",
-            "event_tag",
-        )
-    )
+    # Not a local list: a second copy of the schema is exactly how
+    # voted_up was loaded into staging and then dropped on the way to
+    # Pub/Sub.
+    field_list = ", ".join(RECORD_FIELDS)
     sql = f"SELECT {field_list}\nFROM `{project}.{dataset}.{staging}`\nWHERE TRUE"
     parameters: list[bigquery.ScalarQueryParameter] = []
 

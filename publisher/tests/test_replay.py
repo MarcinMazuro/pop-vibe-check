@@ -120,3 +120,20 @@ class TestBuildMessage:
         record["event_tag"] = None
         _, attributes = build_message(record, replayed_at="2026-07-16T10:00:00Z")
         assert attributes["event_tag"] == ""
+
+
+def test_replay_selects_every_schema_field():
+    """The replay SELECT must carry the whole record schema.
+
+    `voted_up` was added to the schema, loaded into staging, and then
+    silently dropped here because this query had its own copy of the
+    column list. The fix was to share one tuple; this test is what keeps
+    it shared.
+    """
+    from publisher.load import RECORD_FIELDS
+
+    sql, _ = build_replay_query(project="p", dataset="d", staging="raw_staging")
+
+    selected = sql.split("FROM")[0]
+    missing = [field for field in RECORD_FIELDS if field not in selected]
+    assert not missing, f"replay query drops {missing}"

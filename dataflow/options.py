@@ -100,6 +100,16 @@ class SentimentOptions(PipelineOptions):
             help="Vertex region. Copied into VERTEX_LOCATION on the worker.",
         )
         parser.add_argument(
+            "--vertex_model_version",
+            default="",
+            help=(
+                "Overrides the model_version written to events. Serving one "
+                "checkpoint from two machine families gives each deployment "
+                "its own id, which would split one model across two "
+                "model_version values; this pins it to the registry version."
+            ),
+        )
+        parser.add_argument(
             "--bq_write_method",
             default="STREAMING_INSERTS",
             choices=BQ_WRITE_METHODS,

@@ -25,8 +25,12 @@ from publisher.config import RunConfig, load_config
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("publisher.load")
 
-# All record fields, in schema order. Shared by the MERGE column lists.
-_RECORD_FIELDS = (
+# All record fields, in schema order. The single source of truth for which
+# columns move through the publisher: the MERGE column lists here and the
+# replay SELECT in publisher.replay both read it. It used to be duplicated
+# there, and the copy went stale the moment voted_up was added — the
+# column loaded into staging and then vanished on its way to Pub/Sub.
+RECORD_FIELDS = (
     "id",
     "source",
     "parent_id",
@@ -79,7 +83,7 @@ def build_merge_sql(project: str, dataset: str, landing: str, staging: str) -> s
         values — there is no user input here).
     """
     update_assignments = ",\n      ".join(
-        f"{field} = s.{field}" for field in _RECORD_FIELDS if field != "id"
+        f"{field} = s.{field}" for field in RECORD_FIELDS if field != "id"
     )
     return f"""
     MERGE `{project}.{dataset}.{staging}` AS t
