@@ -93,6 +93,10 @@ JOB_NAME="${JOB_NAME:-co-sentiment-$(date -u +%Y%m%d-%H%M%S)}"
 VERTEX_ENDPOINT_ID="${VERTEX_ENDPOINT_ID:-}"
 VERTEX_PROJECT="${VERTEX_PROJECT:-}"
 VERTEX_LOCATION="${VERTEX_LOCATION:-europe-central2}"
+# Pins the model_version column to the registry version. Serving one
+# checkpoint from two machine families otherwise writes two different
+# model_versions for the same model.
+VERTEX_MODEL_VERSION="${VERTEX_MODEL_VERSION:-}"
 
 if [[ "${NLP_MODEL}" == "vertex" ]]; then
   if [[ -z "${VERTEX_ENDPOINT_ID}" ]]; then
@@ -162,6 +166,7 @@ gcloud dataflow flex-template run "${JOB_NAME}" \
   --parameters="vertex_endpoint_id=${VERTEX_ENDPOINT_ID}" \
   --parameters="vertex_project=${VERTEX_PROJECT}" \
   --parameters="vertex_location=${VERTEX_LOCATION}" \
+  --parameters="vertex_model_version=${VERTEX_MODEL_VERSION}" \
   --parameters="sdk_container_image=${SDK_IMAGE}"
 
 cat <<NEXT

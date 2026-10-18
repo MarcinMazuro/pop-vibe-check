@@ -48,6 +48,11 @@ _ENV_ENDPOINT = "VERTEX_ENDPOINT_ID"
 _ENV_PROJECT = "VERTEX_PROJECT"
 _ENV_LOCATION = "VERTEX_LOCATION"
 _ENV_MAX_CHARS = "VERTEX_MAX_CHARS"
+# Serving the same checkpoint from two machine families gives each
+# deployment its own id, so rows would carry two different
+# model_versions for one model. Setting this pins the identifier to the
+# thing that actually determines the labels: the registry version.
+_ENV_MODEL_VERSION = "VERTEX_MODEL_VERSION"
 
 # XLM-R (like BERT) accepts at most 512 tokens. The serving container does
 # not truncate: a longer comment comes back as
@@ -375,7 +380,9 @@ class VertexEndpointClassifier:
         self._endpoint_id = resolved_id
         self._project = resolved_project
         self._location = resolved_location
-        self._model_version_override = model_version
+        self._model_version_override = (
+            model_version or os.environ.get(_ENV_MODEL_VERSION, "").strip() or None
+        )
         self._deployed_model_id = ""
         self._max_chars = max_chars or _env_max_chars()
         if endpoint is not None:

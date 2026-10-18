@@ -104,6 +104,7 @@ class ClassifyBatch(beam.DoFn):
         vertex_endpoint_id: str = "",
         vertex_project: str = "",
         vertex_location: str = "",
+        vertex_model_version: str = "",
     ) -> None:
         """Record which classifier to load and the Vertex env to inject.
 
@@ -113,11 +114,15 @@ class ClassifyBatch(beam.DoFn):
                 constructing a ``vertex`` classifier. Empty for the stub.
             vertex_project: Copied into ``VERTEX_PROJECT``.
             vertex_location: Copied into ``VERTEX_LOCATION``.
+            vertex_model_version: Copied into ``VERTEX_MODEL_VERSION`` so
+                every row names the registry version rather than whichever
+                deployment served it.
         """
         self._model_name = model_name
         self._vertex_endpoint_id = vertex_endpoint_id
         self._vertex_project = vertex_project
         self._vertex_location = vertex_location
+        self._vertex_model_version = vertex_model_version
         self._classifier: SentimentClassifier | None = None
 
     def setup(self) -> None:
@@ -135,6 +140,8 @@ class ClassifyBatch(beam.DoFn):
             os.environ["VERTEX_ENDPOINT_ID"] = self._vertex_endpoint_id
         if self._vertex_project:
             os.environ["VERTEX_PROJECT"] = self._vertex_project
+        if self._vertex_model_version:
+            os.environ["VERTEX_MODEL_VERSION"] = self._vertex_model_version
         if self._vertex_location:
             os.environ["VERTEX_LOCATION"] = self._vertex_location
         warm_up_language_detection()
@@ -249,6 +256,7 @@ def build_pipeline(pipeline: beam.Pipeline, options: SentimentOptions) -> None:
                 vertex_endpoint_id=options.vertex_endpoint_id or "",
                 vertex_project=options.vertex_project or "",
                 vertex_location=options.vertex_location or "europe-central2",
+                vertex_model_version=options.vertex_model_version or "",
             )
         )
     )

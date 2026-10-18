@@ -27,6 +27,10 @@ substitutions:
   _VERTEX_ENDPOINT_ID: ""
   _VERTEX_PROJECT: ""
   _VERTEX_LOCATION: europe-central2
+  # Pins model_version to the registry version. Without it, serving the
+  # same checkpoint from two machine families writes two different
+  # model_versions for one model.
+  _VERTEX_MODEL_VERSION: ""
 
   # Which template to launch: empty = the current spec (refreshed on every
   # merge to main), or a commit SHA for that commit's immutable spec.
@@ -91,6 +95,7 @@ steps:
       - VERTEX_ENDPOINT_ID=${_VERTEX_ENDPOINT_ID}
       - VERTEX_PROJECT=${_VERTEX_PROJECT}
       - VERTEX_LOCATION=${_VERTEX_LOCATION}
+      - VERTEX_MODEL_VERSION=${_VERTEX_MODEL_VERSION}
       - MAX_WORKERS=${_MAX_WORKERS}
       - MACHINE_TYPE=${_MACHINE_TYPE}
     args:
