@@ -103,9 +103,9 @@ Supervisor: mgr inż. Szymon Olewniczak.
 | Real values in secret containers | YouTube key + salt ✓ real; Reddit ✗ placeholders | Secret Manager |
 | Replay publisher: code, image, job, first replay to Pub/Sub | ✓ Done — 4228 records replayed in order ([details](docs/phase-1-publisher.md)) | [`publisher/`](publisher/) |
 | **Dataflow streaming infra (this PR)** — `dataflow/` module + worker SA, `events` / `events_landing` + promotion MERGE, Dataflow subscription + DLQ topic/sub, dataflow-temp bucket, inter-worker firewall, launch-parameter outputs | ✓ Applied | [`terraform/modules/dataflow/`](terraform/modules/dataflow/) + extensions across `bigquery/`, `pubsub/`, `iam/`, `network/`, `storage/` |
-| Dataflow Beam pipeline + Flex Template | ✓ **Live** — 12,254 records classified end-to-end, reproducibility verified, replays run from CI ([details](docs/phase-1-dataflow.md)) | [`dataflow/`](dataflow/) |
+| Dataflow Beam pipeline + Flex Template | ✓ **Live** — **263,893 records from two sources classified end-to-end**, replays run from CI ([details](docs/phase-1-full-replay.md)) | [`dataflow/`](dataflow/) |
 | NLP stub classifier + registry seam | ✓ Done | [`nlp/`](nlp/) |
-| Real NLP model — XLM-R v2.1 on Vertex (trained on Workbench, tracked in MLflow) | ✓ **Live in `events`** — all 12,254 rows classified 2026-09-21; Endpoint since deleted ([details](docs/phase-1-nlp-vertex-dev.md)) | [`nlp/`](nlp/) |
+| Real NLP model — XLM-R v2.1 on Vertex (trained on Workbench, tracked in MLflow) | ✓ **Whole dataset labelled** — 263,893 rows, **95.3% agreement with the authors' own ratings**; replicas undeployed after the run ([details](docs/phase-1-full-replay.md)) | [`nlp/`](nlp/) |
 | Cloud Build CI/CD — GitHub connection; PR: Python checks, image builds, `terraform plan`; main: image push + deploy by digest, Flex Template specs, approval-gated `terraform apply` | ✓ Applied | [`terraform/modules/cloud_build/`](terraform/modules/cloud_build/) |
 | Monitoring alerts (Dataflow job failure, job left running, replay backlog, dead letters) + one-button replay pipeline (`co-replay-dev`) | ✓ Applied | [`terraform/modules/monitoring/`](terraform/modules/monitoring/), [`dataflow/replay.cloudbuild.yaml`](dataflow/replay.cloudbuild.yaml) |
 
