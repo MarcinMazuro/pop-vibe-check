@@ -35,6 +35,19 @@ Run it as `python -m streamlit` from the repository root: that puts the root on 
 
 Saving a page under `views/` reloads it (`--server.runOnSave true` skips the *Rerun* prompt). Changes to `charts.py`, `metrics.py` or `queries.py` need a server restart: Streamlit does not re-import the `dashboard` package's modules. Query results are cached for `CACHE_TTL_SECONDS`; the sidebar's *Odśwież dane* button clears the cache.
 
+## Deployment (Cloud Run)
+
+The dev dashboard runs as the Cloud Run service `co-dashboard-dev` (`terraform/modules/dashboard`), behind Identity-Aware Proxy. Open the URL from `terraform output dashboard_url` and sign in with a Google account listed in `report_viewer_emails`; the page then reads the views as the service's own identity, so viewers need no BigQuery access.
+
+Every merge to main that touches `dashboard/` builds `dashboard/Dockerfile`, pushes the image and deploys it by digest (`dashboard/cloudbuild.yaml`). To try the image locally:
+
+```bash
+docker build -f dashboard/Dockerfile -t dashboard .
+docker run --rm -p 8080:8080 -e PORT=8080 \
+  -e GOOGLE_APPLICATION_CREDENTIALS=/adc.json \
+  -v "$APPDATA/gcloud/application_default_credentials.json:/adc.json:ro" dashboard
+```
+
 ## Configuration (environment variables)
 
 | Variable | Default | Meaning |

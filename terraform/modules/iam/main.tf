@@ -37,6 +37,10 @@ locals {
       display_name = "Dataflow worker"
       description  = "Runtime identity for the Dataflow streaming pipeline workers — consumes the events subscription, runs the NLP model, and writes enriched rows to the BigQuery events_landing table. Run as the Dataflow Flex Template job's worker service account."
     }
+    "dashboard" = {
+      display_name = "Dashboard"
+      description  = "Runtime identity of the Streamlit dashboard Cloud Run service. Reads the reporting dataset's authorized views and nothing else."
+    }
     "ml-trainer" = {
       display_name = "ML trainer"
       description  = "Identity attached to the Vertex AI Workbench instance used to fine-tune DistilBERT. Reads BigQuery staging, writes dataset caches / MLflow artifacts to GCS, and uploads model versions to Vertex AI Model Registry."

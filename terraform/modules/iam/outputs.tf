@@ -33,6 +33,11 @@ output "ml_trainer_sa_email" {
   value       = google_service_account.workload["ml-trainer"].email
 }
 
+output "dashboard_sa_email" {
+  description = "Email of the dashboard SA — the Streamlit Cloud Run service's runtime identity."
+  value       = google_service_account.workload["dashboard"].email
+}
+
 output "service_accounts" {
   description = "Map of workload short name → SA email. Convenient for iterating in downstream modules (e.g. for_each over collector SAs when granting bucket access)."
   value = {

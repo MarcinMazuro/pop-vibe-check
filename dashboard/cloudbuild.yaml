@@ -1,0 +1,65 @@
+# Cloud Build config for the Streamlit dashboard image.
+#
+# Two triggers share this file (see terraform/modules/cloud_build):
+#   - pull request into main → _DEPLOY=false: build only, nothing pushed;
+#   - push to main           → _DEPLOY=true: push the image tagged with the
+#     full commit SHA, then deploy it to the Cloud Run service by digest.
+#
+# Terraform ignores the service's image, so this deploy is what decides
+# which image the service runs. `services update` keeps every other field,
+# IAP included. Manual run from the repo root (build + deploy):
+#
+#   gcloud builds submit --region=europe-central2 \
+#     --service-account=projects/<project>/serviceAccounts/co-cloud-build-sa-dev@<project>.iam.gserviceaccount.com \
+#     --gcs-source-staging-dir=gs://co-tf-artifacts-dev/cloudbuild/source \
+#     --config dashboard/cloudbuild.yaml \
+#     --substitutions=COMMIT_SHA=$(git rev-parse HEAD),_DEPLOY=true .
+substitutions:
+  _REGION: europe-central2
+  _REPO: co-images-dev
+  _IMAGE: dashboard
+  _SERVICE: co-dashboard-dev
+  _DEPLOY: "false"
+
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - dashboard/Dockerfile
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:${COMMIT_SHA}
+      - .
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -ec
+      - |
+        if [ "${_DEPLOY}" != "true" ]; then
+          echo "Build-only run (_DEPLOY=${_DEPLOY}); image not pushed."
+          exit 0
+        fi
+        docker push ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:${COMMIT_SHA}
+
+  # Deploy by digest: a tag can be moved, a digest always names the exact
+  # image this build produced.
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -ec
+      - |
+        if [ "${_DEPLOY}" != "true" ]; then
+          echo "Build-only run (_DEPLOY=${_DEPLOY}); nothing deployed."
+          exit 0
+        fi
+        image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}
+        digest=$$(gcloud artifacts docker images describe "$$image:${COMMIT_SHA}" \
+          --format='value(image_summary.digest)')
+        gcloud run services update ${_SERVICE} --region=${_REGION} --image="$$image@$$digest"
+
+options:
+  logging: CLOUD_LOGGING_ONLY

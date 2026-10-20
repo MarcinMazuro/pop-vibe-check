@@ -85,6 +85,11 @@ variable "publisher_job_name" {
   type        = string
 }
 
+variable "dashboard_service_name" {
+  description = "Cloud Run service the dashboard image is deployed to."
+  type        = string
+}
+
 variable "template_spec_dir" {
   description = "gs:// prefix Flex Template specs are written under, e.g. 'gs://co-dataflow-temp-dev/templates'."
   type        = string
