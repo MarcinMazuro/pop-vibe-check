@@ -119,7 +119,7 @@ variable "replay_backlog_age_alert_seconds" {
 }
 
 variable "report_viewer_emails" {
-  description = "User emails allowed to read the reporting dataset's authorized views (the Looker Studio dashboard's readers). They get no access to the analytics dataset."
+  description = "User emails allowed to read the reporting dataset's authorized views (the Looker Studio dashboard's readers) and to open the Streamlit dashboard through IAP. They get no access to the analytics dataset."
   type        = list(string)
   default     = []
 }

@@ -5,9 +5,11 @@
 # whole repo unless trimmed here.
 .git/
 .venv/
+**/.venv/
 venv/
 env/
 __pycache__/
+**/__pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/

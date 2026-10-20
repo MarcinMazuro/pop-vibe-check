@@ -253,3 +253,13 @@ output "report_view_ids" {
   description = "Map of purpose → PROJECT.DATASET.VIEW for the Looker Studio data sources."
   value       = module.bigquery.report_view_ids
 }
+
+output "dashboard_service_name" {
+  description = "Short name of the dashboard Cloud Run service."
+  value       = module.dashboard.service_name
+}
+
+output "dashboard_url" {
+  description = "URL of the Streamlit dashboard. Viewers sign in through IAP with a Google account listed in report_viewer_emails."
+  value       = module.dashboard.service_url
+}

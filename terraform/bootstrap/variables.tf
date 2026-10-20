@@ -65,6 +65,7 @@ variable "enabled_services" {
     "dataflow.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
+    "iap.googleapis.com",
     "monitoring.googleapis.com",
     "notebooks.googleapis.com",
     "pubsub.googleapis.com",
