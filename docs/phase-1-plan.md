@@ -317,7 +317,9 @@ Experiment `xlmr-sentiment` (v2) / `distilbert-sentiment` (v1). There is no `ter
 
 **C4 — Presentation.** The BigQuery authorised views are done (dataset
 `co_reporting_dev`, PR #35). The Looker Studio dashboard on top of them
-is outstanding.
+is outstanding. In the meantime a Streamlit dashboard over the same views
+runs on Cloud Run behind IAP (PRs #64, #65):
+[`docs/phase-1-dashboard.md`](phase-1-dashboard.md).
 
 ---
 
