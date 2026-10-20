@@ -1,0 +1,9 @@
+# Dashboard runtime dependencies. Pinned for a reproducible local run and,
+# later, a reproducible image. Kept out of requirements-dev.txt: Streamlit's
+# dependency tree has no business in the pipeline's environment.
+streamlit==1.66.0
+google-cloud-bigquery==3.42.2
+db-dtypes==1.8.0
+pandas==3.0.6
+plotly==7.1.0
+pytest==8.3.4
