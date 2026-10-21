@@ -6,7 +6,7 @@ Streamlit dashboard over the BigQuery reporting views. A quick, code-first way t
 
 Every query is a plain `SELECT *` over one authorized view in the reporting dataset (`terraform/modules/bigquery/main.tf`). A new metric is a new column or a new view in Terraform, never a calculation in Python — that is what keeps a Looker Studio rebuild a matter of clicking the charts together.
 
-The one exception is `metrics.rollup`: it rolls `v_sentiment_daily` up to weeks, months and whole events by **summing the counts and dividing again**, exactly what a Looker Studio chart does with SUM fields. It never averages shares, and it drops `distinct_authors`, which is not additive.
+The one exception is `metrics.rollup`: it rolls `v_sentiment_daily` up to weeks, months and whole events by **summing the counts and dividing again**, exactly what a Looker Studio chart does with SUM fields. It never averages shares, and it drops `distinct_authors`, which is not additive. `metrics.source_divergence` and `metrics.event_lift` only compare such rollups with each other (differences and ratios of summed counts), which in Looker is a blend or a calculated field.
 
 The dashboard never reads the analytics dataset. The reporting views leave out `author_hash` and `text`, so neither can reach a chart.
 
@@ -15,7 +15,7 @@ The dashboard never reads the analytics dataset. The reporting views leave out `
 | Page | View | Shows |
 |---|---|---|
 | Przegląd | `v_sentiment_daily`, `v_sentiment_by_event` | Headline numbers, net sentiment and volume over time per source, event windows shaded |
-| Wydarzenia | `v_sentiment_daily`, `v_sentiment_by_event` | Net sentiment and sentiment split per event × source, the widest source divergence |
+| Wydarzenia | `v_sentiment_daily`, `v_sentiment_by_event` | Net sentiment and sentiment split per event × source, the widest source divergence, each event's net-sentiment change and volume multiplier against the rest of its source |
 | Źródła i języki | `v_source_coverage` | Volume and positive share per source and language |
 
 ## Running locally
