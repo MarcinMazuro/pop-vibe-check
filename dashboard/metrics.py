@@ -16,6 +16,9 @@ import pandas as pd
 
 COUNT_COLUMNS = ["records", "positive", "neutral", "negative"]
 
+# Everything outside the lifecycle event windows: a background, not an event.
+BACKGROUND_TAG = "general"
+
 Grain = Literal["D", "W", "M"]
 
 
@@ -124,4 +127,60 @@ def source_divergence(by_event_source: pd.DataFrame) -> pd.DataFrame:
         pd.DataFrame(rows, columns=columns)
         .sort_values("gap", ascending=False)
         .reset_index(drop=True)
+    )
+
+
+def event_lift(daily: pd.DataFrame) -> pd.DataFrame:
+    """Per event and source, how the event window differs from the source's baseline.
+
+    The baseline is every *other* record of the same source (leave-one-out):
+    on Steam that is mostly ``general``, on YouTube — which has no
+    ``general`` tag, its collection being per event — the other events. Both
+    sides are summed from counts, so the nets are exact. Volume is compared
+    per day with data rather than per calendar day, so a source's collection
+    gaps do not count as silence.
+
+    Args:
+        daily: Rows of ``v_sentiment_daily``, ``event_date`` as datetime.
+
+    Returns:
+        One row per event × source (the background tag excluded) with
+        ``records``, ``days``, ``net_sentiment``, ``per_day``, the same for
+        the baseline (``baseline_*``), ``net_lift`` (event net minus baseline
+        net) and ``volume_multiplier`` (event per-day volume over baseline's).
+        Without a baseline the last two are NaN.
+    """
+    rows = []
+    for (tag, source), event in daily.groupby(["event_tag", "source"]):
+        if tag == BACKGROUND_TAG:
+            continue
+        rest = daily[(daily["source"] == source) & (daily["event_tag"] != tag)]
+        sides = {}
+        for prefix, frame in (("", event), ("baseline_", rest)):
+            days = frame["event_date"].nunique()
+            records = int(frame["records"].sum())
+            sides |= {
+                f"{prefix}records": records,
+                f"{prefix}days": days,
+                f"{prefix}net_sentiment": totals(frame)["net_sentiment"],
+                f"{prefix}per_day": records / days if days else float("nan"),
+            }
+        rows.append({"event_tag": tag, "source": source, **sides})
+
+    columns = [
+        "event_tag",
+        "source",
+        "records",
+        "days",
+        "net_sentiment",
+        "per_day",
+        "baseline_records",
+        "baseline_days",
+        "baseline_net_sentiment",
+        "baseline_per_day",
+    ]
+    out = pd.DataFrame(rows, columns=columns)
+    return out.assign(
+        net_lift=out["net_sentiment"] - out["baseline_net_sentiment"],
+        volume_multiplier=out["per_day"] / out["baseline_per_day"],
     )

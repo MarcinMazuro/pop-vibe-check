@@ -37,7 +37,7 @@ account's email address with "Pop Vibe Check Dashboard" once per account.
 | Page | Views | Shows |
 |---|---|---|
 | **Przegląd** (Sentyment w czasie) | `v_sentiment_daily`, `v_sentiment_by_event` | Headline numbers, net sentiment and volume per source by day / week / month, event windows shaded |
-| **Wydarzenia** | `v_sentiment_daily`, `v_sentiment_by_event` | Net sentiment and the pos / neu / neg split per event × source, the widest source divergence |
+| **Wydarzenia** | `v_sentiment_daily`, `v_sentiment_by_event` | Net sentiment and the pos / neu / neg split per event × source, the widest source divergence, the event effect (net-sentiment change and volume multiplier against the rest of the same source) |
 | **Źródła i języki** | `v_source_coverage` | Volume and positive share per source and language |
 
 Query results are cached for 5 minutes per instance. The sidebar's

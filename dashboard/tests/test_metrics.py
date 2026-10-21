@@ -105,6 +105,48 @@ def test_source_divergence_empty_when_single_source():
     assert metrics.source_divergence(by_event).empty
 
 
+def test_event_lift_compares_against_the_rest_of_the_source():
+    lift = metrics.event_lift(DAILY)
+    steam = lift[(lift.event_tag == "launch") & (lift.source == "steam")].iloc[0]
+
+    # Two days with data in the window, one in the baseline ('general').
+    assert steam.days == 2
+    assert steam.baseline_days == 1
+    assert steam.baseline_net_sentiment == pytest.approx((1 - 2) / 4)
+    assert steam.net_lift == pytest.approx((23 - 11) / 40 - (1 - 2) / 4)
+    assert steam.volume_multiplier == pytest.approx((40 / 2) / (4 / 1))
+
+
+def test_event_lift_skips_the_background_tag():
+    lift = metrics.event_lift(DAILY)
+
+    assert "general" not in set(lift.event_tag)
+
+
+def test_event_lift_without_baseline_is_undefined():
+    # YouTube's only records are the launch window: nothing to compare with.
+    lift = metrics.event_lift(DAILY)
+    youtube = lift[lift.source == "youtube"].iloc[0]
+
+    assert youtube.baseline_records == 0
+    assert pd.isna(youtube.net_lift)
+    assert pd.isna(youtube.volume_multiplier)
+
+
+def test_event_lift_baseline_on_youtube_is_the_other_events():
+    events_only = _daily(
+        [
+            ("2025-04-23", "youtube", "launch", 20, 5, 5, 10, 0.8),
+            ("2025-06-01", "youtube", "reveal", 10, 8, 2, 0, 0.8),
+            ("2025-06-02", "youtube", "reveal", 10, 6, 4, 0, 0.8),
+        ]
+    )
+    lift = metrics.event_lift(events_only).set_index("event_tag")
+
+    assert lift.loc["launch", "baseline_net_sentiment"] == pytest.approx(14 / 20)
+    assert lift.loc["launch", "volume_multiplier"] == pytest.approx(20 / 10)
+
+
 def test_complete_periods_breaks_lines_across_silent_weeks():
     sparse = _daily(
         [
