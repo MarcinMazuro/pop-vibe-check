@@ -20,6 +20,7 @@ module.exports = {
   neutral,
   negative,
   positiveShare: share(positive),
+  neutralShare: share(neutral),
   negativeShare: share(negative),
   netSentiment,
 };

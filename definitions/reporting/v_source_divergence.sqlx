@@ -1,0 +1,46 @@
+config {
+  type: "view",
+  description: "Per event tag covered by at least two sources, the gap between the most and the least positive source. The widest gaps are the events where single-source analysis would mislead.",
+  columns: {
+    event_tag: "Lifecycle event id, or 'general'.",
+    sources: "Sources with records under the tag.",
+    high_source: "Source with the highest net_sentiment under the tag.",
+    high_net: "Its net_sentiment.",
+    low_source: "Source with the lowest net_sentiment under the tag.",
+    low_net: "Its net_sentiment.",
+    gap: "high_net - low_net, in [0, 2].",
+  },
+  bigquery: {
+    labels: reporting.labels,
+  },
+  assertions: {
+    uniqueKey: ["event_tag"],
+    nonNull: ["high_source", "high_net", "low_source", "low_net", "gap"],
+    rowConditions: [
+      "sources >= 2",
+      "high_source != low_source",
+      "gap BETWEEN 0 AND 2",
+    ],
+  },
+}
+
+WITH ranked AS (
+  SELECT
+    event_tag,
+    COUNT(*) AS sources,
+    ARRAY_AGG(STRUCT(source, net_sentiment) ORDER BY net_sentiment DESC LIMIT 1)[OFFSET(0)] AS high,
+    ARRAY_AGG(STRUCT(source, net_sentiment) ORDER BY net_sentiment ASC LIMIT 1)[OFFSET(0)] AS low
+  FROM ${ref("v_sentiment_by_event_source")}
+  GROUP BY event_tag
+  HAVING COUNT(*) >= 2
+)
+
+SELECT
+  event_tag,
+  sources,
+  high.source                             AS high_source,
+  high.net_sentiment                      AS high_net,
+  low.source                              AS low_source,
+  low.net_sentiment                       AS low_net,
+  high.net_sentiment - low.net_sentiment  AS gap
+FROM ranked

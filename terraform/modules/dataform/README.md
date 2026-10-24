@@ -11,7 +11,7 @@ workflow_settings.yaml        project, location, datasets, core version, vars.an
 includes/                     shared SQL fragments (sentiment.js) and settings (reporting.js)
 definitions/sources/          declarations of what Terraform owns (events)
 definitions/reporting/        one .sqlx per view in co_reporting_dev, with its built-in assertions
-definitions/assertions/       assertions across views (no_personal_columns)
+definitions/assertions/       assertions across views (no_personal_columns, records_reconcile)
 ```
 
 Compile locally — no credentials, nothing touches BigQuery — with the version pinned in `workflow_settings.yaml`:

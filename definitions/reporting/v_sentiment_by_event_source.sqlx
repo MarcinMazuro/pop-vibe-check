@@ -1,0 +1,50 @@
+config {
+  type: "view",
+  description: "Sentiment per event window and source, the background tag included. The per-source split behind the event charts; v_sentiment_by_event is the same with the sources merged.",
+  columns: {
+    event_tag: "Lifecycle event id, or 'general' for everything outside the event windows.",
+    source: "Origin platform.",
+    records: "Classified records under the tag from the source.",
+    positive: "Records labelled 'pos'.",
+    neutral: "Records labelled 'neu'.",
+    negative: "Records labelled 'neg'.",
+    positive_share: "positive / records.",
+    neutral_share: "neutral / records.",
+    negative_share: "negative / records.",
+    net_sentiment: "(positive - negative) / records, in [-1, 1].",
+    avg_confidence: "Mean model confidence (sentiment_score).",
+    distinct_authors: "Distinct authors under the tag from the source. Not additive: never sum it across rows.",
+  },
+  bigquery: {
+    labels: reporting.labels,
+  },
+  assertions: {
+    uniqueKey: ["event_tag", "source"],
+    nonNull: ["source"],
+    rowConditions: [
+      "records > 0",
+      "positive + neutral + negative = records",
+      "distinct_authors <= records",
+      "positive_share BETWEEN 0 AND 1",
+      "neutral_share BETWEEN 0 AND 1",
+      "negative_share BETWEEN 0 AND 1",
+      "net_sentiment BETWEEN -1 AND 1",
+    ],
+  },
+}
+
+SELECT
+  event_tag,
+  source,
+  COUNT(*)                     AS records,
+  ${sentiment.positive}        AS positive,
+  ${sentiment.neutral}         AS neutral,
+  ${sentiment.negative}        AS negative,
+  ${sentiment.positiveShare}   AS positive_share,
+  ${sentiment.neutralShare}    AS neutral_share,
+  ${sentiment.negativeShare}   AS negative_share,
+  ${sentiment.netSentiment}    AS net_sentiment,
+  AVG(sentiment_score)         AS avg_confidence,
+  COUNT(DISTINCT author_hash)  AS distinct_authors
+FROM ${ref("events")}
+GROUP BY event_tag, source

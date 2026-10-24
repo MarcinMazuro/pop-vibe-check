@@ -1,0 +1,80 @@
+config {
+  type: "view",
+  description: "Per event window and source, how the window differs from the source's own baseline: every other record of the same source (leave-one-out). On Steam that is mostly 'general'; YouTube has no 'general' (its collection is per event), so its baseline is its other events.",
+  columns: {
+    event_tag: "Lifecycle event id; the background tag is not an event and has no row.",
+    source: "Origin platform.",
+    records: "Records under the tag from the source.",
+    days: "Days with at least one such record. Days with data, not calendar days, so a collection gap does not count as silence.",
+    net_sentiment: "(positive - negative) / records in the window.",
+    per_day: "records / days.",
+    baseline_records: "The source's records under any other tag.",
+    baseline_days: "Days with at least one baseline record.",
+    baseline_net_sentiment: "(positive - negative) / records over the baseline; NULL without one.",
+    baseline_per_day: "baseline_records / baseline_days; NULL without a baseline.",
+    net_lift: "net_sentiment - baseline_net_sentiment, in [-2, 2]; NULL without a baseline.",
+    volume_multiplier: "per_day / baseline_per_day; NULL without a baseline.",
+  },
+  bigquery: {
+    labels: reporting.labels,
+  },
+  assertions: {
+    uniqueKey: ["event_tag", "source"],
+    nonNull: ["event_tag", "source", "records", "days", "net_sentiment", "per_day"],
+    rowConditions: [
+      `event_tag != '${reporting.backgroundTag}'`,
+      "records > 0",
+      "days > 0",
+      "(baseline_records = 0) = (baseline_net_sentiment IS NULL)",
+      "net_sentiment BETWEEN -1 AND 1",
+      "baseline_net_sentiment BETWEEN -1 AND 1",
+      "net_lift BETWEEN -2 AND 2",
+      "volume_multiplier > 0",
+    ],
+  },
+}
+
+-- Both sides are summed from the daily counts, so the nets are exact.
+WITH
+  pairs AS (
+    SELECT DISTINCT event_tag, source
+    FROM ${ref("v_sentiment_daily")}
+    WHERE event_tag != '${reporting.backgroundTag}'
+  ),
+
+  -- Each pair against all daily rows of its source, split into the event
+  -- and the rest.
+  sides AS (
+    SELECT
+      pairs.event_tag,
+      pairs.source,
+      daily.event_tag IS NOT DISTINCT FROM pairs.event_tag  AS in_event,
+      SUM(daily.records)                                    AS records,
+      COUNT(DISTINCT daily.event_date)                      AS days,
+      SAFE_DIVIDE(SUM(daily.positive) - SUM(daily.negative), SUM(daily.records)) AS net_sentiment,
+      SAFE_DIVIDE(SUM(daily.records), COUNT(DISTINCT daily.event_date))          AS per_day
+    FROM pairs
+    JOIN ${ref("v_sentiment_daily")} AS daily
+      ON daily.source = pairs.source
+    GROUP BY event_tag, source, in_event
+  )
+
+SELECT
+  event.event_tag,
+  event.source,
+  event.records,
+  event.days,
+  event.net_sentiment,
+  event.per_day,
+  COALESCE(baseline.records, 0)                          AS baseline_records,
+  COALESCE(baseline.days, 0)                             AS baseline_days,
+  baseline.net_sentiment                                 AS baseline_net_sentiment,
+  baseline.per_day                                       AS baseline_per_day,
+  event.net_sentiment - baseline.net_sentiment           AS net_lift,
+  SAFE_DIVIDE(event.per_day, baseline.per_day)           AS volume_multiplier
+FROM sides AS event
+LEFT JOIN sides AS baseline
+  ON baseline.event_tag = event.event_tag
+  AND baseline.source = event.source
+  AND NOT baseline.in_event
+WHERE event.in_event
