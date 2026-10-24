@@ -36,8 +36,8 @@ account's email address with "Pop Vibe Check Dashboard" once per account.
 
 | Page | Views | Shows |
 |---|---|---|
-| **Przegląd** (Sentyment w czasie) | `v_sentiment_daily`, `v_sentiment_by_event` | Headline numbers, net sentiment and volume per source by day / week / month, event windows shaded |
-| **Wydarzenia** | `v_sentiment_daily`, `v_sentiment_by_event` | Net sentiment and the pos / neu / neg split per event × source, the widest source divergence, the event effect (net-sentiment change and volume multiplier against the rest of the same source) |
+| **Przegląd** (Sentyment w czasie) | `v_sentiment_by_period`, `v_sentiment_by_event` | Headline numbers, net sentiment and volume per source by day / week / month, event windows shaded |
+| **Wydarzenia** | `v_sentiment_by_event_source`, `v_source_divergence`, `v_event_lift`, `v_sentiment_by_event` | Net sentiment and the pos / neu / neg split per event × source, the widest source divergence, the event effect (net-sentiment change and volume multiplier against the rest of the same source) |
 | **Źródła i języki** | `v_source_coverage` | Volume and positive share per source and language |
 
 Query results are cached for 5 minutes per instance. The sidebar's
@@ -127,12 +127,55 @@ actually revokes access.
 | "You don't have access" with a different email | Signed in to Chrome with several Google accounts | Use *try a different account* on that page |
 | Everyone gets a plain 403 | IAP was switched off on the service (e.g. by a Terraform update) | `gcloud run services update co-dashboard-dev --region=europe-central2 --iap` |
 
+## Changing a metric: Dataform web IDE, workspace, deploy
+
+Every number on the pages is a column of a view in `co_reporting_dev`, and
+the views are a Dataform project in the repository root
+([ADR 0003](adr/0003-reporting-sql-in-dataform.md)):
+`definitions/reporting/*.sqlx`, shared SQL fragments in
+`includes/sentiment.js`. A metric changes in SQL, never in the dashboard.
+
+1. **Open a workspace.** Console → BigQuery → Dataform →
+   `co-reporting-dev` → *Create development workspace*. Name it with
+   letters, digits and underscores only (`kozi_lift`, not `kozi-lift`):
+   the name becomes part of a dataset ID. A workspace is a git branch with
+   an editor; it starts from `main`.
+2. **Edit and run.** *Compile* shows errors as you type. *Start execution*
+   creates the views in **`co_reporting_dev_<workspace>`** and the
+   assertion results in `co_dataform_assertions_dev_<workspace>`, never in
+   the datasets the dashboard reads. A failing assertion shows the rows
+   that broke it.
+3. **Commit and push** from the workspace to a new branch, not `main` (a
+   push to `main` deploys at once, without review), then open a pull
+   request on GitHub. `co-dataform-compile-pr-dev` compiles it.
+4. **Merge.** `co-dataform-deploy-dev` compiles `main` at the merge
+   commit and runs every action: the views are replaced in place, then all
+   assertions run, and a failing one fails the build. No approval is
+   needed, and nothing in Terraform changes. The dashboard shows the new
+   numbers once its 5-minute cache expires (or after *Odśwież dane*).
+5. **Clean up** the workspace's datasets when it is done; nothing deletes
+   them automatically:
+
+   ```bash
+   bq rm -r -f -d pop-vibe-check:co_reporting_dev_<workspace>
+   bq rm -r -f -d pop-vibe-check:co_dataform_assertions_dev_<workspace>
+   ```
+
+The same edit works without the web IDE: change the `.sqlx` on a branch
+and compile locally with `npx --yes @dataform/cli@3.0.71 compile` (no
+credentials needed). A new view also goes into the `dependencies` of
+`definitions/assertions/no_personal_columns.sqlx`, and into
+`report_view_ids` in `terraform/modules/bigquery/outputs.tf` if Looker
+Studio should find it. Details:
+[`terraform/modules/dataform/README.md`](../terraform/modules/dataform/README.md).
+
 ## Open items
 
 - **Looker Studio (C4)** is still outstanding. This dashboard is the
   interim presentation layer and a spec for the Looker rebuild: same views,
-  same metrics. The one Python-side calculation, `metrics.rollup`, is what
-  a Looker chart does with SUM fields.
+  same metrics. The pages only filter rows; the headline numbers sum the
+  selected sources' counts, which is what a Looker scorecard does with SUM
+  fields.
 - **Publishing the consent screen** (*Audience → Publish app*) would remove
   the 100-test-user cap and the second list. For the `openid` and `email`
   scopes, publishing should not require Google verification. Access would

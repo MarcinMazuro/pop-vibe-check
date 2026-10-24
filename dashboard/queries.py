@@ -1,10 +1,10 @@
 """BigQuery reads for the dashboard.
 
 Every query is a plain ``SELECT`` over one authorized view in the reporting
-dataset. The metrics themselves live in the view SQL
-(``terraform/modules/bigquery/main.tf``), so a Looker Studio data source
-pointed at the same view shows the same numbers. Nothing here reads the
-analytics dataset, and the runtime identity is not allowed to.
+dataset. The metrics themselves live in the view SQL — the Dataform project
+in ``definitions/reporting/`` — so a Looker Studio data source pointed at the
+same view shows the same numbers. Nothing here reads the analytics dataset,
+and the runtime identity is not allowed to.
 """
 
 from __future__ import annotations
@@ -38,11 +38,29 @@ def _select(sql: str) -> pd.DataFrame:
     return _client().query(sql).to_dataframe()
 
 
-def sentiment_daily() -> pd.DataFrame:
-    """One row per day × source × event_tag (``v_sentiment_daily``)."""
-    df = _select(f"SELECT * FROM {_view('v_sentiment_daily')}")
-    df["event_date"] = pd.to_datetime(df["event_date"])
+def sentiment_by_period() -> pd.DataFrame:
+    """One row per grain × period × source (``v_sentiment_by_period``).
+
+    Every source has a row for every period, zero counts where it had none.
+    """
+    df = _select(f"SELECT * FROM {_view('v_sentiment_by_period')}")
+    df["period"] = pd.to_datetime(df["period"])
     return df
+
+
+def sentiment_by_event_source() -> pd.DataFrame:
+    """One row per event_tag × source, ``general`` included."""
+    return _select(f"SELECT * FROM {_view('v_sentiment_by_event_source')}")
+
+
+def event_lift() -> pd.DataFrame:
+    """One row per event_tag × source against the rest of its source."""
+    return _select(f"SELECT * FROM {_view('v_event_lift')}")
+
+
+def source_divergence() -> pd.DataFrame:
+    """Per event_tag with two or more sources, the most and least positive one."""
+    return _select(f"SELECT * FROM {_view('v_source_divergence')} ORDER BY gap DESC")
 
 
 def sentiment_by_event() -> pd.DataFrame:
