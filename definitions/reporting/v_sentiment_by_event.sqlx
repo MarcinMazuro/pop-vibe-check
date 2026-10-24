@@ -1,0 +1,47 @@
+config {
+  type: "view",
+  description: "One row per lifecycle event tag: volume, sentiment split and the window the records span.",
+  columns: {
+    event_tag: "Lifecycle event id.",
+    first_record_utc: "Earliest created_utc under the tag.",
+    last_record_utc: "Latest created_utc under the tag.",
+    records: "Classified records under the tag.",
+    sources: "Distinct sources with records under the tag.",
+    distinct_authors: "Distinct authors under the tag.",
+    positive: "Records labelled 'pos'.",
+    neutral: "Records labelled 'neu'.",
+    negative: "Records labelled 'neg'.",
+    positive_share: "positive / records.",
+    net_sentiment: "(positive - negative) / records, in [-1, 1].",
+  },
+  bigquery: {
+    labels: reporting.labels,
+  },
+  assertions: {
+    uniqueKey: ["event_tag"],
+    nonNull: ["event_tag"],
+    rowConditions: [
+      "positive + neutral + negative <= records",
+      "positive_share BETWEEN 0 AND 1",
+      "net_sentiment BETWEEN -1 AND 1",
+      "first_record_utc <= last_record_utc",
+    ],
+  },
+}
+
+-- One row per lifecycle event — the summary table of the thesis.
+SELECT
+  event_tag,
+  MIN(created_utc)             AS first_record_utc,
+  MAX(created_utc)             AS last_record_utc,
+  COUNT(*)                     AS records,
+  COUNT(DISTINCT source)       AS sources,
+  COUNT(DISTINCT author_hash)  AS distinct_authors,
+  ${sentiment.positive}        AS positive,
+  ${sentiment.neutral}         AS neutral,
+  ${sentiment.negative}        AS negative,
+  ${sentiment.positiveShare}   AS positive_share,
+  ${sentiment.netSentiment}    AS net_sentiment
+FROM ${ref("events")}
+WHERE event_tag IS NOT NULL
+GROUP BY event_tag

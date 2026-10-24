@@ -4,6 +4,22 @@ Dataform repository for the reporting layer. The SQL of every reporting view liv
 
 Dataform here is a window onto GitHub: the web IDE edits branches through it, and Cloud Build compiles `main` at the merged commit and runs it (`cloudbuild.dataform.yaml`, triggers in `modules/cloud_build`). There is no release config and no workflow config — the views change when the code does, not on a schedule.
 
+## The project
+
+```
+workflow_settings.yaml        project, location, datasets, core version, vars.analytics_dataset
+includes/                     shared SQL fragments (sentiment.js) and settings (reporting.js)
+definitions/sources/          declarations of what Terraform owns (events)
+definitions/reporting/        one .sqlx per view in co_reporting_dev, with its built-in assertions
+definitions/assertions/       assertions across views (no_personal_columns)
+```
+
+Compile locally — no credentials, nothing touches BigQuery — with the version pinned in `workflow_settings.yaml`:
+
+```bash
+npx --yes @dataform/cli@3.0.71 compile
+```
+
 ## What this creates
 
 - **`{name_prefix}-reporting-{env}`** — Dataform repository (`google-beta`) in `var.region`, linked to `https://github.com/{github_owner}/{github_repo}.git` on `default_branch`. Invocations run as `dataform_sa_email`. Workspace compilations get `schema_suffix = "${workspaceName}"`.

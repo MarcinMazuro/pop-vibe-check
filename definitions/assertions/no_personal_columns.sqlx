@@ -1,0 +1,18 @@
+config {
+  type: "assertion",
+  description: "Fails if any object in the reporting dataset exposes author_hash or text. The reporting dataset is authorized on analytics as a whole, so this is what stands between a careless view and the personal data.",
+  // Run after every reporting view, so a view this deploy creates or
+  // changes is checked in the same run. Add each new view here.
+  dependencies: [
+    "v_events",
+    "v_sentiment_by_event",
+    "v_sentiment_daily",
+    "v_source_coverage",
+  ],
+}
+
+SELECT
+  table_name,
+  column_name
+FROM `${reporting.dataset()}`.INFORMATION_SCHEMA.COLUMNS
+WHERE LOWER(column_name) IN (${reporting.personalColumnList})

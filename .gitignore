@@ -183,3 +183,10 @@ nlp/eval/artifacts/xlmr-sent-v2.1/
 
 # Cloud Build local outputs
 cloudbuild-*.yaml.local
+
+# =============================================================================
+# Dataform
+# =============================================================================
+
+node_modules/
+.df-credentials.json

@@ -414,24 +414,22 @@ resource "google_project_iam_member" "ml_trainer_job_user" {
 }
 
 # ----------------------------------------------------------------------------
-# Reporting dataset and authorized views.
+# Reporting dataset.
 #
-# Looker Studio reads from here, never from the analytics dataset. The
-# views are *authorized*: they hold the read permission on `events`
-# themselves, so a dashboard reader granted access to this dataset can
-# see exactly what the views expose and nothing else — not raw_staging,
-# not events_landing, and none of the columns left out below.
+# The dashboard (and later Looker Studio) reads from here, never from the
+# analytics dataset. The views themselves — their SQL, descriptions and
+# data tests — are a Dataform project in the repository root
+# (definitions/reporting/), deployed on merge to main by
+# cloudbuild.dataform.yaml. Terraform owns the dataset, who may read it,
+# and its authorization on analytics.
 #
-# Two columns are deliberately absent from every view:
-#   - author_hash — pseudonymous personal data under GDPR. Author counts
-#     are computed *inside* the aggregates; the identifiers never leave.
-#   - text — the comment bodies themselves. A dashboard shows how
-#     sentiment moves, not what individuals wrote.
+# Two analytics columns never reach a reporting view: author_hash
+# (pseudonymous personal data under GDPR — author counts are computed
+# inside the aggregates) and text (what individuals wrote). A Dataform
+# assertion fails the deploy if either shows up here.
 # ----------------------------------------------------------------------------
 locals {
   reporting_dataset_id = "${replace(var.name_prefix, "-", "_")}_reporting_${var.env}"
-
-  events_ref = "${var.project_id}.${google_bigquery_dataset.analytics.dataset_id}.${google_bigquery_table.events.table_id}"
 }
 
 resource "google_bigquery_dataset" "reporting" {
@@ -447,167 +445,44 @@ resource "google_bigquery_dataset" "reporting" {
   labels = var.labels
 }
 
-# Row-level view, minus the personal and free-text columns. The drill-down
-# behind the aggregates.
-resource "google_bigquery_table" "v_events" {
-  project    = var.project_id
-  dataset_id = google_bigquery_dataset.reporting.dataset_id
-  table_id   = "v_events"
+# The four views Terraform used to create now come from Dataform. Forget
+# them without dropping them: Dataform's deploy replaces each in place.
+# In prod, where Dataform does not run yet, they stay as last applied.
+removed {
+  from = google_bigquery_table.v_events
 
-  description = "One row per classified record, without author_hash or text. Drill-down source for the dashboards."
-
-  deletion_protection = false
-  labels              = var.labels
-
-  view {
-    use_legacy_sql = false
-    query          = <<-SQL
-      SELECT
-        id,
-        source,
-        created_utc,
-        DATE(created_utc)  AS event_date,
-        event_tag,
-        language,
-        score,
-        voted_up,
-        sentiment_label,
-        sentiment_score,
-        model_version
-      FROM `${local.events_ref}`
-    SQL
+  lifecycle {
+    destroy = false
   }
 }
 
-# The time series the dashboard is built on: one row per day × source ×
-# event_tag, with the label split already pivoted into columns.
-resource "google_bigquery_table" "v_sentiment_daily" {
-  project    = var.project_id
-  dataset_id = google_bigquery_dataset.reporting.dataset_id
-  table_id   = "v_sentiment_daily"
+removed {
+  from = google_bigquery_table.v_sentiment_daily
 
-  description = "Daily sentiment split per source and event window. The main time series behind the dashboard."
-
-  deletion_protection = false
-  labels              = var.labels
-
-  view {
-    use_legacy_sql = false
-    query          = <<-SQL
-      SELECT
-        DATE(created_utc)                                       AS event_date,
-        source,
-        event_tag,
-        COUNT(*)                                                AS records,
-        COUNTIF(sentiment_label = 'pos')                        AS positive,
-        COUNTIF(sentiment_label = 'neu')                        AS neutral,
-        COUNTIF(sentiment_label = 'neg')                        AS negative,
-        SAFE_DIVIDE(COUNTIF(sentiment_label = 'pos'), COUNT(*)) AS positive_share,
-        SAFE_DIVIDE(COUNTIF(sentiment_label = 'neg'), COUNT(*)) AS negative_share,
-        -- Positive minus negative, in [-1, 1]: one number per day that a
-        -- line chart can carry.
-        SAFE_DIVIDE(
-          COUNTIF(sentiment_label = 'pos') - COUNTIF(sentiment_label = 'neg'),
-          COUNT(*)
-        )                                                       AS net_sentiment,
-        AVG(sentiment_score)                                    AS avg_confidence,
-        COUNT(DISTINCT author_hash)                             AS distinct_authors
-      FROM `${local.events_ref}`
-      GROUP BY event_date, source, event_tag
-    SQL
+  lifecycle {
+    destroy = false
   }
 }
 
-# One row per lifecycle event — the summary table of the thesis.
-resource "google_bigquery_table" "v_sentiment_by_event" {
-  project    = var.project_id
-  dataset_id = google_bigquery_dataset.reporting.dataset_id
-  table_id   = "v_sentiment_by_event"
+removed {
+  from = google_bigquery_table.v_sentiment_by_event
 
-  description = "One row per lifecycle event tag: volume, sentiment split and the window the records span."
-
-  deletion_protection = false
-  labels              = var.labels
-
-  view {
-    use_legacy_sql = false
-    query          = <<-SQL
-      SELECT
-        event_tag,
-        MIN(created_utc)                                        AS first_record_utc,
-        MAX(created_utc)                                        AS last_record_utc,
-        COUNT(*)                                                AS records,
-        COUNT(DISTINCT source)                                  AS sources,
-        COUNT(DISTINCT author_hash)                             AS distinct_authors,
-        COUNTIF(sentiment_label = 'pos')                        AS positive,
-        COUNTIF(sentiment_label = 'neu')                        AS neutral,
-        COUNTIF(sentiment_label = 'neg')                        AS negative,
-        SAFE_DIVIDE(COUNTIF(sentiment_label = 'pos'), COUNT(*)) AS positive_share,
-        SAFE_DIVIDE(
-          COUNTIF(sentiment_label = 'pos') - COUNTIF(sentiment_label = 'neg'),
-          COUNT(*)
-        )                                                       AS net_sentiment
-      FROM `${local.events_ref}`
-      WHERE event_tag IS NOT NULL
-      GROUP BY event_tag
-    SQL
+  lifecycle {
+    destroy = false
   }
 }
 
-# Coverage per source and language. With a second source this is what
-# shows where each one actually contributes — and it is the evidence for
-# the multilingual claim.
-resource "google_bigquery_table" "v_source_coverage" {
-  project    = var.project_id
-  dataset_id = google_bigquery_dataset.reporting.dataset_id
-  table_id   = "v_source_coverage"
+removed {
+  from = google_bigquery_table.v_source_coverage
 
-  description = "Volume and sentiment per source and language, with the window each source covers."
-
-  deletion_protection = false
-  labels              = var.labels
-
-  view {
-    use_legacy_sql = false
-    query          = <<-SQL
-      SELECT
-        source,
-        language,
-        COUNT(*)                                                AS records,
-        MIN(created_utc)                                        AS first_record_utc,
-        MAX(created_utc)                                        AS last_record_utc,
-        COUNT(DISTINCT event_tag)                               AS event_tags,
-        SAFE_DIVIDE(COUNTIF(sentiment_label = 'pos'), COUNT(*)) AS positive_share
-      FROM `${local.events_ref}`
-      GROUP BY source, language
-    SQL
+  lifecycle {
+    destroy = false
   }
 }
 
-# ----------------------------------------------------------------------------
-# Authorization. Each view is granted read on the analytics dataset, which
-# is what lets a reader query it without holding access to `events`.
-# ----------------------------------------------------------------------------
-resource "google_bigquery_dataset_access" "authorized_views" {
-  for_each = {
-    v_events             = google_bigquery_table.v_events.table_id
-    v_sentiment_daily    = google_bigquery_table.v_sentiment_daily.table_id
-    v_sentiment_by_event = google_bigquery_table.v_sentiment_by_event.table_id
-    v_source_coverage    = google_bigquery_table.v_source_coverage.table_id
-  }
-
-  project    = var.project_id
-  dataset_id = google_bigquery_dataset.analytics.dataset_id
-
-  view {
-    project_id = var.project_id
-    dataset_id = google_bigquery_dataset.reporting.dataset_id
-    table_id   = each.value
-  }
-}
-
-# Every view in the reporting dataset may read the analytics dataset, not
-# just the four above. This is what lets Dataform create and replace views
+# Authorization. Every view in the reporting dataset may read the
+# analytics dataset — which is what lets a reader query a view without
+# holding access to `events`, and lets Dataform create and replace views
 # there without a Terraform apply per view. The price is that anything
 # able to create a view in reporting can expose any analytics column, so
 # no workload but the Dataform SA may write to reporting (the runner and

@@ -1,0 +1,37 @@
+config {
+  type: "view",
+  description: "Volume and sentiment per source and language, with the window each source covers.",
+  columns: {
+    source: "Origin platform.",
+    language: "Language code written by the Dataflow pipeline.",
+    records: "Classified records in the group.",
+    first_record_utc: "Earliest created_utc in the group.",
+    last_record_utc: "Latest created_utc in the group.",
+    event_tags: "Distinct lifecycle event tags in the group.",
+    positive_share: "Records labelled 'pos' / records.",
+  },
+  bigquery: {
+    labels: reporting.labels,
+  },
+  assertions: {
+    uniqueKey: ["source", "language"],
+    rowConditions: [
+      "positive_share BETWEEN 0 AND 1",
+      "first_record_utc <= last_record_utc",
+    ],
+  },
+}
+
+-- Coverage per source and language. With a second source this is what
+-- shows where each one actually contributes — and it is the evidence for
+-- the multilingual claim.
+SELECT
+  source,
+  language,
+  COUNT(*)                    AS records,
+  MIN(created_utc)            AS first_record_utc,
+  MAX(created_utc)            AS last_record_utc,
+  COUNT(DISTINCT event_tag)   AS event_tags,
+  ${sentiment.positiveShare}  AS positive_share
+FROM ${ref("events")}
+GROUP BY source, language
