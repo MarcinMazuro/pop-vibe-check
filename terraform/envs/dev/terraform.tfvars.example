@@ -37,3 +37,6 @@ notification_emails = [
 
 # Users allowed to approve the queued `terraform apply` on main.
 # cloud_build_approver_emails = ["you@example.com"]
+
+# Users allowed to work in the Dataform web IDE (reporting views).
+# dataform_editor_emails = ["you@example.com"]

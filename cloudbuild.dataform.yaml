@@ -1,0 +1,116 @@
+# Cloud Build config for the Dataform project (reporting views).
+#
+# Two triggers share this file (see terraform/modules/cloud_build):
+#   - pull request into main → _MODE=compile: the Dataform CLI compiles
+#     workflow_settings.yaml + definitions/ + includes/ locally. No
+#     credentials, nothing touches BigQuery.
+#   - push to main → _MODE=deploy: the Dataform API compiles this exact
+#     commit, then runs every action as the Dataform SA — CREATE OR REPLACE
+#     each view, then the assertions. A compilation error or a failed
+#     action fails the build.
+#
+# The views stay views, so there is no schedule: what is in BigQuery
+# changes only when this build runs. Manual deploy of a commit on main
+# from the repo root:
+#
+#   gcloud builds submit --region=europe-central2 \
+#     --service-account=projects/<project>/serviceAccounts/co-cloud-build-sa-dev@<project>.iam.gserviceaccount.com \
+#     --gcs-source-staging-dir=gs://co-tf-artifacts-dev/cloudbuild/source \
+#     --config cloudbuild.dataform.yaml \
+#     --substitutions=COMMIT_SHA=$(git rev-parse HEAD),_MODE=deploy .
+substitutions:
+  _REGION: europe-central2
+  _REPOSITORY: co-reporting-dev
+  # Keep equal to dataformCoreVersion in workflow_settings.yaml.
+  _DATAFORM_CLI: 3.0.71
+  _MODE: compile
+  # Minutes to wait for the workflow invocation. A handful of views and
+  # assertions finish in one or two.
+  _TIMEOUT_MINUTES: "20"
+
+steps:
+  - id: compile
+    name: node:20
+    entrypoint: bash
+    args:
+      - -ec
+      - |
+        if [ "${_MODE}" != "compile" ]; then
+          echo "Deploy run (_MODE=${_MODE}); Dataform compiles the commit itself."
+          exit 0
+        fi
+        npx --yes @dataform/cli@${_DATAFORM_CLI} compile
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -ec
+      - |
+        if [ "${_MODE}" != "deploy" ]; then
+          echo "Compile-only run (_MODE=${_MODE}); nothing deployed."
+          exit 0
+        fi
+
+        repo=https://dataform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${_REGION}/repositories/${_REPOSITORY}
+        token=$$(gcloud auth print-access-token)
+        api() {
+          curl -sS --fail-with-body \
+            -H "Authorization: Bearer $$token" \
+            -H "Content-Type: application/json" "$$@"
+        }
+        field() {
+          python3 -c 'import json, sys; print(json.load(sys.stdin).get(sys.argv[1], ""))' "$$1"
+        }
+
+        # Compile the merged commit, not the branch head: a later merge
+        # must not slip into this build.
+        compilation=$$(api -X POST "$$repo/compilationResults" \
+          -d "{\"gitCommitish\": \"${COMMIT_SHA}\"}")
+        errors=$$(printf '%s' "$$compilation" | python3 -c '
+        import json, sys
+        for e in json.load(sys.stdin).get("compilationErrors", []):
+            print(e.get("actionTarget", {}).get("name", "-"), "|", e.get("message"))
+        ')
+        if [ -n "$$errors" ]; then
+          echo "Compilation of ${COMMIT_SHA} failed:"
+          printf '%s\n' "$$errors"
+          exit 1
+        fi
+        compilation_name=$$(printf '%s' "$$compilation" | field name)
+        echo "Compiled: $$compilation_name"
+
+        # No invocationConfig: run every action — views, then assertions.
+        invocation=$$(api -X POST "$$repo/workflowInvocations" \
+          -d "{\"compilationResult\": \"$$compilation_name\"}")
+        invocation_name=$$(printf '%s' "$$invocation" | field name)
+        echo "Invoked: $$invocation_name"
+
+        deadline=$$(( $$(date +%s) + ${_TIMEOUT_MINUTES} * 60 ))
+        while :; do
+          state=$$(api "https://dataform.googleapis.com/v1/$$invocation_name" | field state)
+          case "$$state" in
+            SUCCEEDED)
+              echo "Workflow invocation succeeded."
+              exit 0
+              ;;
+            FAILED|CANCELLED)
+              echo "Workflow invocation $$state. Actions that did not succeed:"
+              api "https://dataform.googleapis.com/v1/$$invocation_name:query" | python3 -c '
+        import json, sys
+        for a in json.load(sys.stdin).get("workflowInvocationActions", []):
+            if a.get("state") not in ("SUCCEEDED", "SKIPPED"):
+                print(a.get("target", {}).get("name"), a.get("state"), "|", a.get("failureReason", ""))
+        '
+              exit 1
+              ;;
+          esac
+          if [ "$$(date +%s)" -ge "$$deadline" ]; then
+            echo "Still $$state after ${_TIMEOUT_MINUTES} min; giving up. The invocation keeps running."
+            exit 1
+          fi
+          sleep 10
+        done
+
+options:
+  logging: CLOUD_LOGGING_ONLY

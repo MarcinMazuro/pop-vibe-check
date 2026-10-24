@@ -21,5 +21,7 @@ output "trigger_names" {
     [for t in google_cloudbuild_trigger.image_deploy : t.name],
     [for t in google_cloudbuild_trigger.terraform_plan_pr : t.name],
     [for t in google_cloudbuild_trigger.terraform_apply : t.name],
+    [for t in google_cloudbuild_trigger.dataform_compile_pr : t.name],
+    [for t in google_cloudbuild_trigger.dataform_deploy : t.name],
   )
 }

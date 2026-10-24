@@ -47,3 +47,8 @@ output "report_view_ids" {
     source_coverage  = "${var.project_id}.${google_bigquery_dataset.reporting.dataset_id}.${google_bigquery_table.v_source_coverage.table_id}"
   }
 }
+
+output "dataform_assertions_dataset_id" {
+  description = "Short ID of the dataset holding Dataform's assertion views; null when dataform_sa_email is not set."
+  value       = one(google_bigquery_dataset.dataform_assertions[*].dataset_id)
+}

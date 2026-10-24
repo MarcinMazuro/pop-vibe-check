@@ -606,6 +606,90 @@ resource "google_bigquery_dataset_access" "authorized_views" {
   }
 }
 
+# Every view in the reporting dataset may read the analytics dataset, not
+# just the four above. This is what lets Dataform create and replace views
+# there without a Terraform apply per view. The price is that anything
+# able to create a view in reporting can expose any analytics column, so
+# no workload but the Dataform SA may write to reporting (the runner and
+# project owners/editors aside), and a Dataform assertion fails the deploy
+# if author_hash or text ever shows up as a reporting column.
+resource "google_bigquery_dataset_access" "authorized_reporting_dataset" {
+  project    = var.project_id
+  dataset_id = google_bigquery_dataset.analytics.dataset_id
+
+  dataset {
+    dataset {
+      project_id = var.project_id
+      dataset_id = google_bigquery_dataset.reporting.dataset_id
+    }
+    target_types = ["VIEWS"]
+  }
+}
+
+# ----------------------------------------------------------------------------
+# Dataform.
+#
+# The Dataform SA builds the reporting views (definitions/reporting/ in the
+# repository root) and runs their assertions:
+#   - dataViewer on analytics — the views' SELECTs, and the assertions
+#     that query through them;
+#   - dataEditor on reporting — CREATE OR REPLACE VIEW;
+#   - dataEditor on its own assertions dataset — assertion views.
+# Project-level bigquery.user rather than jobUser: on top of running jobs
+# it may create datasets, which a run started from a web IDE workspace
+# does (co_reporting_dev_<workspace>, see modules/dataform). It becomes
+# the owner of those datasets and of nothing else.
+# ----------------------------------------------------------------------------
+resource "google_bigquery_dataset" "dataform_assertions" {
+  count = var.dataform_sa_email == null ? 0 : 1
+
+  project    = var.project_id
+  dataset_id = "${replace(var.name_prefix, "-", "_")}_dataform_assertions_${var.env}"
+  location   = var.region
+
+  friendly_name = "${var.name_prefix} Dataform assertions (${var.env})"
+  description   = "Dataform assertion views for the reporting layer. Each returns the rows that break its rule; an empty result is a pass. Rebuilt on every deploy."
+
+  delete_contents_on_destroy = true
+
+  labels = var.labels
+}
+
+resource "google_bigquery_dataset_access" "dataform_analytics_viewer" {
+  count = var.dataform_sa_email == null ? 0 : 1
+
+  project       = var.project_id
+  dataset_id    = google_bigquery_dataset.analytics.dataset_id
+  role          = "roles/bigquery.dataViewer"
+  user_by_email = var.dataform_sa_email
+}
+
+resource "google_bigquery_dataset_access" "dataform_reporting_editor" {
+  count = var.dataform_sa_email == null ? 0 : 1
+
+  project       = var.project_id
+  dataset_id    = google_bigquery_dataset.reporting.dataset_id
+  role          = "roles/bigquery.dataEditor"
+  user_by_email = var.dataform_sa_email
+}
+
+resource "google_bigquery_dataset_access" "dataform_assertions_editor" {
+  count = var.dataform_sa_email == null ? 0 : 1
+
+  project       = var.project_id
+  dataset_id    = google_bigquery_dataset.dataform_assertions[0].dataset_id
+  role          = "roles/bigquery.dataEditor"
+  user_by_email = var.dataform_sa_email
+}
+
+resource "google_project_iam_member" "dataform_bigquery_user" {
+  count = var.dataform_sa_email == null ? 0 : 1
+
+  project = var.project_id
+  role    = "roles/bigquery.user"
+  member  = "serviceAccount:${var.dataform_sa_email}"
+}
+
 # ----------------------------------------------------------------------------
 # Dashboard readers.
 #

@@ -38,6 +38,11 @@ output "dashboard_sa_email" {
   value       = google_service_account.workload["dashboard"].email
 }
 
+output "dataform_sa_email" {
+  description = "Email of the Dataform SA — the identity the Dataform repository's workflow invocations run as."
+  value       = google_service_account.workload["dataform"].email
+}
+
 output "service_accounts" {
   description = "Map of workload short name → SA email. Convenient for iterating in downstream modules (e.g. for_each over collector SAs when granting bucket access)."
   value = {

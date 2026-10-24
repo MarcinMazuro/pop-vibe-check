@@ -95,6 +95,11 @@ variable "template_spec_dir" {
   type        = string
 }
 
+variable "dataform_repository_name" {
+  description = "Short name of the Dataform repository the deploy trigger compiles and invokes (e.g. 'co-reporting-dev'). The Cloud Build SA's grants on it live in modules/dataform."
+  type        = string
+}
+
 # --- Replay pipeline inputs -------------------------------------------------
 # Everything dataflow/launch.sh and promote.sh would otherwise read from
 # `terraform output`.

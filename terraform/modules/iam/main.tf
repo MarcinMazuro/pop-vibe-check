@@ -41,6 +41,10 @@ locals {
       display_name = "Dashboard"
       description  = "Runtime identity of the Streamlit dashboard Cloud Run service. Reads the reporting dataset's authorized views and nothing else."
     }
+    "dataform" = {
+      display_name = "Dataform"
+      description  = "Runs the Dataform repository's workflow invocations — creates the reporting views from definitions/reporting and runs their assertions. Reads the analytics dataset, writes the reporting and assertions datasets."
+    }
     "ml-trainer" = {
       display_name = "ML trainer"
       description  = "Identity attached to the Vertex AI Workbench instance used to fine-tune DistilBERT. Reads BigQuery staging, writes dataset caches / MLflow artifacts to GCS, and uploads model versions to Vertex AI Model Registry."

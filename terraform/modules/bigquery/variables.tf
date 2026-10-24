@@ -69,3 +69,9 @@ variable "report_viewer_emails" {
   type        = list(string)
   default     = []
 }
+
+variable "dataform_sa_email" {
+  description = "Service account the Dataform repository runs as. Granted dataViewer on analytics, dataEditor on reporting and on a Dataform assertions dataset created for it, and bigquery.user on the project. Must be known at plan time (pass a literal for a new SA). null skips the dataset and every grant."
+  type        = string
+  default     = null
+}
