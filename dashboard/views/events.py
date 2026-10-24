@@ -5,10 +5,10 @@ from __future__ import annotations
 import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
-from dashboard import charts, metrics, queries
+from dashboard import charts, queries
 from plotly.subplots import make_subplots
 
-daily = queries.sentiment_daily()
+by_event_source = queries.sentiment_by_event_source()
 events = queries.sentiment_by_event()
 p = charts.palette()
 
@@ -18,7 +18,7 @@ st.caption(
     "Wydarzenia ułożone chronologicznie."
 )
 
-all_sources = charts.ordered_sources(daily["source"].unique().tolist())
+all_sources = charts.ordered_sources(by_event_source["source"].unique().tolist())
 f1, f2 = st.columns([3, 2], vertical_alignment="bottom")
 sources = f1.multiselect(
     "Źródła", all_sources, default=all_sources, format_func=charts.source_label
@@ -36,18 +36,24 @@ if not sources:
     st.info("Wybierz co najmniej jedno źródło.")
     st.stop()
 
-selected = daily[daily["source"].isin(sources)]
+by_event = by_event_source[by_event_source["source"].isin(sources)]
 if not include_general:
-    selected = selected[selected["event_tag"] != "general"]
-
-by_event = metrics.rollup(selected, ["event_tag", "source"])
+    by_event = by_event[by_event["event_tag"] != "general"]
 
 # Chronological order from the event view; 'general' (absent there) goes last.
 order = [t for t in events["event_tag"] if t in set(by_event["event_tag"])]
 order += sorted(set(by_event["event_tag"]) - set(order))
 
 # --- Where the sources disagree -----------------------------------------------
-divergence = metrics.source_divergence(by_event)
+# The view ranks all sources; its gap holds for the selection as long as both
+# ends of it are selected. Otherwise the event is left out rather than shown
+# with a gap the selection does not have.
+divergence = queries.source_divergence()
+divergence = divergence[
+    divergence["high_source"].isin(sources)
+    & divergence["low_source"].isin(sources)
+    & divergence["event_tag"].isin(by_event["event_tag"])
+]
 if not divergence.empty:
     top = divergence.iloc[0]
     st.info(
@@ -93,8 +99,10 @@ st.caption(
     "rekordy na dzień z danymi; na YouTube zależy też od doboru zebranych filmów."
 )
 
-# The baseline is the whole source, whatever the 'general' toggle hides.
-lift = metrics.event_lift(daily[daily["source"].isin(sources)])
+# The baseline is the whole source, whatever the 'general' toggle hides; it
+# never mixes sources, so filtering the rows by source is exact.
+lift = queries.event_lift()
+lift = lift[lift["source"].isin(sources)]
 lift_order = [t for t in order if t in set(lift["event_tag"])]
 
 drops = lift.dropna(subset=["net_lift"])

@@ -6,20 +6,20 @@ import plotly.graph_objects as go
 import streamlit as st
 from dashboard import charts, metrics, queries
 
-GRAINS: dict[str, metrics.Grain] = {"Dzień": "D", "Tydzień": "W", "Miesiąc": "M"}
+GRAINS = {"Dzień": "day", "Tydzień": "week", "Miesiąc": "month"}
 
-daily = queries.sentiment_daily()
+by_period = queries.sentiment_by_period()
 events = queries.sentiment_by_event()
 p = charts.palette()
 
 st.title("Sentyment w czasie")
 st.caption(
     "Udział komentarzy pozytywnych minus negatywnych (net sentiment, od −1 do 1), "
-    f"źródło: `{queries.REPORTING_DATASET}.v_sentiment_daily`."
+    f"źródło: `{queries.REPORTING_DATASET}.v_sentiment_by_period`."
 )
 
 # --- Filters, one row above the charts --------------------------------------
-all_sources = charts.ordered_sources(daily["source"].unique().tolist())
+all_sources = charts.ordered_sources(by_period["source"].unique().tolist())
 f1, f2, f3, f4 = st.columns([3, 2, 2, 2], vertical_alignment="bottom")
 sources = f1.multiselect(
     "Źródła", all_sources, default=all_sources, format_func=charts.source_label
@@ -46,19 +46,23 @@ if not sources:
     st.info("Wybierz co najmniej jedno źródło.")
     st.stop()
 
-selected = daily[daily["source"].isin(sources)]
+selected = by_period[by_period["source"].isin(sources)]
 
 # --- Headline numbers --------------------------------------------------------
-total = metrics.totals(selected)
+# Every record is in exactly one month, so the month rows' counts sum to the
+# whole selection.
+total = metrics.totals(selected[selected["grain"] == "month"])
 k1, k2, k3, k4 = st.columns(4)
 k1.metric("Rekordy", f"{int(total['records']):,}".replace(",", " "))
 k2.metric("Net sentiment", f"{total['net_sentiment']:+.3f}")
 k3.metric("Pozytywne", f"{total['positive_share']:.1%}")
 k4.metric("Negatywne", f"{total['negative_share']:.1%}")
 
-series = metrics.complete_periods(
-    metrics.rollup(selected, ["source"], grain), "source", grain
-)
+# The view's periods span all sources; trim them to the selected sources'
+# first and last record, so YouTube alone does not run on into empty months.
+series = selected[selected["grain"] == grain]
+active = series.loc[series["records"] > 0, "period"]
+series = series[series["period"].between(active.min(), active.max())]
 # 'general' is everything outside the event windows, not a window itself.
 windows = events[events["event_tag"] != "general"]
 
@@ -108,7 +112,7 @@ for source in charts.ordered_sources(series["source"].unique().tolist()):
             mode="lines+markers",
             connectgaps=False,
             line={"color": p.sources.get(source), "width": 2},
-            marker={"size": 4 if grain == "D" else 8},
+            marker={"size": 4 if grain == "day" else 8},
             customdata=s[["records", "positive_share", "negative_share"]],
             hovertemplate=(
                 "%{y:+.3f} · %{customdata[0]:,} rek. · "

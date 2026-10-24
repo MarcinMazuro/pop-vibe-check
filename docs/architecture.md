@@ -22,7 +22,7 @@ flowchart TD
     DF -->|append| EL[(BigQuery events_landing)]
     DF -->|unparseable| DLQ[Pub/Sub dead-letter topic]
     EL -->|"MERGE on id, freshest processed_at"| EV[(BigQuery events<br/>analytical source of truth)]
-    EV --> RPT[(BigQuery co_reporting_dev<br/>authorized views)]
+    EV --> RPT[(BigQuery co_reporting_dev<br/>views from Dataform)]
     RPT --> LS[Looker Studio]
     DF -.->|REST| VX[Vertex AI Endpoint<br/>XLM-R sentiment]
 ```
@@ -95,7 +95,10 @@ preference.
 
 Everything is Terraform (`terraform/modules/`, composed in
 `terraform/envs/dev/`), applied by Cloud Build behind a manual approval;
-laptops run `terraform plan` only. Images are built per service, tagged
+laptops run `terraform plan` only. The one exception is the SQL of the
+reporting views and their metrics: a Dataform project in the repository
+root, tested by assertions and deployed on every merge
+([ADR 0003](adr/0003-reporting-sql-in-dataform.md)). Images are built per service, tagged
 with the full commit SHA and deployed to Cloud Run Jobs **by digest**, so a
 job always runs the exact image a commit produced. The env's canonical
 variables live in a Secret Manager secret rather than on anyone's laptop.
