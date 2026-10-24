@@ -109,6 +109,10 @@ locals {
     # connections / repositories.
     "roles/cloudbuild.connectionAdmin",
 
+    # Dataform — the reporting views' repository (git remote, service
+    # account, workspace overrides) and its repository-level IAM.
+    "roles/dataform.admin",
+
     # Cloud Monitoring — notification channels for budget alerts, plus
     # any future alert policies / uptime checks. Editor (not admin)
     # covers create/update/delete on channels and policies without

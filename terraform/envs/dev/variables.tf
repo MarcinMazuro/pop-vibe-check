@@ -123,3 +123,9 @@ variable "report_viewer_emails" {
   type        = list(string)
   default     = []
 }
+
+variable "dataform_editor_emails" {
+  description = "User emails allowed to work in the Dataform web IDE: create workspaces, compile and execute. An execution runs as the Dataform SA, into datasets suffixed with the workspace name."
+  type        = list(string)
+  default     = []
+}

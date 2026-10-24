@@ -148,6 +148,14 @@ module "bigquery" {
   # Who may read the Looker Studio views. Deliberately not the analytics
   # dataset: the views carry the read permission themselves.
   report_viewer_emails = var.report_viewer_emails
+
+  # Builds the reporting views (modules/dataform). Literal: the SA is new
+  # in this apply, and its computed email would leave the grants' count
+  # unknown at plan time.
+  dataform_sa_email = "${var.name_prefix}-dataform-sa-${local.env}@${var.project_id}.iam.gserviceaccount.com"
+
+  # The literal above carries no dependency on the SA resource.
+  depends_on = [module.iam]
 }
 
 module "pubsub" {
@@ -268,6 +276,7 @@ module "cloud_build" {
   steam_job_name                  = module.cloud_run_jobs.steam_job_name
   publisher_job_name              = module.cloud_run_jobs.publisher_job_name
   dashboard_service_name          = module.dashboard.service_name
+  dataform_repository_name        = module.dataform.repository_name
   template_spec_dir               = module.dataflow.template_spec_dir
 
   # Replay pipeline: the launch parameters a laptop reads from
@@ -306,6 +315,27 @@ module "dashboard" {
   viewer_emails        = var.report_viewer_emails
 
   deployer_sa_email = module.iam.cloud_build_sa_email
+}
+
+# Dataform repository for the reporting views. The SQL lives in the repo
+# root (definitions/); merges to main are compiled and run by Cloud Build.
+# The GitHub token secret needs a version before the repository can fetch
+# — see modules/dataform/README.md.
+module "dataform" {
+  source = "../../modules/dataform"
+
+  project_id  = var.project_id
+  name_prefix = var.name_prefix
+  env         = local.env
+  region      = var.region
+  labels      = local.labels
+
+  github_owner = "MarcinMazuro"
+  github_repo  = "pop-vibe-check"
+
+  dataform_sa_email = module.iam.dataform_sa_email
+  deployer_sa_email = module.iam.cloud_build_sa_email
+  editor_emails     = var.dataform_editor_emails
 }
 
 # Alert policies for the streaming path: job failure, a job left running

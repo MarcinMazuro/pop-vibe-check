@@ -28,6 +28,8 @@ and the secrets and IAM they need.
 | `co-sentiment-pipeline-deploy-dev` | push main | same | Cloud Build SA | same | build, push, publish template specs — **never launches a job** |
 | `co-terraform-plan-pr-dev` | PR → main | `terraform/**` | Terraform CI SA | `terraform/cloudbuild.yaml` | fmt, validate, plan |
 | `co-terraform-apply-dev` | push main | `terraform/**` | Terraform CI SA | same | **manual approval**, then plan + apply |
+| `co-dataform-compile-pr-dev` | PR → main | `workflow_settings.yaml`, `definitions/**`, `includes/**`, `cloudbuild.dataform.yaml` | Cloud Build SA | `cloudbuild.dataform.yaml` | `dataform compile` (CLI, no credentials) |
+| `co-dataform-deploy-dev` | push main | same | Cloud Build SA | same | Dataform API: compile the merged commit, invoke it (views, then assertions), wait for the result |
 | `co-replay-dev` | **manual only** | — | Cloud Build SA | `dataflow/replay.cloudbuild.yaml` | one full replay: launch, publish, wait, drain, promote, fingerprint |
 
 Markdown and test files are ignored by the image triggers; the pipeline
@@ -43,7 +45,7 @@ tests). Collaborators' own PRs build immediately.
 
 | SA | Created in | Used for | Can |
 |---|---|---|---|
-| `co-cloud-build-sa-dev` | `modules/iam` | checks, image builds, deploys, replays | push to Artifact Registry; `run.developer` on the YouTube and publisher jobs + actAs their SAs; write `templates/` in the dataflow-temp bucket; launch and drain Dataflow jobs; `dataEditor` on the analytics dataset for the promotion MERGE |
+| `co-cloud-build-sa-dev` | `modules/iam` | checks, image builds, deploys, replays | push to Artifact Registry; `run.developer` on the YouTube and publisher jobs + actAs their SAs; write `templates/` in the dataflow-temp bucket; launch and drain Dataflow jobs; `dataEditor` on the analytics dataset for the promotion MERGE; `dataform.editor` on the Dataform repository + actAs the Dataform SA |
 | `pvc-tf-ci-sa` | `terraform/bootstrap` | terraform plan / apply | read the tfvars secret; impersonate `pvc-tf-runner-sa` |
 
 The split is deliberate: image builds execute code from pull requests, so
@@ -112,6 +114,7 @@ Add a new version to `co-github-token-dev` (step 3). The connection reads
 | `youtube_job_name` | string | yes | — | Cloud Run Job the YouTube image is deployed to |
 | `publisher_job_name` | string | yes | — | Cloud Run Job the publisher image is deployed to |
 | `template_spec_dir` | string | yes | — | `gs://` prefix for Flex Template specs |
+| `dataform_repository_name` | string | yes | — | Dataform repository the deploy trigger compiles and invokes |
 | `dataflow_worker_sa_email`, `dataflow_subnetwork`, `dataflow_temp_location`, `dataflow_staging_location`, `dataflow_input_subscription`, `dataflow_events_landing_table`, `dataflow_dlq_topic` | string | yes | — | Launch parameters baked into the replay trigger (Cloud Build cannot read `terraform output`) |
 | `vertex_endpoint_id`, `vertex_project`, `vertex_location` | string | no | `""` / `europe-central2` | Vertex Endpoint the pipeline calls with `_MODEL=vertex`; empty while no Endpoint exists |
 | `bq_dataset_id`, `raw_staging_table_id`, `events_landing_table_id`, `events_table_id` | string | yes | — | Table references the replay's promotion step uses |

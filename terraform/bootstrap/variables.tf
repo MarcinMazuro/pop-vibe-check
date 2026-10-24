@@ -63,6 +63,7 @@ variable "enabled_services" {
     "cloudresourcemanager.googleapis.com",
     "compute.googleapis.com",
     "dataflow.googleapis.com",
+    "dataform.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
     "iap.googleapis.com",

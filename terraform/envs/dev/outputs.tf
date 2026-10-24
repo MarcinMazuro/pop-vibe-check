@@ -254,6 +254,16 @@ output "report_view_ids" {
   value       = module.bigquery.report_view_ids
 }
 
+output "dataform_repository_name" {
+  description = "Short name of the Dataform repository holding the reporting views."
+  value       = module.dataform.repository_name
+}
+
+output "dataform_github_token_secret_id" {
+  description = "Secret the Dataform repository reads its GitHub token from. Populate with `gcloud secrets versions add`."
+  value       = module.dataform.github_token_secret_id
+}
+
 output "dashboard_service_name" {
   description = "Short name of the dashboard Cloud Run service."
   value       = module.dashboard.service_name

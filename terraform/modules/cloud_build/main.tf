@@ -370,6 +370,73 @@ resource "google_cloudbuild_trigger" "terraform_apply" {
 }
 
 # ----------------------------------------------------------------------------
+# Dataform — the reporting views (definitions/ in the repository root).
+#
+# Pull requests compile the project with the Dataform CLI, no credentials
+# involved. A merge to main asks the Dataform API to compile that exact
+# commit and run it as the Dataform SA: CREATE OR REPLACE every view, then
+# the assertions, failing the build if any fails. No approval gate — the
+# build replaces views, it creates no infrastructure. See
+# cloudbuild.dataform.yaml.
+# ----------------------------------------------------------------------------
+locals {
+  dataform_substitutions = {
+    _REGION     = var.region
+    _REPOSITORY = var.dataform_repository_name
+  }
+
+  dataform_included_files = [
+    "workflow_settings.yaml",
+    "definitions/**",
+    "includes/**",
+    "cloudbuild.dataform.yaml",
+  ]
+}
+
+resource "google_cloudbuild_trigger" "dataform_compile_pr" {
+  count = local.github_enabled ? 1 : 0
+
+  project         = var.project_id
+  location        = var.region
+  name            = "${var.name_prefix}-dataform-compile-pr-${var.env}"
+  description     = "PR: compile the Dataform project (reporting views and assertions)."
+  filename        = "cloudbuild.dataform.yaml"
+  service_account = local.cloud_build_sa_id
+  included_files  = local.dataform_included_files
+
+  substitutions = merge(local.dataform_substitutions, { _MODE = "compile" })
+
+  repository_event_config {
+    repository = google_cloudbuildv2_repository.this[0].id
+    pull_request {
+      branch          = "^main$"
+      comment_control = local.pr_comment_control
+    }
+  }
+}
+
+resource "google_cloudbuild_trigger" "dataform_deploy" {
+  count = local.github_enabled ? 1 : 0
+
+  project         = var.project_id
+  location        = var.region
+  name            = "${var.name_prefix}-dataform-deploy-${var.env}"
+  description     = "main: compile the merged commit in Dataform and run it (views, then assertions)."
+  filename        = "cloudbuild.dataform.yaml"
+  service_account = local.cloud_build_sa_id
+  included_files  = local.dataform_included_files
+
+  substitutions = merge(local.dataform_substitutions, { _MODE = "deploy" })
+
+  repository_event_config {
+    repository = google_cloudbuildv2_repository.this[0].id
+    push {
+      branch = "^main$"
+    }
+  }
+}
+
+# ----------------------------------------------------------------------------
 # Replay pipeline — manual trigger.
 #
 # One button that launches Dataflow, runs the publisher, waits for the

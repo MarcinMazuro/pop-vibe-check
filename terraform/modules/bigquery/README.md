@@ -12,6 +12,7 @@ Provisions the BigQuery analytics dataset and its four tables — `raw_landing` 
 - Publisher IAM: dataset-level `roles/bigquery.dataEditor` plus project-level `roles/bigquery.jobUser` for the publisher SA (jobUser is only grantable at project scope; kept here because it exists solely for this dataset's load/replay jobs).
 - Dataflow worker IAM: the same `dataEditor` (dataset) + `jobUser` (project) pair for the Dataflow worker SA, so the pipeline can write `events_landing`.
 - ML trainer IAM: dataset-level `roles/bigquery.dataViewer` plus project-level `roles/bigquery.jobUser` so Vertex AI Workbench can SELECT from `raw_staging` / `events` when building the own-domain fine-tune split. Read-only on purpose — the trainer must not write analytical tables.
+- Dataform IAM (when `dataform_sa_email` is set): a **`{name_prefix}_dataform_assertions_{env}`** dataset for assertion views; `dataViewer` on analytics, `dataEditor` on reporting and on the assertions dataset, project-level `roles/bigquery.user` (jobs, plus the `_<workspace>`-suffixed datasets a web IDE run creates). See `modules/dataform`.
 
 ### Schema: one source, two tables
 
@@ -35,6 +36,7 @@ Note: BigQuery dataset names require underscores rather than hyphens (GCP rule).
 | `ml_trainer_sa_email` | string | yes | — | ML trainer SA granted dataViewer on the dataset and jobUser on the project (Workbench gold / own-domain reads) |
 | `report_viewer_emails` | list(string) | no | `[]` | Users who may read the reporting views (the dashboard's readers). No access to the analytics dataset |
 | `promoter_sa_email` | string | no | `null` | SA that promotes a drained replay (the Cloud Build SA); granted `dataEditor` on the dataset and `jobUser` on the project |
+| `dataform_sa_email` | string | no | `null` | SA the Dataform repository runs as; gets the assertions dataset and the grants above. Must be known at plan time |
 | `delete_contents_on_destroy` | bool | no | `false` | One-off escape hatch for `terraform destroy` when the dataset still has tables. See "Tearing down" below. |
 
 ## Outputs
@@ -48,6 +50,7 @@ Note: BigQuery dataset names require underscores rather than hyphens (GCP rule).
 | `raw_staging_table_id` | Short table id of the staging table (`raw_staging`) |
 | `events_landing_table_id` | Short table id of the Dataflow write target (`events_landing`) |
 | `events_table_id` | Short table id of the analytical events table (`events`) |
+| `dataform_assertions_dataset_id` | Short ID of the Dataform assertions dataset; `null` without `dataform_sa_email` |
 
 ## Promotion MERGE (`events_landing` → `events`)
 
@@ -143,3 +146,13 @@ Point a Looker Studio data source at a view in this dataset (the env
 composition outputs `reporting_dataset_id` and `report_view_ids`). Readers
 listed in `report_viewer_emails` get `dataViewer` here plus project-level
 `jobUser`, and nothing on `events`.
+
+**The whole reporting dataset is authorized too** (`target_types = ["VIEWS"]`),
+so a view Dataform creates there can read `events` without a Terraform
+apply. During the move of the view SQL to Dataform the per-view entries
+above stay alongside it. The trade-off: anyone who can create a view in
+reporting can expose any analytics column. No workload other than the
+Dataform SA gets write access to reporting (beyond the Terraform runner
+and the project owners/editors BigQuery admits to every dataset), and a
+Dataform assertion fails the deploy if `author_hash` or `text` appears as
+a reporting column.
