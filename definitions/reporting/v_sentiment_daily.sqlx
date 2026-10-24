@@ -1,0 +1,48 @@
+config {
+  type: "view",
+  description: "Daily sentiment split per source and event window. The main time series behind the dashboard.",
+  columns: {
+    event_date: "DATE(created_utc), UTC.",
+    source: "Origin platform.",
+    event_tag: "Lifecycle event id; NULL for general collection.",
+    records: "Classified records in the group.",
+    positive: "Records labelled 'pos'.",
+    neutral: "Records labelled 'neu'.",
+    negative: "Records labelled 'neg'.",
+    positive_share: "positive / records.",
+    negative_share: "negative / records.",
+    net_sentiment: "(positive - negative) / records, in [-1, 1].",
+    avg_confidence: "Mean model confidence (sentiment_score).",
+    distinct_authors: "Distinct authors in the group. Not additive: never sum it across rows.",
+  },
+  bigquery: {
+    labels: reporting.labels,
+  },
+  assertions: {
+    uniqueKey: ["event_date", "source", "event_tag"],
+    rowConditions: [
+      "positive + neutral + negative <= records",
+      "positive_share BETWEEN 0 AND 1",
+      "negative_share BETWEEN 0 AND 1",
+      "net_sentiment BETWEEN -1 AND 1",
+    ],
+  },
+}
+
+-- The time series the dashboard is built on: one row per day × source ×
+-- event_tag, with the label split already pivoted into columns.
+SELECT
+  DATE(created_utc)            AS event_date,
+  source,
+  event_tag,
+  COUNT(*)                     AS records,
+  ${sentiment.positive}        AS positive,
+  ${sentiment.neutral}         AS neutral,
+  ${sentiment.negative}        AS negative,
+  ${sentiment.positiveShare}   AS positive_share,
+  ${sentiment.negativeShare}   AS negative_share,
+  ${sentiment.netSentiment}    AS net_sentiment,
+  AVG(sentiment_score)         AS avg_confidence,
+  COUNT(DISTINCT author_hash)  AS distinct_authors
+FROM ${ref("events")}
+GROUP BY event_date, source, event_tag

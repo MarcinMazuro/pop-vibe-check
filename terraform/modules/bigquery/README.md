@@ -1,6 +1,6 @@
 # modules/bigquery
 
-Provisions the BigQuery analytics dataset and its four tables — `raw_landing` / `raw_staging` for the replay publisher, `events_landing` / `events` for the Dataflow streaming pipeline — plus the reporting dataset holding the authorized views Looker Studio reads.
+Provisions the BigQuery analytics dataset and its four tables — `raw_landing` / `raw_staging` for the replay publisher, `events_landing` / `events` for the Dataflow streaming pipeline — plus the reporting dataset the dashboard reads. The views in that dataset are created by Dataform from `definitions/reporting/` in the repository root, not by this module.
 
 ## What this creates
 
@@ -124,10 +124,15 @@ classifier at scale.
 
 ## Reporting dataset and authorized views
 
-`{name_prefix}_reporting_{env}` is the presentation layer. It holds four
-views over `events`, each **authorized** on the analytics dataset: the
-view itself carries the read permission, so a dashboard reader needs
-access only to this dataset and sees exactly what the views expose.
+`{name_prefix}_reporting_{env}` is the presentation layer: views over
+`events`, and the only dataset a dashboard reader gets access to.
+
+**This module creates the dataset, not the views.** Their SQL, column
+descriptions and data tests are a Dataform project in the repository root
+(`definitions/reporting/*.sqlx`), deployed on merge to main by
+`cloudbuild.dataform.yaml` — see `modules/dataform`. The four views
+Terraform used to create were handed over with `removed { destroy = false }`
+blocks: Terraform forgot them and Dataform replaces them in place.
 
 | View | One row per | For |
 |---|---|---|
@@ -143,16 +148,17 @@ bodies themselves; a dashboard shows how sentiment moves, not what
 individuals wrote.
 
 Point a Looker Studio data source at a view in this dataset (the env
-composition outputs `reporting_dataset_id` and `report_view_ids`). Readers
-listed in `report_viewer_emails` get `dataViewer` here plus project-level
-`jobUser`, and nothing on `events`.
+composition outputs `reporting_dataset_id` and `report_view_ids`; the view
+names there are a contract with the Dataform project). Readers listed in
+`report_viewer_emails` get `dataViewer` here plus project-level `jobUser`,
+and nothing on `events`.
 
-**The whole reporting dataset is authorized too** (`target_types = ["VIEWS"]`),
-so a view Dataform creates there can read `events` without a Terraform
-apply. During the move of the view SQL to Dataform the per-view entries
-above stay alongside it. The trade-off: anyone who can create a view in
-reporting can expose any analytics column. No workload other than the
-Dataform SA gets write access to reporting (beyond the Terraform runner
-and the project owners/editors BigQuery admits to every dataset), and a
-Dataform assertion fails the deploy if `author_hash` or `text` appears as
-a reporting column.
+**The whole reporting dataset is authorized on analytics**
+(`target_types = ["VIEWS"]`): every view in it can read `events`, so a
+reader needs no access to analytics and a new Dataform view needs no
+Terraform apply. The trade-off: anyone who can create a view in reporting
+can expose any analytics column. No workload other than the Dataform SA
+gets write access to reporting (beyond the Terraform runner and the
+project owners/editors BigQuery admits to every dataset), and the Dataform
+assertion `no_personal_columns` fails the deploy if `author_hash` or `text`
+appears as a reporting column.

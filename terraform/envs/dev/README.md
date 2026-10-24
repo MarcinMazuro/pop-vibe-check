@@ -17,7 +17,7 @@ Build console. Locally you run `terraform plan` only. See
 
 - `terraform/bootstrap` has been applied successfully against this project
   (state bucket `pvc-tf-state` and SA `pvc-tf-runner-sa` exist).
-- `gcloud` and `terraform` (`>= 1.6, < 2.0`) installed.
+- `gcloud` and `terraform` (`>= 1.7, < 2.0`) installed.
 - You hold `roles/iam.serviceAccountTokenCreator` on the runner SA. The
   provider impersonates the SA on every apply, and impersonation requires
   this role on your user identity. **`roles/owner` is not enough** — that

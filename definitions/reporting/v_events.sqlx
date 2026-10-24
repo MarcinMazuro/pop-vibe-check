@@ -1,0 +1,39 @@
+config {
+  type: "view",
+  description: "One row per classified record, without author_hash or text. Drill-down source for the dashboards.",
+  columns: {
+    id: "Source-prefixed unique id, e.g. 'youtube:Ugx...' or 'reddit:t3_...'.",
+    source: "Origin platform.",
+    created_utc: "Author-side creation time.",
+    event_date: "DATE(created_utc), UTC.",
+    event_tag: "Lifecycle event id the collection run targeted; NULL for general collection.",
+    language: "Language code written by the Dataflow pipeline.",
+    score: "Reddit upvotes or YouTube like count.",
+    voted_up: "The author's own thumbs up/down where the source has one (Steam reviews); NULL elsewhere, never a thumbs down.",
+    sentiment_label: "Sentiment class from the NLP model: 'pos', 'neg' or 'neu'.",
+    sentiment_score: "Model confidence for sentiment_label, 0..1.",
+    model_version: "MLflow model version that produced the sentiment label.",
+  },
+  bigquery: {
+    labels: reporting.labels,
+  },
+  assertions: {
+    uniqueKey: ["id"],
+  },
+}
+
+-- Row-level view, minus the personal and free-text columns. The drill-down
+-- behind the aggregates.
+SELECT
+  id,
+  source,
+  created_utc,
+  DATE(created_utc)  AS event_date,
+  event_tag,
+  language,
+  score,
+  voted_up,
+  sentiment_label,
+  sentiment_score,
+  model_version
+FROM ${ref("events")}

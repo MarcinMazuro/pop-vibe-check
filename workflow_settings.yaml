@@ -1,0 +1,20 @@
+# Dataform project for the reporting layer: the views in co_reporting_dev
+# that the dashboard (and later Looker Studio) reads. The SQL lives in
+# definitions/reporting/, shared fragments in includes/.
+#
+# Managed Dataform reads a project from the repository root only, hence
+# this file here and not in a subdirectory. The repository itself, its
+# service account and the deploy are in terraform/modules/dataform and
+# cloudbuild.dataform.yaml.
+#
+# A web IDE workspace compiles with schema suffix _<workspace>, so every
+# dataset below gets that suffix there — except declarations
+# (definitions/sources/), which always point at the real analytics data.
+defaultProject: pop-vibe-check
+defaultLocation: europe-central2
+defaultDataset: co_reporting_dev
+defaultAssertionDataset: co_dataform_assertions_dev
+# Keep equal to _DATAFORM_CLI in cloudbuild.dataform.yaml.
+dataformCoreVersion: 3.0.71
+vars:
+  analytics_dataset: co_analytics_dev
