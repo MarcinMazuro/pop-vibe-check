@@ -42,10 +42,14 @@ output "report_view_ids" {
   description = "Map of purpose → fully-qualified view reference (PROJECT.DATASET.VIEW) for the Looker Studio data sources. The views are created by Dataform (definitions/reporting/), so the names here are a contract with that project, not resource references."
   value = {
     for purpose, view in {
-      events           = "v_events"
-      sentiment_daily  = "v_sentiment_daily"
-      sentiment_events = "v_sentiment_by_event"
-      source_coverage  = "v_source_coverage"
+      events                  = "v_events"
+      sentiment_daily         = "v_sentiment_daily"
+      sentiment_events        = "v_sentiment_by_event"
+      source_coverage         = "v_source_coverage"
+      sentiment_by_period     = "v_sentiment_by_period"
+      sentiment_event_sources = "v_sentiment_by_event_source"
+      event_lift              = "v_event_lift"
+      source_divergence       = "v_source_divergence"
     } : purpose => "${var.project_id}.${google_bigquery_dataset.reporting.dataset_id}.${view}"
   }
 }

@@ -1,0 +1,112 @@
+config {
+  type: "view",
+  description: "Sentiment per period and source at three grains: day, week (from Monday) and month. Every source has a row for every period between the first and the last record, with zero counts where it had none, so a line chart breaks over a gap instead of bridging it.",
+  columns: {
+    grain: "'day', 'week' or 'month'. Always filter on one grain: the three overlap.",
+    period: "First day of the period: the day itself, the Monday of the week, the 1st of the month.",
+    source: "Origin platform.",
+    records: "Classified records in the period; 0 where the source had none.",
+    positive: "Records labelled 'pos'.",
+    neutral: "Records labelled 'neu'.",
+    negative: "Records labelled 'neg'.",
+    positive_share: "positive / records; NULL in a period without records.",
+    neutral_share: "neutral / records; NULL in a period without records.",
+    negative_share: "negative / records; NULL in a period without records.",
+    net_sentiment: "(positive - negative) / records, in [-1, 1]; NULL in a period without records.",
+    avg_confidence: "Mean model confidence (sentiment_score); NULL in a period without records.",
+    distinct_authors: "Distinct authors in the period. Not additive: never sum it across rows.",
+  },
+  bigquery: {
+    labels: reporting.labels,
+  },
+  assertions: {
+    uniqueKey: ["grain", "period", "source"],
+    nonNull: ["grain", "period", "source", "records", "distinct_authors"],
+    rowConditions: [
+      "grain IN ('day', 'week', 'month')",
+      "grain != 'week' OR EXTRACT(DAYOFWEEK FROM period) = 2",
+      "grain != 'month' OR EXTRACT(DAY FROM period) = 1",
+      "positive + neutral + negative = records",
+      "distinct_authors <= records",
+      "(records = 0) = (net_sentiment IS NULL)",
+      "positive_share BETWEEN 0 AND 1",
+      "neutral_share BETWEEN 0 AND 1",
+      "negative_share BETWEEN 0 AND 1",
+      "net_sentiment BETWEEN -1 AND 1",
+    ],
+  },
+}
+
+-- Counted from the events rather than summed from v_sentiment_daily, so
+-- distinct_authors is exact at every grain.
+WITH
+  bounds AS (
+    SELECT
+      MIN(DATE(created_utc)) AS first_day,
+      MAX(DATE(created_utc)) AS last_day
+    FROM ${ref("events")}
+  ),
+
+  -- Every day from the first record to the last, mapped to its period at
+  -- each grain. Both the counts and the spine take their periods from here.
+  calendar AS (
+    SELECT
+      grain,
+      day,
+      CASE grain
+        WHEN 'day' THEN day
+        WHEN 'week' THEN DATE_TRUNC(day, WEEK(MONDAY))
+        WHEN 'month' THEN DATE_TRUNC(day, MONTH)
+      END AS period
+    FROM bounds
+    CROSS JOIN UNNEST(GENERATE_DATE_ARRAY(first_day, last_day)) AS day
+    CROSS JOIN UNNEST(['day', 'week', 'month']) AS grain
+  ),
+
+  counts AS (
+    SELECT
+      calendar.grain,
+      calendar.period,
+      events.source,
+      COUNT(*)                            AS records,
+      ${sentiment.positive}               AS positive,
+      ${sentiment.neutral}                AS neutral,
+      ${sentiment.negative}               AS negative,
+      ${sentiment.positiveShare}          AS positive_share,
+      ${sentiment.neutralShare}           AS neutral_share,
+      ${sentiment.negativeShare}          AS negative_share,
+      ${sentiment.netSentiment}           AS net_sentiment,
+      AVG(sentiment_score)                AS avg_confidence,
+      COUNT(DISTINCT author_hash)         AS distinct_authors
+    FROM ${ref("events")} AS events
+    JOIN calendar ON calendar.day = DATE(events.created_utc)
+    GROUP BY grain, period, source
+  ),
+
+  spine AS (
+    SELECT DISTINCT
+      calendar.grain,
+      calendar.period,
+      sources.source
+    FROM calendar
+    CROSS JOIN (SELECT DISTINCT source FROM ${ref("events")}) AS sources
+  )
+
+-- The spine's empty periods keep zero counts and NULL shares: a share of
+-- nothing is undefined, not 0.
+SELECT
+  spine.grain,
+  spine.period,
+  spine.source,
+  COALESCE(counts.records, 0)           AS records,
+  COALESCE(counts.positive, 0)          AS positive,
+  COALESCE(counts.neutral, 0)           AS neutral,
+  COALESCE(counts.negative, 0)          AS negative,
+  counts.positive_share,
+  counts.neutral_share,
+  counts.negative_share,
+  counts.net_sentiment,
+  counts.avg_confidence,
+  COALESCE(counts.distinct_authors, 0)  AS distinct_authors
+FROM spine
+LEFT JOIN counts USING (grain, period, source)

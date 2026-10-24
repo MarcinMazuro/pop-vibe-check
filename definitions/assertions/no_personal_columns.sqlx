@@ -4,10 +4,14 @@ config {
   // Run after every reporting view, so a view this deploy creates or
   // changes is checked in the same run. Add each new view here.
   dependencies: [
+    "v_event_lift",
     "v_events",
     "v_sentiment_by_event",
+    "v_sentiment_by_event_source",
+    "v_sentiment_by_period",
     "v_sentiment_daily",
     "v_source_coverage",
+    "v_source_divergence",
   ],
 }
 

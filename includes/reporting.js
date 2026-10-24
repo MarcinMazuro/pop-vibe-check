@@ -15,6 +15,10 @@ const labels = {
 const personalColumns = ["author_hash", "text"];
 const personalColumnList = personalColumns.map((c) => `'${c}'`).join(", ");
 
+// The event_tag of everything outside the lifecycle event windows: a
+// background, not an event.
+const backgroundTag = "general";
+
 // The reporting dataset this compilation writes to: co_reporting_dev on a
 // deploy, co_reporting_dev_<workspace> from a web IDE workspace.
 function dataset() {
@@ -23,4 +27,10 @@ function dataset() {
   return `${defaultDatabase}.${schema}`;
 }
 
-module.exports = { labels, personalColumns, personalColumnList, dataset };
+module.exports = {
+  labels,
+  personalColumns,
+  personalColumnList,
+  backgroundTag,
+  dataset,
+};

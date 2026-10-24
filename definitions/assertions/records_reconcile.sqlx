@@ -1,0 +1,45 @@
+config {
+  type: "assertion",
+  description: "Fails if a reporting view loses or double-counts records: each grain of each view must add up to the events it was built from, and each event-lift row's window plus baseline to its whole source.",
+}
+
+WITH
+  events_total AS (
+    SELECT COUNT(*) AS records FROM ${ref("events")}
+  ),
+
+  source_totals AS (
+    SELECT source, COUNT(*) AS records
+    FROM ${ref("events")}
+    GROUP BY source
+  ),
+
+  sums AS (
+    SELECT 'v_sentiment_daily' AS check_name, SUM(records) AS records
+    FROM ${ref("v_sentiment_daily")}
+    UNION ALL
+    SELECT CONCAT('v_sentiment_by_period/', grain), SUM(records)
+    FROM ${ref("v_sentiment_by_period")}
+    GROUP BY grain
+    UNION ALL
+    SELECT 'v_sentiment_by_event_source', SUM(records)
+    FROM ${ref("v_sentiment_by_event_source")}
+  )
+
+SELECT
+  check_name,
+  sums.records,
+  events_total.records AS expected
+FROM sums
+CROSS JOIN events_total
+WHERE sums.records != events_total.records
+
+UNION ALL
+
+SELECT
+  CONCAT('v_event_lift/', lift.event_tag, '/', lift.source),
+  lift.records + lift.baseline_records,
+  source_totals.records
+FROM ${ref("v_event_lift")} AS lift
+JOIN source_totals USING (source)
+WHERE lift.records + lift.baseline_records != source_totals.records

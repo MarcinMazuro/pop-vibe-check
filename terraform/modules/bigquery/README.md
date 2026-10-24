@@ -140,6 +140,10 @@ blocks: Terraform forgot them and Dataform replaces them in place.
 | `v_sentiment_daily` | day × source × event tag | The main time series (`net_sentiment` is positives minus negatives over total, in [-1, 1]) |
 | `v_sentiment_by_event` | lifecycle event tag | The summary table: volume, split, and the window the records span |
 | `v_source_coverage` | source × language | Where each source contributes, and the language mix |
+| `v_sentiment_by_period` | grain (day, week, month) × period × source | The time series at the dashboard's grains; every source has every period, empty ones with zero counts and NULL shares |
+| `v_sentiment_by_event_source` | event tag × source | Each event's split per source, `general` included |
+| `v_event_lift` | event tag × source | An event window against the rest of its source: `net_lift`, `volume_multiplier` |
+| `v_source_divergence` | event tag covered by two or more sources | The most and least positive source and the gap between them |
 
 **Two columns never leave the analytics dataset.** `author_hash` is
 pseudonymous personal data under GDPR — author counts are computed inside
