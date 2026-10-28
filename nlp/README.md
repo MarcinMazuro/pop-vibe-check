@@ -46,7 +46,7 @@ Ops journal (DistilBERT, XLM-R, serve-replay):
 | `stub/` | Rule-based placeholder |
 | `endpoint/` | Vertex predict client + Model Registry upload/deploy/undeploy CLI |
 | `training/` | Hybrid corpus loaders + XLM-RoBERTa `train.py` (Workbench) |
-| `tracking/` | MLflow → GCS (`mlruns/`). Not the Dataflow factory |
+| `tracking/` | MLflow: runs to the tracking server, artifacts to GCS (`mlruns/`); file-store migration. Not the Dataflow factory |
 | `eval/` | Gold sample, guidelines, metrics, time-window SQL, external CSVs |
 | `notebooks/` | Workbench walkthrough |
 
@@ -161,9 +161,26 @@ Model: `xlm-roberta-base`, 3-class head, `MAX_LEN=128`.
 ### MLflow
 
 `nlp/tracking/mlflow_utils.py` logs lr / epochs / batch, accuracy,
-macro-F1, per-class P/R/F1, and the weight directory to
-`gs://co-tf-artifacts-dev/nlp/mlruns`. That GCS prefix is exempt from
-the artifacts-bucket 30-day delete.
+macro-F1, per-class P/R/F1, and the weight directory. Runs go to the
+MLflow tracking server (Cloud Run behind IAP, Postgres on Cloud SQL —
+[`terraform/modules/mlflow`](../terraform/modules/mlflow/README.md),
+[ADR 0004](../docs/adr/0004-mlflow-tracking-server-on-cloud-run-and-cloud-sql.md));
+artifacts go straight to `gs://co-tf-artifacts-dev/nlp/mlruns`, a prefix
+exempt from the artifacts-bucket 30-day delete. On Workbench:
+
+```bash
+export MLFLOW_TRACKING_URI=https://co-mlflow-dev-....run.app   # terraform output mlflow_url
+export MLFLOW_IAP_AUDIENCE=<IAP OAuth client ID>
+```
+
+With those set, the trainer SA authenticates through IAP with an ID
+token that refreshes itself. Leaving `MLFLOW_TRACKING_URI` at a `gs://`
+value falls back to the old Workbench-local file store.
+
+Runs logged to the file store before the server existed are copied into
+it with `python -m nlp.tracking.migrate` (run on Workbench; see its
+docstring). Run ids change, and the old id stays as the tag
+`migrated_from_run_id`.
 
 ## Model Registry and Endpoint
 

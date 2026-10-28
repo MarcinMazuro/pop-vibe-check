@@ -73,6 +73,7 @@ variable "enabled_services" {
     "run.googleapis.com",
     "secretmanager.googleapis.com",
     "serviceusage.googleapis.com",
+    "sqladmin.googleapis.com",
     "storage.googleapis.com",
   ]
 }

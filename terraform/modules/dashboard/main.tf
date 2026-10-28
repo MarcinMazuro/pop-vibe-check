@@ -98,7 +98,8 @@ resource "google_cloud_run_v2_service" "dashboard" {
 #
 # Viewers get httpsResourceAccessor on the project: provider 5.x has no
 # per-service IAP IAM resource, and the project-level grant is inherited by
-# every IAP-protected resource in it — this service is the only one.
+# every IAP-protected resource in it — this service and the MLflow
+# server (modules/mlflow).
 # ----------------------------------------------------------------------------
 resource "google_cloud_run_v2_service_iam_member" "iap_invoker" {
   project  = var.project_id

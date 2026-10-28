@@ -63,6 +63,14 @@ reach Google APIs over Private Google Access only, so an image that tried
 to fetch weights at start-up would hang, and an image that carried them
 would have to be rebuilt to change models.
 
+**Training is tracked on an MLflow server, not on the machine that
+trains.** Parameters, metrics and the model registry live in Postgres
+(Cloud SQL) behind a Cloud Run service. IAP lets in the same people who
+can open the dashboard. Weights go straight to GCS beside the rest of
+the NLP artifacts. Before this, the run history was a directory on the
+Workbench disk that nobody else could see
+([ADR 0004](adr/0004-mlflow-tracking-server-on-cloud-run-and-cloud-sql.md)).
+
 ## What is reproducible, and how
 
 Every number in the thesis has to be regeneratable from the raw archive

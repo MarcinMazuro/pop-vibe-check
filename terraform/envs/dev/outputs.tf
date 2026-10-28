@@ -273,3 +273,18 @@ output "dashboard_url" {
   description = "URL of the Streamlit dashboard. Viewers sign in through IAP with a Google account listed in report_viewer_emails."
   value       = module.dashboard.service_url
 }
+
+output "mlflow_service_name" {
+  description = "Short name of the MLflow tracking server Cloud Run service."
+  value       = module.mlflow.service_name
+}
+
+output "mlflow_url" {
+  description = "URL of the MLflow tracking server: the UI for people signed in through IAP, and MLFLOW_TRACKING_URI for training."
+  value       = module.mlflow.service_url
+}
+
+output "mlflow_sql_connection_name" {
+  description = "Cloud SQL connection name of the MLflow database, for the Cloud SQL Auth Proxy."
+  value       = module.mlflow.instance_connection_name
+}

@@ -311,9 +311,11 @@ Harness in `nlp/eval/`. Gold-set evaluation is done; the Steam
 `voted_up` weak-label evaluation is still **pending** — it needs the
 Steam reviews loaded into staging and replayed through `vertex`.
 
-**C3 — MLflow.** Not Cloud Run + Cloud SQL. Tracking is a file store on
-the Workbench VM; artifacts go to `gs://co-tf-artifacts-dev/nlp/mlruns`.
-Experiment `xlmr-sentiment` (v2) / `distilbert-sentiment` (v1). There is no `terraform/modules/mlflow`.
+**C3 — MLflow.** Phase 1 shipped a file store on the Workbench VM, with
+artifacts in `gs://co-tf-artifacts-dev/nlp/mlruns`. Experiment
+`xlmr-sentiment` (v2) / `distilbert-sentiment` (v1). Since 2026-10-28 it
+is a tracking server: Cloud Run plus Cloud SQL, `terraform/modules/mlflow`
+([ADR 0004](adr/0004-mlflow-tracking-server-on-cloud-run-and-cloud-sql.md)).
 
 **C4 — Presentation.** The BigQuery authorised views are done (dataset
 `co_reporting_dev`, PR #35). The Looker Studio dashboard on top of them
@@ -354,9 +356,9 @@ whoever finishes their track first.
 3. **Streaming Engine** — recommended on, for the disk cost above.
 4. **One multilingual model or per-language routing** — recommended
    single multilingual, for the reasons in C1.
-5. **MLflow hosting.** Cloud Run plus Cloud SQL plus GCS artifacts is the
-   correct shape but adds a recurring cost and a Terraform module. Decide
-   early; Track C cannot start C3 without it.
+5. ~~**MLflow hosting.**~~ — decided 2026-10-28: Cloud Run plus Cloud SQL
+   plus GCS artifacts, with the standing cost accepted, see
+   [ADR 0004](adr/0004-mlflow-tracking-server-on-cloud-run-and-cloud-sql.md).
 6. **How the MERGE runs** — manual `bq query`, a scheduled query, or a
    Cloud Run Job. Whatever the answer, it triggers after the Dataflow
    drain, not after the publisher exits.
