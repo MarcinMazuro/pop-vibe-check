@@ -53,6 +53,11 @@ module "storage" {
   # before a tear-down if you want Terraform to clean up the bucket
   # contents on the next apply.
   raw_archive_autodelete_days = 0
+
+  # The mlflow_sa_email literal above carries no dependency on the SA
+  # resource. Without this the bucket grant raced the SA's creation on the
+  # first apply ("Service account ... does not exist").
+  depends_on = [module.iam]
 }
 
 module "iam" {
