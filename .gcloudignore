@@ -22,6 +22,11 @@ htmlcov/
 *.tfstate.*
 *.tfvars
 
+# Local model weights and caches, gigabytes each, for nlp/eval runs.
+# gitignored, but gcloud reads only this file once it exists.
+nlp/eval/artifacts/*-sent*/
+.cache/
+
 # Agent-local tooling.
 .claude/
 CLAUDE.md
