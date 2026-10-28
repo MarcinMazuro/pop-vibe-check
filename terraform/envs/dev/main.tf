@@ -31,6 +31,11 @@ module "storage" {
   # artifacts bucket. The binding lives next to the bucket.
   ml_trainer_sa_email = module.iam.ml_trainer_sa_email
 
+  # The MLflow server reads run artifacts under nlp/mlruns/ for its UI.
+  # Literal: the SA is new in this apply, and its computed email would
+  # leave the grant's count unknown at plan time.
+  mlflow_sa_email = "${var.name_prefix}-mlflow-sa-${local.env}@${var.project_id}.iam.gserviceaccount.com"
+
   # Cloud Build publishes Flex Template specs under templates/ (grant is
   # conditioned to that prefix).
   cloud_build_sa_email = module.iam.cloud_build_sa_email
@@ -107,6 +112,7 @@ module "artifact_registry" {
     "${var.name_prefix}-dataflow-worker-sa-${local.env}@${var.project_id}.iam.gserviceaccount.com",
     # Literal for the same reason: the dashboard SA is new in this apply.
     "${var.name_prefix}-dashboard-sa-${local.env}@${var.project_id}.iam.gserviceaccount.com",
+    "${var.name_prefix}-mlflow-sa-${local.env}@${var.project_id}.iam.gserviceaccount.com",
   ]
 
   # The dataflow-worker reader entry above is a literal string, so it
@@ -276,6 +282,7 @@ module "cloud_build" {
   steam_job_name                  = module.cloud_run_jobs.steam_job_name
   publisher_job_name              = module.cloud_run_jobs.publisher_job_name
   dashboard_service_name          = module.dashboard.service_name
+  mlflow_service_name             = module.mlflow.service_name
   dataform_repository_name        = module.dataform.repository_name
   template_spec_dir               = module.dataflow.template_spec_dir
 
@@ -313,6 +320,31 @@ module "dashboard" {
   dashboard_sa_email   = module.iam.dashboard_sa_email
   reporting_dataset_id = module.bigquery.reporting_dataset_id
   viewer_emails        = var.report_viewer_emails
+
+  deployer_sa_email = module.iam.cloud_build_sa_email
+}
+
+# MLflow tracking server on Cloud Run, Cloud SQL Postgres behind it, IAP in
+# front. Artifacts stay under nlp/mlruns/ on the artifacts bucket. IAP is
+# switched on with gcloud after the first apply — see
+# modules/mlflow/README.md.
+module "mlflow" {
+  source = "../../modules/mlflow"
+
+  project_id  = var.project_id
+  name_prefix = var.name_prefix
+  env         = local.env
+  region      = var.region
+  labels      = local.labels
+
+  mlflow_sa_email = module.iam.mlflow_sa_email
+  artifact_root   = "${module.storage.tf_artifacts_bucket_url}/nlp/mlruns"
+
+  # Workbench logs runs through IAP. Literal, as everywhere a for_each
+  # takes an SA email.
+  client_sa_emails = [
+    "${var.name_prefix}-ml-trainer-sa-${local.env}@${var.project_id}.iam.gserviceaccount.com",
+  ]
 
   deployer_sa_email = module.iam.cloud_build_sa_email
 }

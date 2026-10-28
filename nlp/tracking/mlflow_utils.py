@@ -1,8 +1,11 @@
 """MLflow tracking with a GCS artifact store.
 
-Hosting is Workbench-local plus a GCS backend — no Cloud SQL, no Cloud
-Run UI. That is enough for the thesis requirement to record learning
-rate, epochs, batch size, accuracy, and macro-F1.
+Runs are tracked on the MLflow server (Cloud Run behind IAP, Postgres on
+Cloud SQL — ``terraform/modules/mlflow``): set ``MLFLOW_TRACKING_URI`` to
+its URL and ``MLFLOW_IAP_AUDIENCE`` to the IAP OAuth client ID. Artifacts
+go straight to GCS under ``nlp/mlruns/`` either way; the server does not
+proxy them. A ``gs://`` tracking URI still selects the older
+Workbench-local file store.
 
 This module must not be imported from :mod:`nlp.registry`. The registry
 is the Dataflow classifier factory; tracking is a training concern.
@@ -11,6 +14,8 @@ is the Dataflow classifier factory; tracking is a training concern.
 from __future__ import annotations
 
 import logging
+import os
+import threading
 from collections.abc import Mapping
 from typing import Any
 
@@ -18,6 +23,38 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_GCS_TRACKING_URI = "gs://co-tf-artifacts-dev/nlp/mlruns"
 DEFAULT_EXPERIMENT = "xlmr-sentiment"
+
+IAP_AUDIENCE_ENV = "MLFLOW_IAP_AUDIENCE"
+# Google ID tokens live an hour. Refreshing at half that keeps a training
+# run longer than an hour authenticated without tracking expiry.
+IAP_TOKEN_REFRESH_SECONDS = 30 * 60
+
+
+def use_iap_token(audience: str) -> None:
+    """Keep ``MLFLOW_TRACKING_TOKEN`` set to a fresh Google ID token.
+
+    IAP admits a program that presents a Google-signed ID token minted for
+    its OAuth client, from an identity holding
+    ``roles/iap.httpsResourceAccessor``. MLflow reads
+    ``MLFLOW_TRACKING_TOKEN`` on every request and sends it as a bearer
+    token, so replacing the variable on a timer is all a refresh needs.
+
+    The token comes from Application Default Credentials: the metadata
+    server on Workbench, or a service account key elsewhere. A user's
+    ``gcloud`` login cannot mint a token for an arbitrary audience.
+
+    Args:
+        audience: The IAP OAuth client ID.
+    """
+    import google.auth.transport.requests
+    import google.oauth2.id_token
+
+    os.environ["MLFLOW_TRACKING_TOKEN"] = google.oauth2.id_token.fetch_id_token(
+        google.auth.transport.requests.Request(), audience
+    )
+    timer = threading.Timer(IAP_TOKEN_REFRESH_SECONDS, use_iap_token, (audience,))
+    timer.daemon = True
+    timer.start()
 
 
 def start_run(
@@ -30,14 +67,15 @@ def start_run(
 
     Args:
         tracking_uri: MLflow tracking URI. ``None`` uses ``MLFLOW_TRACKING_URI``
-            or :data:`DEFAULT_GCS_TRACKING_URI`.
+            or :data:`DEFAULT_GCS_TRACKING_URI`. For an ``https://`` server,
+            ``MLFLOW_IAP_AUDIENCE`` set in the environment switches on the
+            IAP token (:func:`use_iap_token`).
         experiment: Experiment name.
         run_name: Optional run name.
 
     Returns:
         The active ``mlflow.ActiveRun``.
     """
-    import os
     from pathlib import Path
 
     import mlflow
@@ -69,8 +107,16 @@ def start_run(
             experiment,
         )
     else:
+        audience = os.environ.get(IAP_AUDIENCE_ENV)
+        if audience:
+            use_iap_token(audience)
         mlflow.set_tracking_uri(uri)
-        logger.info("MLflow tracking_uri=%s experiment=%s", uri, experiment)
+        logger.info(
+            "MLflow tracking_uri=%s experiment=%s iap=%s",
+            uri,
+            experiment,
+            bool(audience),
+        )
     mlflow.set_experiment(experiment)
     return mlflow.start_run(run_name=run_name)
 

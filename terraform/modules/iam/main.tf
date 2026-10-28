@@ -45,6 +45,10 @@ locals {
       display_name = "Dataform"
       description  = "Runs the Dataform repository's workflow invocations — creates the reporting views from definitions/reporting and runs their assertions. Reads the analytics dataset, writes the reporting and assertions datasets."
     }
+    "mlflow" = {
+      display_name = "MLflow tracking server"
+      description  = "Runtime identity of the MLflow tracking server Cloud Run service. Connects to its Cloud SQL instance, reads its database password secret, and reads run artifacts under nlp/mlruns/ on the artifacts bucket for the UI."
+    }
     "ml-trainer" = {
       display_name = "ML trainer"
       description  = "Identity attached to the Vertex AI Workbench instance used to fine-tune DistilBERT. Reads BigQuery staging, writes dataset caches / MLflow artifacts to GCS, and uploads model versions to Vertex AI Model Registry."

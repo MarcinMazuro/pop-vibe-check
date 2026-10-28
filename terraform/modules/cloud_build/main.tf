@@ -91,6 +91,14 @@ locals {
         _SERVICE = var.dashboard_service_name
       }
     }
+    mlflow-server = {
+      filename       = "mlflow_server/cloudbuild.yaml"
+      included_files = ["mlflow_server/**"]
+      ignored_files  = ["**/*.md"]
+      substitutions = {
+        _SERVICE = var.mlflow_service_name
+      }
+    }
     sentiment-pipeline = {
       filename       = "dataflow/cloudbuild.yaml"
       included_files = ["dataflow/**", "nlp/**"]

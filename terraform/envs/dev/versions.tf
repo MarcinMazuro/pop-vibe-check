@@ -11,5 +11,10 @@ terraform {
       source  = "hashicorp/google-beta"
       version = ">= 5.0, < 6.0"
     }
+    # The MLflow database password (modules/mlflow).
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 3.6, < 4.0"
+    }
   }
 }

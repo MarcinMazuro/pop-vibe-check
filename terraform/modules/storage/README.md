@@ -5,7 +5,7 @@ Provisions the project's GCS buckets.
 ## What this creates
 
 - **`{name_prefix}-raw-archive-{env}`** — regional, immutable raw archive that collectors write JSONL into. Standard → Coldline transition at 30 days. Versioning is off (data is append-only by convention). Uniform bucket-level access, public access prevention enforced.
-- **`{name_prefix}-tf-artifacts-{env}`** — regional bucket for Cloud Build logs, generic build artifacts, and NLP training caches. Hard-deletes objects under `logs/` and `cloudbuild/` at 30 days; the `nlp/` prefix (dataset cache, MLflow runs, exported weights) is retained. The ML trainer SA has `roles/storage.objectAdmin` on this bucket.
+- **`{name_prefix}-tf-artifacts-{env}`** — regional bucket for Cloud Build logs, generic build artifacts, and NLP training caches. Hard-deletes objects under `logs/` and `cloudbuild/` at 30 days; the `nlp/` prefix (dataset cache, MLflow runs, exported weights) is retained. The ML trainer SA has `roles/storage.objectAdmin` on this bucket; the MLflow server SA (when `mlflow_sa_email` is set) has `roles/storage.objectViewer` conditioned to `nlp/mlruns/`, to show run artifacts in its UI.
 - **`{name_prefix}-dataflow-temp-{env}`** — regional bucket for Dataflow's runtime staging/temp files and the Flex Template spec. **Prefix-scoped** lifecycle: hard-deletes objects older than 7 days **only under `staging/` and `temp/`** — `templates/` (the spec every launch reads) is exempt and survives indefinitely. Plus `roles/storage.objectAdmin` on this bucket for the Dataflow worker SA, and (when `cloud_build_sa_email` is set) the same role for the Cloud Build SA, conditioned to `templates/`.
 
 All three buckets sit in the region passed via `var.region`. Project standard is `europe-central2`. `name_prefix` is short (≤ 8 chars) and identifies the case study — e.g. `co` for Clair Obscur, `w4` for Witcher 4 — so multiple releases can coexist in one GCP project.
@@ -24,6 +24,7 @@ A bucket-wide "delete after 7 days" would take `templates/` with it, and the Fle
 | `labels` | map(string) | yes | — | Labels attached to every bucket |
 | `dataflow_worker_sa_email` | string | yes | — | Dataflow worker SA granted `roles/storage.objectAdmin` on the dataflow-temp bucket |
 | `ml_trainer_sa_email` | string | yes | — | ML trainer SA granted `roles/storage.objectAdmin` on the artifacts bucket (`nlp/` cache and MLflow) |
+| `mlflow_sa_email` | string | no | `null` | MLflow server SA granted `roles/storage.objectViewer` on the artifacts bucket, conditioned to `nlp/mlruns/` |
 | `cloud_build_sa_email` | string | no | `null` | Cloud Build SA granted `roles/storage.objectAdmin` on the dataflow-temp bucket, conditioned to `templates/`, to publish Flex Template specs |
 | `cloud_build_source_reader_emails` | list(string) | no | `[]` | SAs manual `gcloud builds submit` runs as; granted `roles/storage.objectViewer` on the artifacts bucket conditioned to `cloudbuild/source/` |
 | `raw_archive_autodelete_days` | number | no | `0` | If > 0, raw archive objects are deleted after this many days. `0` disables hard-delete and lets the archive grow indefinitely. |

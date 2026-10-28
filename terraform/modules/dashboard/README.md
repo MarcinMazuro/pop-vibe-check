@@ -6,7 +6,7 @@ Serves the Streamlit dashboard (`dashboard/`) as a Cloud Run service behind Iden
 
 - **`{name_prefix}-dashboard-{env}`** — Cloud Run v2 service running as the dashboard SA. 1 CPU, 1Gi, scales 0–2 instances, CPU billed only while a websocket is open, session affinity on, 3600s request timeout (a Streamlit session is one long-lived websocket). Created on Google's public `hello` sample image; Cloud Build deploys the real one on every merge to main and the image field is ignored afterwards.
 - **`roles/run.invoker`** on the service for the IAP service agent — the only principal that calls the service directly.
-- **`roles/iap.httpsResourceAccessor`** on the project for each of `viewer_emails`. Project-level because provider 5.x has no per-service IAP IAM resource; this service is the project's only IAP resource.
+- **`roles/iap.httpsResourceAccessor`** on the project for each of `viewer_emails`. Project-level because provider 5.x has no per-service IAP IAM resource; the grant also admits these viewers to the project's other IAP resource, the MLflow server (`modules/mlflow`).
 - **`roles/bigquery.dataViewer`** on the reporting dataset and **`roles/bigquery.jobUser`** on the project for the dashboard SA. The page reads the authorized views as this SA, so viewers need no BigQuery access of their own.
 - **Image deployer grants** (when `deployer_sa_email` is set): `roles/run.developer` on the service and `roles/iam.serviceAccountUser` on the dashboard SA, for the Cloud Build SA.
 

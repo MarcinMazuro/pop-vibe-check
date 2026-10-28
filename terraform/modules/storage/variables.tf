@@ -33,6 +33,12 @@ variable "ml_trainer_sa_email" {
   type        = string
 }
 
+variable "mlflow_sa_email" {
+  description = "Email of the MLflow tracking server SA — granted roles/storage.objectViewer on the artifacts bucket, conditioned to the nlp/mlruns/ prefix, so the UI can show run artifacts. null skips the grant."
+  type        = string
+  default     = null
+}
+
 variable "cloud_build_sa_email" {
   description = "Email of the per-env Cloud Build SA — granted roles/storage.objectAdmin on the dataflow-temp bucket, conditioned to the templates/ prefix, so CI can publish Flex Template specs. null skips the grant."
   type        = string

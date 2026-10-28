@@ -122,6 +122,29 @@ resource "google_storage_bucket_iam_member" "ml_trainer_object_admin" {
 }
 
 # ----------------------------------------------------------------------------
+# MLflow tracking server access to run artifacts.
+#
+# The server runs with --no-serve-artifacts: clients write artifacts to GCS
+# with their own credentials, and the server only reads them back for the
+# UI. Read-only and scoped to nlp/mlruns/ — the bucket also holds Terraform
+# plans. A list call is checked against the bucket, not an object, so the
+# list half of the condition matches on the requested prefix instead.
+# ----------------------------------------------------------------------------
+resource "google_storage_bucket_iam_member" "mlflow_object_viewer" {
+  count = var.mlflow_sa_email == null ? 0 : 1
+
+  bucket = google_storage_bucket.tf_artifacts.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${var.mlflow_sa_email}"
+
+  condition {
+    title       = "mlflow-runs-only"
+    description = "MLflow run artifacts under nlp/mlruns/ only."
+    expression  = "resource.name.startsWith(\"projects/_/buckets/${google_storage_bucket.tf_artifacts.name}/objects/nlp/mlruns/\") || api.getAttribute(\"storage.googleapis.com/objectListPrefix\", \"\").startsWith(\"nlp/mlruns/\")"
+  }
+}
+
+# ----------------------------------------------------------------------------
 # Dataflow staging / temp bucket.
 #
 # Three prefixes with two very different retention needs, which is why the

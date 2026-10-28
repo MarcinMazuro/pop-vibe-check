@@ -113,6 +113,10 @@ locals {
     # account, workspace overrides) and its repository-level IAM.
     "roles/dataform.admin",
 
+    # Cloud SQL — the Postgres instance behind the MLflow tracking server
+    # (modules/mlflow): instance, database and its built-in user.
+    "roles/cloudsql.admin",
+
     # Cloud Monitoring — notification channels for budget alerts, plus
     # any future alert policies / uptime checks. Editor (not admin)
     # covers create/update/delete on channels and policies without

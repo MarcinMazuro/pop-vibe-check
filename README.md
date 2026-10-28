@@ -108,6 +108,7 @@ Supervisor: mgr inż. Szymon Olewniczak.
 | Real NLP model — XLM-R v2.1 on Vertex (trained on Workbench, tracked in MLflow) | ✓ **Live in `events`** — all 12,254 rows classified 2026-09-21; Endpoint since deleted ([details](docs/phase-1-nlp-vertex-dev.md)) | [`nlp/`](nlp/) |
 | Cloud Build CI/CD — GitHub connection; PR: Python checks, image builds, `terraform plan`; main: image push + deploy by digest, Flex Template specs, approval-gated `terraform apply` | ✓ Applied | [`terraform/modules/cloud_build/`](terraform/modules/cloud_build/) |
 | Monitoring alerts (Dataflow job failure, job left running, replay backlog, dead letters) + one-button replay pipeline (`co-replay-dev`) | ✓ Applied | [`terraform/modules/monitoring/`](terraform/modules/monitoring/), [`dataflow/replay.cloudbuild.yaml`](dataflow/replay.cloudbuild.yaml) |
+| MLflow tracking server — Cloud Run behind IAP, Postgres on Cloud SQL, artifacts in GCS; migration of the Workbench file-store runs ([ADR 0004](docs/adr/0004-mlflow-tracking-server-on-cloud-run-and-cloud-sql.md)) | Code ready, not yet applied | [`terraform/modules/mlflow/`](terraform/modules/mlflow/), [`mlflow_server/`](mlflow_server/) |
 
 The Dataflow infrastructure above is **applied and live** (branch `feat/tf-dataflow-infra`); nothing billable runs until PR 3 launches the pipeline explicitly. Applying it also added `roles/compute.securityAdmin` to the Terraform runner SA in `terraform/bootstrap/` — firewall rules are "security" resources that `compute.networkAdmin` alone can't create.
 

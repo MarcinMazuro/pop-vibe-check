@@ -35,7 +35,7 @@ named XLM-R, weights baked into the Flex Template, and a
 | Serving | Vertex Endpoint REST from Dataflow (`--nlp_model vertex`). Weights are **not** `COPY`'d into the Flex Template image. |
 | Registry | `stub` (default) and `vertex`. `events` was produced with `vertex` (XLM-R v2.1). DistilBERT v1, XLM-R v2 and v2.1 are uploaded to Model Registry; **no Endpoint exists today**. |
 | Platform | Vertex AI Workbench / Model Registry / Endpoint (thesis Agent Platform). Console labels say Vertex AI; APIs are `aiplatform.googleapis.com` and `notebooks.googleapis.com`. |
-| MLflow | File store on the Workbench VM + GCS artifacts. Not Cloud SQL, not Cloud Run, no `terraform/modules/mlflow`. |
+| MLflow | Shipped as a file store on the Workbench VM + GCS artifacts. Superseded 2026-10-28 by a tracking server on Cloud Run + Cloud SQL (`terraform/modules/mlflow`, [ADR 0004](adr/0004-mlflow-tracking-server-on-cloud-run-and-cloud-sql.md)); artifacts unchanged. |
 
 Dataflow workers still have no public IP and no PyPI / Hugging Face Hub.
 They reach `aiplatform.googleapis.com` over Private Google Access.

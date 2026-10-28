@@ -147,7 +147,7 @@ terraform apply
 A clean `plan` on a fresh project with `billing_account_id` set and one
 entry in `operator_emails` should show roughly **40 resources to add**:
 
-- 15 × `google_project_service` (one per entry in `var.enabled_services` — includes `monitoring.googleapis.com` since the budgets module landed)
+- one `google_project_service` per entry in `var.enabled_services` (includes `monitoring.googleapis.com` since the budgets module landed, `sqladmin.googleapis.com` since the MLflow module)
 - 1 × `google_storage_bucket` (the state bucket)
 - 2 × `google_service_account` (the runner SA and the Terraform CI SA)
 - one `google_project_iam_member` per curated runner role, plus `logging.logWriter` for the CI SA

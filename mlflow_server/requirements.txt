@@ -1,0 +1,8 @@
+# MLflow tracking server runtime dependencies. The server pin bounds the
+# training client from above: a client newer than the server may call
+# endpoints the server does not have (nlp/training/requirements.txt).
+mlflow==3.16.1
+# Backend store: Postgres on Cloud SQL.
+psycopg2-binary==2.9.13
+# Artifact reads for the UI (gs:// artifact URIs).
+google-cloud-storage==3.16.0
