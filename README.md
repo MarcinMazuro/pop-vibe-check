@@ -2,7 +2,7 @@
 
 Streaming sentiment analysis around pop-culture releases, on GCP with an MLOps pipeline. Engineering thesis project at Gdańsk University of Technology, Department of Computer Systems Architecture.
 
-> **Status:** Phase 0 complete; Phase 1 stream simulation **live**. Staging now holds **263,893 records from two sources** — 251,639 Steam reviews from launch day plus **12,254 YouTube comments across 9 lifecycle events**, reveal through the 2026 anniversary update; the first 4228 are described in [docs/phase-0-youtube-first-collection.md](docs/phase-0-youtube-first-collection.md)), the **replay publisher streams it from BigQuery staging to Pub/Sub in chronological order with time compression** (see [docs/phase-1-publisher.md](docs/phase-1-publisher.md)), and the **Dataflow pipeline classifies it into the `events` table with the real multilingual model (XLM-R v2.1 on a Vertex Endpoint)** ([details](docs/phase-1-nlp-vertex-dev.md)) — the same replay run twice produces an identical set of rows (demonstrated with the stub classifier, see [docs/phase-1-dataflow.md](docs/phase-1-dataflow.md); through the Vertex Endpoint, 3 of 10,811 re-classified ids changed label). The Reddit collector is written but **Reddit API access was refused**, so Reddit is out of scope and **Steam reviews are the second source** ([ADR 0001](docs/adr/0001-steam-replaces-reddit-as-second-source.md)); the remaining Phase 1 work and its three-way split are planned in [docs/phase-1-plan.md](docs/phase-1-plan.md).
+> **Status:** Phase 0 complete; Phase 1 stream simulation **live**. Staging now holds **263,893 records from two sources** — 251,639 Steam reviews from launch day plus **12,254 YouTube comments across 9 lifecycle events**, reveal through the 2026 anniversary update; the first 4228 are described in [docs/phase-0-youtube-first-collection.md](docs/phase-0-youtube-first-collection.md)), the **replay publisher streams it from BigQuery staging to Pub/Sub in chronological order with time compression** (see [docs/phase-1-publisher.md](docs/phase-1-publisher.md)), and the **Dataflow pipeline classifies it into the `events` table with the real multilingual model (XLM-R v2.1 on a Vertex Endpoint)** ([details](docs/phase-1-nlp-vertex-dev.md)) — the same replay run twice produces an identical set of rows (demonstrated with the stub classifier, see [docs/phase-1-dataflow.md](docs/phase-1-dataflow.md); through the Vertex Endpoint, 3 of 10,811 re-classified ids changed label). The Reddit collector is written but **Reddit API access was refused**, so Reddit is out of scope and **Steam reviews are the second source** ([ADR 0001](docs/adr/0001-steam-replaces-reddit-as-second-source.md)); the remaining Phase 1 work and its three-way split are planned in [docs/phase-1-plan.md](docs/phase-1-plan.md). The results are on a **Looker Studio dashboard** over the reporting views ([docs/phase-1-looker-studio.md](docs/phase-1-looker-studio.md)).
 
 ---
 
@@ -109,6 +109,7 @@ Supervisor: mgr inż. Szymon Olewniczak.
 | Cloud Build CI/CD — GitHub connection; PR: Python checks, image builds, `terraform plan`; main: image push + deploy by digest, Flex Template specs, approval-gated `terraform apply` | ✓ Applied | [`terraform/modules/cloud_build/`](terraform/modules/cloud_build/) |
 | Monitoring alerts (Dataflow job failure, job left running, replay backlog, dead letters) + one-button replay pipeline (`co-replay-dev`) | ✓ Applied | [`terraform/modules/monitoring/`](terraform/modules/monitoring/), [`dataflow/replay.cloudbuild.yaml`](dataflow/replay.cloudbuild.yaml) |
 | MLflow tracking server — Cloud Run behind IAP, Postgres on Cloud SQL, artifacts in GCS; migration of the Workbench file-store runs ([ADR 0004](docs/adr/0004-mlflow-tracking-server-on-cloud-run-and-cloud-sql.md)) | Code ready, not yet applied | [`terraform/modules/mlflow/`](terraform/modules/mlflow/), [`mlflow_server/`](mlflow_server/) |
+| Dashboard — Looker Studio report *Pop vibe check*: three pages over six Dataform reporting views, queried with each viewer's credentials | ✓ **Done** — all 263,893 records, Steam and YouTube ([details](docs/phase-1-looker-studio.md)) | Looker Studio; views in [`definitions/reporting/`](definitions/reporting/) |
 
 The Dataflow infrastructure above is **applied and live** (branch `feat/tf-dataflow-infra`); nothing billable runs until PR 3 launches the pipeline explicitly. Applying it also added `roles/compute.securityAdmin` to the Terraform runner SA in `terraform/bootstrap/` — firewall rules are "security" resources that `compute.networkAdmin` alone can't create.
 
@@ -148,7 +149,7 @@ YouTube: image built and pushed, job wired, API key fixed, four events collected
 After collectors produce raw JSONL reliably:
 
 1. ✓ `pubsub/` module — events topic + ordered verify subscription, plus (this PR, applied) the Dataflow subscription, the DLQ topic + inspection subscription, and the Pub/Sub service-agent + worker-SA IAM the dead-letter path needs.
-2. ✓ `bigquery/` extension — `raw_landing` + `raw_staging`, plus (this PR, applied) `events` + `events_landing` (one shared schema extended with `sentiment_*`, `model_version`, `processed_at`), the documented promotion MERGE, and worker-SA IAM. Looker authorised views still to come.
+2. ✓ `bigquery/` extension — `raw_landing` + `raw_staging`, plus (this PR, applied) `events` + `events_landing` (one shared schema extended with `sentiment_*`, `model_version`, `processed_at`), the documented promotion MERGE, and worker-SA IAM. The Looker authorised views followed in `co_reporting_dev`; their SQL now lives in Dataform ([ADR 0003](docs/adr/0003-reporting-sql-in-dataform.md)).
 3. ✓ `iam/` extension — publisher SA, plus (this PR, applied) the Dataflow worker SA.
 4. ✓ `dataflow/` module — **this PR** applied the infrastructure: worker `dataflow.worker` grant, launcher `dataflow.admin` + actAs grants, the dataflow-temp bucket, the inter-worker firewall rule, and the launch-parameter outputs PR 3 reads from `terraform output`. The Beam **Flex Template** (image + spec) and any Dataflow job resource are **PR 3** — `terraform apply` never starts a streaming job.
 5. ✓ `cloud_run_jobs/` extension — publisher job (BigQuery → Pub/Sub bridge with time compression), deployed and verified ([docs/phase-1-publisher.md](docs/phase-1-publisher.md))
@@ -161,9 +162,10 @@ staging → publisher → Pub/Sub → Dataflow → `events`, with the reproducib
 guarantee demonstrated ([docs/phase-1-dataflow.md](docs/phase-1-dataflow.md)). The
 real model (XLM-R v2.1) has classified the full YouTube dataset
 ([docs/phase-1-nlp-vertex-dev.md](docs/phase-1-nlp-vertex-dev.md)). The frontier is
-now **Steam data** (collect, load into staging, replay through `vertex`), the
-`voted_up` weak-label evaluation, and the Looker Studio dashboard — planned in
-[docs/phase-1-plan.md](docs/phase-1-plan.md). Images and dev
+now **Steam data** (collect, load into staging, replay through `vertex`) and the
+`voted_up` weak-label evaluation — planned in
+[docs/phase-1-plan.md](docs/phase-1-plan.md). The Looker Studio dashboard is
+done ([docs/phase-1-looker-studio.md](docs/phase-1-looker-studio.md)). Images and dev
 infrastructure are built and applied by Cloud Build
 ([`terraform/modules/cloud_build/`](terraform/modules/cloud_build/)).
 
@@ -188,7 +190,7 @@ permanently running Dataflow job.
 - `terraform/envs/prod/` composition (same shape as dev)
 - ✓ Pre-commit hooks ([`.pre-commit-config.yaml`](.pre-commit-config.yaml)) and `tflint` + `tfsec` in the PR build — same checks and pins locally and in CI
 - Architecture diagram for the thesis document
-- Looker Studio dashboard
+- ✓ Looker Studio dashboard over the reporting views ([docs/phase-1-looker-studio.md](docs/phase-1-looker-studio.md); the interim Streamlit one was retired on 2026-11-02)
 
 ---
 

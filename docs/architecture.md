@@ -63,10 +63,19 @@ reach Google APIs over Private Google Access only, so an image that tried
 to fetch weights at start-up would hang, and an image that carried them
 would have to be rebuilt to change models.
 
+**The dashboard reads views, not tables.** The Looker Studio report has
+one data source per view in `co_reporting_dev`. The views carry the
+metrics, written in Dataform and tested by assertions
+([ADR 0003](adr/0003-reporting-sql-in-dataform.md)). The report only adds
+up counts and divides once, so a chart shows the same number as the SQL.
+It queries with each viewer's own credentials, and the views are all a
+viewer can read: `events` stays out of reach
+([phase-1-looker-studio.md](phase-1-looker-studio.md)).
+
 **Training is tracked on an MLflow server, not on the machine that
 trains.** Parameters, metrics and the model registry live in Postgres
 (Cloud SQL) behind a Cloud Run service. IAP lets in the same people who
-can open the dashboard. Weights go straight to GCS beside the rest of
+read the reporting views. Weights go straight to GCS beside the rest of
 the NLP artifacts. Before this, the run history was a directory on the
 Workbench disk that nobody else could see
 ([ADR 0004](adr/0004-mlflow-tracking-server-on-cloud-run-and-cloud-sql.md)).

@@ -416,7 +416,7 @@ resource "google_project_iam_member" "ml_trainer_job_user" {
 # ----------------------------------------------------------------------------
 # Reporting dataset.
 #
-# The dashboard (and later Looker Studio) reads from here, never from the
+# The Looker Studio report reads from here, never from the
 # analytics dataset. The views themselves — their SQL, descriptions and
 # data tests — are a Dataform project in the repository root
 # (definitions/reporting/), deployed on merge to main by

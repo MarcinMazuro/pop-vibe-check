@@ -85,11 +85,6 @@ variable "publisher_job_name" {
   type        = string
 }
 
-variable "dashboard_service_name" {
-  description = "Cloud Run service the dashboard image is deployed to."
-  type        = string
-}
-
 variable "mlflow_service_name" {
   description = "Cloud Run service the MLflow tracking server image is deployed to."
   type        = string

@@ -10,13 +10,13 @@
 #     --no-serve-artifacts, so clients write there with their own
 #     credentials and the server only reads back for the UI (the grant
 #     lives in modules/storage, next to the bucket);
-#   - who may open the UI is IAP's decision, as for the dashboard.
+#   - who may open the UI is IAP's decision.
 #
 # The instance runs permanently. It is the one standing cost this module
 # adds (a shared-core db-f1-micro); the service itself scales to zero.
 #
-# IAP is switched on outside Terraform, as for the dashboard: provider 5.x
-# has no iap_enabled field on google_cloud_run_v2_service. See README.md.
+# IAP is switched on outside Terraform: provider 5.x has no iap_enabled
+# field on google_cloud_run_v2_service. See README.md.
 # ----------------------------------------------------------------------------
 data "google_project" "this" {
   project_id = var.project_id
@@ -225,7 +225,7 @@ resource "google_cloud_run_v2_service" "mlflow" {
   }
 
   lifecycle {
-    # Image deployed by Cloud Build, as for the dashboard.
+    # Image deployed by Cloud Build, as for the jobs in cloud_run_jobs.
     ignore_changes = [
       launch_stage,
       client,
@@ -246,10 +246,11 @@ resource "google_cloud_run_v2_service" "mlflow" {
 # ----------------------------------------------------------------------------
 # Access through IAP.
 #
-# People: the project-level httpsResourceAccessor grant made for the
-# dashboard's viewers (modules/dashboard) covers every IAP resource in the
-# project, this one included. Provider 5.x has no per-service IAP IAM
-# resource, so there is no narrower grant to make.
+# People (viewer_emails) get httpsResourceAccessor on the project. Provider
+# 5.x has no per-service IAP IAM resource, so there is no narrower grant to
+# make; the project-level one covers every IAP resource in the project.
+# Until 2026-11-02 the Streamlit dashboard's module made this grant, and
+# envs/dev moved it here when the dashboard was retired.
 #
 # Programs: client_sa_emails (the Workbench trainer) get the same role and
 # present a Google-signed ID token, minted for the IAP OAuth client.
@@ -262,6 +263,14 @@ resource "google_cloud_run_v2_service_iam_member" "iap_invoker" {
   member   = "serviceAccount:${local.iap_service_agent}"
 }
 
+resource "google_project_iam_member" "viewer" {
+  for_each = toset(var.viewer_emails)
+
+  project = var.project_id
+  role    = "roles/iap.httpsResourceAccessor"
+  member  = "user:${each.value}"
+}
+
 resource "google_project_iam_member" "client" {
   for_each = toset(var.client_sa_emails)
 
@@ -272,7 +281,7 @@ resource "google_project_iam_member" "client" {
 
 # ----------------------------------------------------------------------------
 # Image deployer (Cloud Build): run.developer on the service, actAs on its
-# runtime SA — the same pair the dashboard grants.
+# runtime SA — the same pair cloud_run_jobs grants for the jobs.
 # ----------------------------------------------------------------------------
 resource "google_cloud_run_v2_service_iam_member" "deployer" {
   count = var.deployer_sa_email == null ? 0 : 1
