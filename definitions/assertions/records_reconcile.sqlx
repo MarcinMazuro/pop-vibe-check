@@ -24,6 +24,9 @@ WITH
     UNION ALL
     SELECT 'v_sentiment_by_event_source', SUM(records)
     FROM ${ref("v_sentiment_by_event_source")}
+    UNION ALL
+    SELECT 'v_source_coverage', SUM(records)
+    FROM ${ref("v_source_coverage")}
   )
 
 SELECT

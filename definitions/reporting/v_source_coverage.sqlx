@@ -5,10 +5,13 @@ config {
     source: "Origin platform.",
     language: "Language code written by the Dataflow pipeline.",
     records: "Classified records in the group.",
+    positive: "Records labelled 'pos'.",
+    neutral: "Records labelled 'neu'.",
+    negative: "Records labelled 'neg'.",
     first_record_utc: "Earliest created_utc in the group.",
     last_record_utc: "Latest created_utc in the group.",
-    event_tags: "Distinct lifecycle event tags in the group.",
-    positive_share: "Records labelled 'pos' / records.",
+    event_tags: "Distinct lifecycle event tags in the group. Not additive: never sum it across rows.",
+    positive_share: "positive / records.",
   },
   bigquery: {
     labels: reporting.labels,
@@ -16,6 +19,7 @@ config {
   assertions: {
     uniqueKey: ["source", "language"],
     rowConditions: [
+      "positive + neutral + negative = records",
       "positive_share BETWEEN 0 AND 1",
       "first_record_utc <= last_record_utc",
     ],
@@ -24,11 +28,15 @@ config {
 
 -- Coverage per source and language. With a second source this is what
 -- shows where each one actually contributes — and it is the evidence for
--- the multilingual claim.
+-- the multilingual claim. The counts let a chart sum the sources per
+-- language and divide again.
 SELECT
   source,
   language,
   COUNT(*)                    AS records,
+  ${sentiment.positive}       AS positive,
+  ${sentiment.neutral}        AS neutral,
+  ${sentiment.negative}       AS negative,
   MIN(created_utc)            AS first_record_utc,
   MAX(created_utc)            AS last_record_utc,
   COUNT(DISTINCT event_tag)   AS event_tags,
