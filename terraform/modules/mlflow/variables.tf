@@ -44,6 +44,12 @@ variable "client_sa_emails" {
   default     = []
 }
 
+variable "viewer_emails" {
+  description = "User emails allowed through IAP to open the UI. Granted roles/iap.httpsResourceAccessor on the project, which covers every IAP resource in it."
+  type        = list(string)
+  default     = []
+}
+
 variable "tier" {
   description = "Cloud SQL machine tier. db-f1-micro is the smallest shared-core tier; the server's load is a few writes per training step."
   type        = string

@@ -37,10 +37,6 @@ locals {
       display_name = "Dataflow worker"
       description  = "Runtime identity for the Dataflow streaming pipeline workers — consumes the events subscription, runs the NLP model, and writes enriched rows to the BigQuery events_landing table. Run as the Dataflow Flex Template job's worker service account."
     }
-    "dashboard" = {
-      display_name = "Dashboard"
-      description  = "Runtime identity of the Streamlit dashboard Cloud Run service. Reads the reporting dataset's authorized views and nothing else."
-    }
     "dataform" = {
       display_name = "Dataform"
       description  = "Runs the Dataform repository's workflow invocations — creates the reporting views from definitions/reporting and runs their assertions. Reads the analytics dataset, writes the reporting and assertions datasets."

@@ -83,14 +83,6 @@ locals {
         _JOB = var.publisher_job_name
       }
     }
-    dashboard = {
-      filename       = "dashboard/cloudbuild.yaml"
-      included_files = ["dashboard/**"]
-      ignored_files  = ["**/*.md", "**/tests/**"]
-      substitutions = {
-        _SERVICE = var.dashboard_service_name
-      }
-    }
     mlflow-server = {
       filename       = "mlflow_server/cloudbuild.yaml"
       included_files = ["mlflow_server/**"]

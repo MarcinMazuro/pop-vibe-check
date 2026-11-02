@@ -9,7 +9,7 @@ Runs the MLflow tracking server (`mlflow_server/`) as a Cloud Run service behind
 - **`{name_prefix}-mlflow-{env}`**: a Cloud Run v2 service running as the MLflow SA. 1 CPU, 1Gi, 0–1 instances, one worker. It reaches the database over Cloud Run's built-in Cloud SQL connection (`/cloudsql`) and runs `--no-serve-artifacts`, so clients write artifacts to GCS themselves. It is created on Google's public `hello` image; Cloud Build deploys the real one, and the image field is ignored afterwards.
 - **For the MLflow SA**: `roles/cloudsql.client` on the project and `roles/secretmanager.secretAccessor` on the password secret. Read access to `nlp/mlruns/` comes from `modules/storage`, next to the bucket.
 - **`roles/run.invoker`** on the service for the IAP service agent.
-- **`roles/iap.httpsResourceAccessor`** on the project for each of `client_sa_emails` (the Workbench trainer). People are not granted anything here: the project-level grant `modules/dashboard` makes for `report_viewer_emails` already covers every IAP resource in the project.
+- **`roles/iap.httpsResourceAccessor`** on the project for each of `viewer_emails` (people; `report_viewer_emails` in dev) and `client_sa_emails` (the Workbench trainer). Provider 5.x has no per-service IAP IAM resource, so the grant is project-level and covers every IAP resource in the project. The people's grant was made by `modules/dashboard` until the Streamlit dashboard was retired on 2026-11-02; `envs/dev` moved it here with a `moved` block.
 - **Image deployer grants** (when `deployer_sa_email` is set): `roles/run.developer` on the service and `roles/iam.serviceAccountUser` on the MLflow SA.
 
 ## First deployment
@@ -27,13 +27,13 @@ Runs the MLflow tracking server (`mlflow_server/`) as a Cloud Run service behind
 
 3. **The first image.** The deploy trigger is created by that same apply, so the merge commit itself did not build anything. Build once by hand (the command is in `mlflow_server/cloudbuild.yaml`), or let the next change under `mlflow_server/` do it.
 
-4. **IAP.** Provider 5.x cannot set it, so it is switched on once, as for the dashboard:
+4. **IAP.** Provider 5.x cannot set it, so it is switched on once:
 
    ```bash
    gcloud run services update co-mlflow-dev --region=europe-central2 --iap
    ```
 
-   The project's custom OAuth client and its test-user list are shared with the dashboard. Anyone who can open the dashboard can open MLflow.
+   IAP uses the project's custom OAuth client and consent screen ("Pop Vibe Check Dashboard"), set up by hand for the retired Streamlit dashboard ([`docs/phase-1-dashboard.md`](../../../docs/phase-1-dashboard.md#what-lives-outside-terraform)). Keep both: MLflow depends on them. A person gets in only when listed in **both** `viewer_emails` and the consent screen's test users.
 
 5. **Check the server.** Open `terraform output mlflow_url` in a browser and you should get the MLflow UI after the Google sign-in.
 
@@ -70,6 +70,7 @@ Copying the runs that predate the server out of the Workbench file store is a on
 | `mlflow_sa_email` | string | yes | — | Runtime identity of the service |
 | `artifact_root` | string | yes | — | Default artifact root, e.g. `gs://co-tf-artifacts-dev/nlp/mlruns` |
 | `client_sa_emails` | list(string) | no | `[]` | SAs that call the server through IAP |
+| `viewer_emails` | list(string) | no | `[]` | People allowed through IAP to open the UI |
 | `tier` | string | no | `db-f1-micro` | Cloud SQL machine tier |
 | `database_version` | string | no | `POSTGRES_16` | Cloud SQL Postgres version |
 | `image_uri` | string | no | `hello` sample | Image the service is created with; ignored afterwards |

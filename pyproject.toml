@@ -60,7 +60,6 @@ convention = "google"
 "publisher/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104"]
 "dataflow/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104", "E402"]
 "nlp/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104", "D107"]
-"dashboard/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104"]
 
 # ---------------------------------------------------------------------------
 # Static typing
@@ -111,6 +110,5 @@ testpaths = [
     "publisher/tests",
     "dataflow/tests",
     "nlp/tests",
-    "dashboard/tests",
 ]
 pythonpath = ["."]

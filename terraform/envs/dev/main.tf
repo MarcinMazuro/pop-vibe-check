@@ -115,8 +115,7 @@ module "artifact_registry" {
     # deterministic, so the email is known here; depends_on below still
     # orders the SA's creation before this grant.
     "${var.name_prefix}-dataflow-worker-sa-${local.env}@${var.project_id}.iam.gserviceaccount.com",
-    # Literal for the same reason: the dashboard SA is new in this apply.
-    "${var.name_prefix}-dashboard-sa-${local.env}@${var.project_id}.iam.gserviceaccount.com",
+    # Literal for the same reason.
     "${var.name_prefix}-mlflow-sa-${local.env}@${var.project_id}.iam.gserviceaccount.com",
   ]
 
@@ -286,7 +285,6 @@ module "cloud_build" {
   youtube_job_name                = module.cloud_run_jobs.youtube_job_name
   steam_job_name                  = module.cloud_run_jobs.steam_job_name
   publisher_job_name              = module.cloud_run_jobs.publisher_job_name
-  dashboard_service_name          = module.dashboard.service_name
   mlflow_service_name             = module.mlflow.service_name
   dataform_repository_name        = module.dataform.repository_name
   template_spec_dir               = module.dataflow.template_spec_dir
@@ -309,24 +307,13 @@ module "cloud_build" {
   events_table_id               = module.bigquery.events_table_id
 }
 
-# Streamlit dashboard on Cloud Run, behind IAP. The people who may open it
-# are the reporting views' readers; the service itself reads the views as
-# its own SA. IAP is switched on with gcloud after the first apply — see
-# modules/dashboard/README.md.
-module "dashboard" {
-  source = "../../modules/dashboard"
-
-  project_id  = var.project_id
-  name_prefix = var.name_prefix
-  env         = local.env
-  region      = var.region
-  labels      = local.labels
-
-  dashboard_sa_email   = module.iam.dashboard_sa_email
-  reporting_dataset_id = module.bigquery.reporting_dataset_id
-  viewer_emails        = var.report_viewer_emails
-
-  deployer_sa_email = module.iam.cloud_build_sa_email
+# The Streamlit dashboard (modules/dashboard) was retired on 2026-11-02 for
+# the Looker Studio report over the same views. Its Cloud Run service, SA
+# and grants go with it, except the people's IAP grant: MLflow relied on
+# it, so it moves there instead of being destroyed and created again.
+moved {
+  from = module.dashboard.google_project_iam_member.viewer
+  to   = module.mlflow.google_project_iam_member.viewer
 }
 
 # MLflow tracking server on Cloud Run, Cloud SQL Postgres behind it, IAP in
@@ -350,6 +337,10 @@ module "mlflow" {
   client_sa_emails = [
     "${var.name_prefix}-ml-trainer-sa-${local.env}@${var.project_id}.iam.gserviceaccount.com",
   ]
+
+  # People: the reporting views' readers, the same list the dashboard let
+  # through IAP before it was retired.
+  viewer_emails = var.report_viewer_emails
 
   deployer_sa_email = module.iam.cloud_build_sa_email
 }

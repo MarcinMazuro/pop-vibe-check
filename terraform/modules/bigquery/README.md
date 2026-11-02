@@ -155,7 +155,8 @@ Point a Looker Studio data source at a view in this dataset (the env
 composition outputs `reporting_dataset_id` and `report_view_ids`; the view
 names there are a contract with the Dataform project). Readers listed in
 `report_viewer_emails` get `dataViewer` here plus project-level `jobUser`,
-and nothing on `events`.
+and nothing on `events`. The dev report built this way is described in
+[`docs/phase-1-looker-studio.md`](../../../docs/phase-1-looker-studio.md).
 
 **The whole reporting dataset is authorized on analytics**
 (`target_types = ["VIEWS"]`): every view in it can read `events`, so a

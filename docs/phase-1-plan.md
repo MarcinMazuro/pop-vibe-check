@@ -289,6 +289,11 @@ REST, not image-baked weights.
 > Steam weak-label evaluation and the dashboard. Details:
 > [docs/phase-1-nlp-vertex-dev.md](phase-1-nlp-vertex-dev.md).
 
+> **Status 2026-11-02.** The dashboard (C4) is done: a Looker Studio
+> report over the reporting views
+> ([docs/phase-1-looker-studio.md](phase-1-looker-studio.md)). What
+> remains for Track C is the Steam weak-label evaluation.
+
 **C1 — XLM-RoBERTa v2 → v2.1** (done), behind the same interface as Marcin's stub.
 `xlm-roberta-base`, 3-class (`pos`/`neu`/`neg`). DistilBERT v1 remains
 the trained English baseline; v2 recipe:
@@ -317,10 +322,15 @@ artifacts in `gs://co-tf-artifacts-dev/nlp/mlruns`. Experiment
 is a tracking server: Cloud Run plus Cloud SQL, `terraform/modules/mlflow`
 ([ADR 0004](adr/0004-mlflow-tracking-server-on-cloud-run-and-cloud-sql.md)).
 
-**C4 — Presentation.** The BigQuery authorised views are done (dataset
-`co_reporting_dev`, PR #35). The Looker Studio dashboard on top of them
-is outstanding. In the meantime a Streamlit dashboard over the same views
-runs on Cloud Run behind IAP (PRs #64, #65):
+**C4 — Presentation** (done 2026-11-02). The BigQuery authorised views
+are done (dataset `co_reporting_dev`, PR #35). Their SQL and metrics
+moved to Dataform
+([ADR 0003](adr/0003-reporting-sql-in-dataform.md)). The dashboard is the
+Looker Studio report **Pop vibe check** on top of them: three pages
+(*Przegląd*, *Wydarzenia*, *Źródła i języki*) over six views:
+[`docs/phase-1-looker-studio.md`](phase-1-looker-studio.md). An interim
+Streamlit dashboard over the same views ran on Cloud Run behind IAP
+(PRs #64, #65) until it was retired on 2026-11-02:
 [`docs/phase-1-dashboard.md`](phase-1-dashboard.md).
 
 ---

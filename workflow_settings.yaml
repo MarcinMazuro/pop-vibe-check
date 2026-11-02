@@ -1,5 +1,5 @@
 # Dataform project for the reporting layer: the views in co_reporting_dev
-# that the dashboard (and later Looker Studio) reads. The SQL lives in
+# that the Looker Studio report reads. The SQL lives in
 # definitions/reporting/, shared fragments in includes/.
 #
 # Managed Dataform reads a project from the repository root only, hence

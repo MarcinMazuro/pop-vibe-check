@@ -264,16 +264,6 @@ output "dataform_github_token_secret_id" {
   value       = module.dataform.github_token_secret_id
 }
 
-output "dashboard_service_name" {
-  description = "Short name of the dashboard Cloud Run service."
-  value       = module.dashboard.service_name
-}
-
-output "dashboard_url" {
-  description = "URL of the Streamlit dashboard. Viewers sign in through IAP with a Google account listed in report_viewer_emails."
-  value       = module.dashboard.service_url
-}
-
 output "mlflow_service_name" {
   description = "Short name of the MLflow tracking server Cloud Run service."
   value       = module.mlflow.service_name

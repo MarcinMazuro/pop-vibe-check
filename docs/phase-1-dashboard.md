@@ -1,13 +1,25 @@
 # Phase 1 — Preliminary dashboards (Streamlit on Cloud Run)
 
+> **Retired on 2026-11-02.** The Looker Studio report over the same
+> reporting views replaced it:
+> [`phase-1-looker-studio.md`](phase-1-looker-studio.md). The code (`dashboard/`), its Terraform
+> module (`terraform/modules/dashboard`), its service account and its
+> Cloud Build triggers were removed; the next dev apply destroys
+> `co-dashboard-dev`. The last commit that still has them is `1417db3`
+> (`git show 1417db3:dashboard/README.md`).
+>
+> Two things outlive it, because MLflow
+> ([`terraform/modules/mlflow`](../terraform/modules/mlflow/README.md))
+> sits behind the same IAP: the project-level IAP grant for
+> `report_viewer_emails`, now made by the MLflow module, and the
+> hand-made OAuth client and consent screen described under
+> [What lives outside Terraform](#what-lives-outside-terraform). The rest
+> of this page records the dashboard as it was.
+
 A code-first dashboard over the BigQuery reporting views, deployed for the
 team before the Looker Studio dashboard (Track C4 in
 [`phase-1-plan.md`](phase-1-plan.md)) exists. It reads the same authorized
 views a Looker data source would, so the numbers carry over unchanged.
-
-Code and local runs: [`dashboard/README.md`](../dashboard/README.md).
-Infrastructure:
-[`terraform/modules/dashboard/README.md`](../terraform/modules/dashboard/README.md).
 
 Date: 2026-10-20 (PR #64 for the app, PR #65 for the deployment).
 
@@ -64,7 +76,7 @@ browser ──► IAP (Google sign-in, access list) ──► Cloud Run co-dashb
 - **Deploys:** a pull request touching `dashboard/` builds the image
   (`co-dashboard-pr-dev`). A merge to `main` builds it, pushes it, and
   deploys it by digest (`co-dashboard-deploy-dev`,
-  [`dashboard/cloudbuild.yaml`](../dashboard/cloudbuild.yaml)). Terraform
+  `dashboard/cloudbuild.yaml`). Terraform
   created the service and ignores its image from then on.
 
 ### What lives outside Terraform
@@ -127,58 +139,23 @@ actually revokes access.
 | "You don't have access" with a different email | Signed in to Chrome with several Google accounts | Use *try a different account* on that page |
 | Everyone gets a plain 403 | IAP was switched off on the service (e.g. by a Terraform update) | `gcloud run services update co-dashboard-dev --region=europe-central2 --iap` |
 
-## Changing a metric: Dataform web IDE, workspace, deploy
+## Changing a metric
 
-Every number on the pages is a column of a view in `co_reporting_dev`, and
-the views are a Dataform project in the repository root
-([ADR 0003](adr/0003-reporting-sql-in-dataform.md)):
-`definitions/reporting/*.sqlx`, shared SQL fragments in
-`includes/sentiment.js`. A metric changes in SQL, never in the dashboard.
+The workflow (Dataform workspace, pull request, deploy on merge) still
+applies and now lives with the report that reads the views:
+[`phase-1-looker-studio.md`](phase-1-looker-studio.md#changing-a-metric-dataform-web-ide-workspace-deploy).
+This dashboard cached query results for 5 minutes; its sidebar's
+*Odśwież dane* cleared the cache.
 
-1. **Open a workspace.** Console → BigQuery → Dataform →
-   `co-reporting-dev` → *Create development workspace*. Name it with
-   letters, digits and underscores only (`kozi_lift`, not `kozi-lift`):
-   the name becomes part of a dataset ID. A workspace is a git branch with
-   an editor; it starts from `main`.
-2. **Edit and run.** *Compile* shows errors as you type. *Start execution*
-   creates the views in **`co_reporting_dev_<workspace>`** and the
-   assertion results in `co_dataform_assertions_dev_<workspace>`, never in
-   the datasets the dashboard reads. A failing assertion shows the rows
-   that broke it.
-3. **Commit and push** from the workspace to a new branch, not `main` (a
-   push to `main` deploys at once, without review), then open a pull
-   request on GitHub. `co-dataform-compile-pr-dev` compiles it.
-4. **Merge.** `co-dataform-deploy-dev` compiles `main` at the merge
-   commit and runs every action: the views are replaced in place, then all
-   assertions run, and a failing one fails the build. No approval is
-   needed, and nothing in Terraform changes. The dashboard shows the new
-   numbers once its 5-minute cache expires (or after *Odśwież dane*).
-5. **Clean up** the workspace's datasets when it is done; nothing deletes
-   them automatically:
+## Open items at retirement
 
-   ```bash
-   bq rm -r -f -d pop-vibe-check:co_reporting_dev_<workspace>
-   bq rm -r -f -d pop-vibe-check:co_dataform_assertions_dev_<workspace>
-   ```
-
-The same edit works without the web IDE: change the `.sqlx` on a branch
-and compile locally with `npx --yes @dataform/cli@3.0.71 compile` (no
-credentials needed). A new view also goes into the `dependencies` of
-`definitions/assertions/no_personal_columns.sqlx`, and into
-`report_view_ids` in `terraform/modules/bigquery/outputs.tf` if Looker
-Studio should find it. Details:
-[`terraform/modules/dataform/README.md`](../terraform/modules/dataform/README.md).
-
-## Open items
-
-- **Looker Studio (C4)** is still outstanding. This dashboard is the
-  interim presentation layer and a spec for the Looker rebuild: same views,
-  same metrics. The pages only filter rows; the headline numbers sum the
-  selected sources' counts, which is what a Looker scorecard does with SUM
-  fields.
+- **Looker Studio (C4)**, the item this dashboard stood in for, is done:
+  [`phase-1-looker-studio.md`](phase-1-looker-studio.md). It has the same
+  three pages over the same views. Its scorecards add up the selected
+  sources' counts, as these pages did.
 - **Publishing the consent screen** (*Audience → Publish app*) would remove
   the 100-test-user cap and the second list. For the `openid` and `email`
   scopes, publishing should not require Google verification. Access would
-  still be limited by the IAP list.
-- **prod** has no dashboard module. Adding one means the same module in
-  `terraform/envs/prod` plus the three manual settings above.
+  still be limited by the IAP list. Since the dashboard was retired, this
+  item concerns only MLflow.
+- **prod** never had this dashboard.
