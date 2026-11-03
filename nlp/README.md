@@ -111,6 +111,10 @@ gcloud workbench instances stop co-nlp-workbench-dev \
 # or: terraform apply   # gates default false → destroys the instance
 ```
 
+A stopped instance still bills its disks, about 140 PLN a month. Once the
+outputs are on GCS, set `enable_nlp_workbench = false` in `co-tfvars-dev`
+and re-run the apply trigger. That deletes the VM and both disks.
+
 ### Stage 2 continued fine-tune (v2 → v2.1)
 
 Use the reviewed `gold_v3.jsonl` and start from the existing v2 export. The

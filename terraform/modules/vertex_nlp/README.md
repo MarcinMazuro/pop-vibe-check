@@ -35,6 +35,12 @@ sets `ACTIVE` (or starts it in the console). Idle shutdown defaults to
 **off** (`workbench_idle_timeout_seconds = 0`); set `10800` to restore
 the 3-hour auto-stop.
 
+**`STOPPED` is not free.** The instance's disks (150 GB `pd-ssd` boot,
+100 GB `pd-standard` data) bill while it is stopped, about 140 PLN a
+month in `europe-central2`. Between training runs, copy the outputs to
+GCS and set `enable_workbench = false`. That deletes the VM and both
+disks.
+
 **Terraform does not store model versions.** Uploading DistilBERT to
 Vertex AI Model Registry and deploying a replica onto the Endpoint are
 training-artifact steps (`nlp/endpoint/register.py`). Putting a deployed

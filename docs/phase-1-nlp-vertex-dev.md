@@ -170,9 +170,8 @@ Weights and checkpoints are on GCS (`gsutil -m cp -r` 2026-09-12):
 | `nlp/mlruns-tracking/` | 1.8 KiB | local file-store copy (`metrics`/`params`/`tags`) |
 
 `co-nlp-workbench-dev` was stopped by hand after the copy
-(`gcloud workbench instances stop …`). State is **STOPPED** (not
-deleted). Boot + data disks remain. Idle shutdown is still off; do not
-`enable_nlp_workbench=false` (that destroys the VM).
+(`gcloud workbench instances stop …`). It was deleted on 2026-11-03
+(see [Workbench deleted](#workbench-deleted-2026-11-03)).
 
 ---
 
@@ -275,9 +274,39 @@ slices should treat the long tail with care.
 
 **After the replay.** The Endpoint no longer exists in `europe-central2`
 (checked 2026-10-11), so there is no replica billing. Workbench
-`co-nlp-workbench-dev` is `STOPPED`. `nlp/catalog.py` still records
+`co-nlp-workbench-dev` was `STOPPED` then and has since been deleted
+(next section). `nlp/catalog.py` still records
 `co-nlp-endpoint-dev` as v2.1's Endpoint — that is where it was served,
 not a live resource.
+
+---
+
+## Workbench deleted (2026-11-03)
+
+A `STOPPED` Workbench still bills its disks. The boot disk was 150 GB
+`pd-ssd` and the data disk 100 GB `pd-standard`. At Warsaw list prices
+(0.81 and 0.19 PLN per GiB-month) that is about **140 PLN a month**. The
+disks were billed from 2026-09-10 until they were deleted.
+
+What was on the VM, and where it lives now:
+
+| On the VM | Copy |
+|---|---|
+| Model weights and checkpoints (DistilBERT, XLM-R v2, v2.1) | `gs://co-tf-artifacts-dev/nlp/models/` (~26 GiB) |
+| HF model cache and datasets | `nlp/models/hf-cache/`, `nlp/datasets/` on the same bucket; re-downloadable |
+| Gold sets (`gold_v3.jsonl` …) | git, `nlp/eval/artifacts/` |
+| MLflow file store (`/home/jupyter/mlruns`) | MLflow server; `nlp.tracking.migrate` ran on the VM on 2026-10-28 |
+
+The VM was deleted through CI. Secret `co-tfvars-dev` version 7 sets
+`enable_nlp_workbench = false`. Build `6cf207ec` destroyed
+`google_workbench_instance.nlp` and the IAP SSH firewall rule. The
+Workbench deleted both disks with the instance; `gcloud compute disks
+list` is empty.
+
+To train again, set `enable_nlp_workbench = true` in the secret and
+re-run the apply trigger. Terraform creates a new, empty VM in
+`STOPPED`. Copy the inputs back from GCS. When the run is finished,
+copy the outputs to GCS and set the flag back to `false`.
 
 ---
 
