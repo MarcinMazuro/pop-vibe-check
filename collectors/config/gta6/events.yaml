@@ -1,0 +1,76 @@
+# Grand Theft Auto VI - lifecycle events.
+#
+# Consumed by collectors.common.events_config when RELEASE=gta6. Each entry
+# maps an event id (used as the EVENT_ID env var and as the GCS output path
+# segment) to its name, type, and date.
+#
+# Compiled 2026-11-22 from press coverage. Entries marked # VERIFY rest on
+# secondary sources only and must be checked against Rockstar Newswire
+# before a production run. Dates are UTC; Rockstar's US-evening drops
+# (trailer 1) are kept on the US date, which the +/- N day event window
+# absorbs.
+#
+# Several windows overlap around launch (embargo, launch, user-review
+# bombing, all within three days). Auto-tagging assigns a record to the
+# nearest event, so the overlap is by design rather than a conflict.
+
+events:
+  - id: development_confirmed
+    name: Rockstar confirms active development
+    type: reveal
+    date_utc: 2022-02-04 # VERIFY
+
+  - id: gameplay_leak
+    name: Pre-release footage leak
+    type: controversy
+    date_utc: 2022-09-18
+
+  - id: trailer_date_announce
+    name: Trailer 1 announced for December
+    type: marketing
+    date_utc: 2023-11-08 # VERIFY
+
+  - id: trailer_1
+    name: Trailer 1 (released early after a leak)
+    type: trailer
+    date_utc: 2023-12-04
+
+  - id: delay_to_may_2026
+    name: First delay, 2025 window to 2026-05-26
+    type: release_date_reveal
+    date_utc: 2025-05-02
+
+  - id: trailer_2
+    name: Trailer 2
+    type: trailer
+    date_utc: 2025-05-06
+
+  - id: delay_to_nov_2026
+    name: Second delay, to 2026-11-19
+    type: release_date_reveal
+    date_utc: 2025-11-06
+
+  - id: preorders_open
+    name: Pre-orders open, pricing announced
+    type: marketing
+    date_utc: 2026-06-25 # VERIFY
+
+  - id: launch_trailer
+    name: Launch trailer
+    type: trailer
+    date_utc: 2026-10-15 # VERIFY - sources disagree on whether this is "Trailer 3"
+
+  - id: review_embargo
+    name: Review embargo lifts (Metascore 99)
+    type: award
+    date_utc: 2026-11-18
+
+  - id: launch
+    name: Console launch (PS5, Xbox Series X|S)
+    type: launch
+    date_utc: 2026-11-19
+
+  - id: user_review_bombing
+    name: Metacritic user reviews open and are review-bombed
+    type: controversy
+    date_utc: 2026-11-20
