@@ -222,6 +222,7 @@ module "cloud_run_jobs" {
 
   project_id  = var.project_id
   name_prefix = var.name_prefix
+  release     = var.release
   env         = local.env
   region      = var.region
   labels      = local.labels

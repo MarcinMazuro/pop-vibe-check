@@ -20,6 +20,12 @@ variable "name_prefix" {
   default     = "co"
 }
 
+variable "release" {
+  description = "Release config the jobs read: a directory under collectors/config/ (default 'clair_obscur'). Goes with name_prefix, as in dev."
+  type        = string
+  default     = "clair_obscur"
+}
+
 variable "billing_account_id" {
   description = "Billing account the budget hangs off. Must be the account the project is linked to, or the budget sees $0 spend."
   type        = string
