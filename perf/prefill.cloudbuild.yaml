@@ -24,8 +24,10 @@ steps:
       - -ec
       - |
         [ -n "${_TOPIC}" ] || { echo "_TOPIC is required." >&2; exit 1; }
+        # The publisher's own pins: the generator builds messages with the
+        # publisher's code, which needs exactly these.
         pip install --quiet --no-cache-dir --disable-pip-version-check \
-          google-cloud-bigquery==3.42.2 google-cloud-pubsub==2.39.0
+          --root-user-action=ignore -r publisher/requirements.txt
         python -m perf.loadgen --yes \
           --project "${PROJECT_ID}" \
           --dataset "${_DATASET}" \
