@@ -43,6 +43,25 @@ endpoint.
    billing-account role enables the export to BigQuery. It only records
    from the moment it is enabled.
 
+### Tables created before Terraform
+
+So experiments could start before this branch merged, the four tables were
+created on 2026-11-22 with `sql/create_tables.sql` (same schemas, modes,
+partitioning and clustering as `perf.tf`; labelled `managed_by=manual`).
+After the merge, **import them instead of applying over them** — an apply
+would fail on "already exists". In `terraform/envs/dev`:
+
+```bash
+for t in raw_staging_perf events_landing_perf perf_runs perf_timeseries; do
+  terraform import "module.bigquery.google_bigquery_table.$t" \
+    "projects/pop-vibe-check/datasets/co_analytics_dev/tables/$t"
+done
+terraform plan   # expect in-place label/description updates only, no replacements
+```
+
+If the plan shows a table being **replaced**, stop: replacing drops its data
+(including `perf_runs`). Export the results first.
+
 ## Running
 
 Python 3.12 with the repo's dev requirements (`requests`, `PyYAML`), and
