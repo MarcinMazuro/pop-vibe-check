@@ -86,37 +86,38 @@ terraform import "module.pubsub.google_pubsub_topic_iam_member.perf_publisher_pu
 
 ## Running
 
-Python 3.12 with the repo's dev requirements (`requests`, `PyYAML`), and
-`gcloud` / `bq` logged in to the project. From the repo root:
+Python 3.12 with `requests` and `PyYAML` for running and collecting, plus
+`google-cloud-bigquery` and `google-cloud-pubsub` only for
+`--load-source loadgen` (the prefill build installs its own). `gcloud` and
+`bq` logged in to the project. From the repo root:
 
 ```bash
-# E1: pipeline capacity without the model, at a fixed worker count
-# (autoscaling off, so 1 / 2 / 4 workers can be compared)
-python -m perf.run --experiment e1 --run-id e1-n2-x10 \
-  --model stub --num-workers 2 \
-  --staging-table raw_staging_perf --copies 10
-
-# Pipeline capacity: amplify, prefill the subscription from Cloud Build,
-# then let the job drain the full backlog at its own maximum rate.
-# (The replay publisher stops at ~50 msg/s; publishing from a laptop
-# managed ~15 msg/s.) Refuses to start while any Dataflow job runs.
-python -m perf.amplify --copies 10
+# Pipeline capacity (the method that works — docs/performance-results.md):
+# amplify, prefill the subscription from Cloud Build, then the job drains
+# the full backlog at its own maximum rate. Refuses to start while any
+# Dataflow job runs.
+python -m perf.amplify --copies 10 --from 2025-04-24 --to 2025-05-01
 python -m perf.run --experiment e1 --run-id e1-n2-pf-x10 \
   --model stub --num-workers 2 --load-source prefill \
   --staging-table raw_staging_perf --copies 10
 
-# A fixed input rate, e.g. for latency at a known load
-python -m perf.run --experiment e4 --run-id e4-r100 \
-  --model stub --num-workers 1 --load-source loadgen --target-rps 100 \
-  --staging-table raw_staging_perf --copies 10
+# E3: the real model, same method (deploy the endpoint first, undeploy after)
+python -m perf.run --experiment e3 --run-id e3-r1-pf \
+  --model vertex --num-workers 2 --load-source prefill \
+  --staging-table raw_staging_perf --endpoint-replicas 1
 
-# E3: real model (deploy the endpoint first, undeploy after)
-python -m perf.run --experiment e3 --run-id e3-r2-b64 \
-  --model vertex --speedup 5000 --max-batch-size 64 --endpoint-replicas 2
+# With the replay publisher instead (the default): ordered, but capped at
+# about 50 msg/s, so it measures the publisher, not the pipeline.
+python -m perf.run --experiment e1 --run-id e1-n1-x10 \
+  --model stub --num-workers 1 --staging-table raw_staging_perf --copies 10
 
 # Re-collect a run (e.g. after creating the results tables)
-python -m perf.collect --spec perf/results/specs/e1-w2-s5000.json --job-id JOB_ID
+python -m perf.collect --spec perf/results/specs/e1-n1-pf-x10.json --job-id JOB_ID
 ```
+
+`--load-source loadgen` (publishing from this machine while the job runs,
+optionally at `--target-rps`) exists but reached only ~15 msg/s from a
+home connection — see the results document before relying on it.
 
 `run.py` submits the build from the local working tree, so uncommitted
 changes are what runs; the recorded `git_commit` is marked `-dirty` then.

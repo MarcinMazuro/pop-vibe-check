@@ -121,17 +121,19 @@ the built-in metrics are not precise enough.
 
 Built in [`perf/`](../perf/README.md); the summary below is the design.
 
-- **Experiment runner.** One command per run, wrapping
-  `dataflow/launch.sh` and the replay publisher: `SPEEDUP`,
-  `MAX_WORKERS`, `MACHINE_TYPE`, model, `max_batch_size`, replica count.
-  Every Dataflow job gets labels (`experiment=e1`, `run=…`) so the
-  billing export can attribute cost to a run.
-- **Metrics collector.** Run right after each experiment: pulls the
-  Dataflow job metrics (vCPU time, memory, Streaming Engine data) and the
-  Cloud Monitoring time series (throughput, backlog, freshness, vCPUs,
-  endpoint replicas and latency) into a BigQuery table of runs. This is
-  not optional — Dataflow history disappears after about 30 days, which
-  is why E0 has no worker data.
+- **Experiment runner.** One command per run, wrapping the replay build:
+  `SPEEDUP`, worker count (fixed or autoscaled), `MACHINE_TYPE`, model,
+  `max_batch_size`, and the load source — the replay publisher, a load
+  generator, or a subscription prefilled from Cloud Build (the method
+  that worked). Every Dataflow job gets labels (`experiment=e1`, `run=…`)
+  so a billing export could attribute cost to a run.
+- **Metrics collector.** Run right after each experiment: resource usage
+  from Cloud Monitoring's `job/total_*` metrics (vCPU time, memory, disk,
+  Streaming Engine data — `gcloud`'s job metrics do not carry them for
+  streaming jobs) and the time series (vCPUs, backlog, lag, endpoint
+  replicas and latency), into BigQuery and CSV. This is not optional —
+  Dataflow history disappears after about 30 days, which is why E0 has no
+  worker data.
 - **Data amplifier.** For runs above ~300 rec/s: copies of the staging
   records with new ids into a separate table.
 - **Analysis.** Queries and charts for the thesis.
@@ -139,7 +141,7 @@ Built in [`perf/`](../perf/README.md); the summary below is the design.
 ## Cost, two ways
 
 1. **From resource usage** — no billing access needed: Dataflow vCPU-hours,
-   memory GB-hours and Streaming Engine data from the job metrics, plus
+   memory GB-hours and Streaming Engine data from the Monitoring totals, plus
    endpoint node-hours and Pub/Sub volume, priced with the public price
    list for `europe-central2`.
 2. **From the billing export** — to check method 1. Needs someone with a
@@ -148,12 +150,14 @@ Built in [`perf/`](../perf/README.md); the summary below is the design.
 
 ## Budget
 
-A Vertex replica (`n1-standard-8`) is about $0.38/h
-([phase-1-steam-collection.md](phase-1-steam-collection.md)); one run is
-15–20 minutes. The whole plan is in the order of tens of PLN up to about
-150 PLN; E1 gives a measured figure to refine this. The project budget
-alert is 50 PLN a month, so either spread the runs over time or raise the
-alert threshold for the experiment period.
+Estimated before the runs: tens of PLN up to about 150 PLN. Measured:
+**the whole of E1, including failed attempts, cost about 1.35 USD**
+([performance-results.md](performance-results.md)). A Vertex replica
+(`n1-standard-8`) is **0.636 USD/h** at Warsaw list prices including the
+management fee — not the ~0.38 USD/h quoted in
+[phase-1-steam-collection.md](phase-1-steam-collection.md) — so E3 is the
+one experiment worth timing carefully. The project budget alert is 50 PLN
+a month.
 
 ## Risks
 

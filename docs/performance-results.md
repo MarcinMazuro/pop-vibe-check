@@ -24,9 +24,11 @@ Dates: 2026-11-21/22. Times are UTC unless stated otherwise. Owner: Oskar.
   only adds cost (1 → 2 workers: same 50 rec/s, double the cost).
 - **Headroom.** Real traffic for this release peaked below 1 record/s;
   one worker has more than 300× headroom.
-- **Cost.** About **0.00024–0.00037 USD per 1,000 records** in these runs
-  (list prices, Warsaw). Roughly 10 minutes of every short job is fixed
-  start/stop time, which dominates the cost of small runs.
+- **Cost.** About **0.00024–0.00037 USD per 1,000 records** when the
+  pipeline runs at capacity (list prices, Warsaw). Behind the 50 rec/s
+  publisher the same work cost 0.0011–0.0024 USD per 1,000 records,
+  because the workers mostly waited. Roughly 10 minutes of every short job
+  is fixed start/stop time, which dominates the cost of small runs.
 - **Delivery order does not change results.** The same 256,570 records
   processed in chronological order and heavily shuffled produced
   **identical labels, scores and languages for every record**.
