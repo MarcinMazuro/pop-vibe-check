@@ -7,6 +7,13 @@ section on performance and cost.
 
 Date: 2026-11-22. Owner: Oskar.
 
+> **Results:** [performance-results.md](performance-results.md) — E1
+> (capacity) done: ~345 / 480 / 970 records/s with 1 / 2 / 4 workers; the
+> replay publisher caps a normal replay at ~50 records/s; delivery order
+> does not change results. Scope was then narrowed to E1, an order check,
+> a minimal E3 and the E6 cost analysis (E2 and a separate E4 series
+> dropped). The results document also records what did not work and why.
+
 ---
 
 ## What is already known

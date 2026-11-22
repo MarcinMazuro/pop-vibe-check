@@ -1,7 +1,9 @@
 # perf — performance, scalability and cost experiments
 
 Tooling for the experiments in
-[docs/performance-plan.md](../docs/performance-plan.md): run an experiment,
+[docs/performance-plan.md](../docs/performance-plan.md) — results and the
+history of how the method was arrived at in
+[docs/performance-results.md](../docs/performance-results.md). Run an experiment,
 collect its metrics before Dataflow forgets them, estimate its cost, and
 amplify the data for loads the real dataset is too small for.
 
