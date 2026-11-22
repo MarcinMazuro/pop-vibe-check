@@ -1,0 +1,18 @@
+{
+  "copies": 10,
+  "endpoint_replicas": null,
+  "experiment": "e1",
+  "load_source": "prefill",
+  "machine_type": "e2-standard-2",
+  "max_batch_size": null,
+  "max_sleep_seconds": null,
+  "max_workers": 2,
+  "model": "stub",
+  "notes": "launch week x10, prefilled backlog, fixed 2 worker(s)",
+  "num_workers": 2,
+  "run_id": "e1-n2-pf-x10",
+  "speedup": null,
+  "staging_table": "raw_staging_perf",
+  "target_rps": null,
+  "wait_timeout_minutes": 120
+}
