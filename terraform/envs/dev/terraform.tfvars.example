@@ -12,6 +12,10 @@ project_id = "your-gcp-project-id"
 # workspace / state) when analysing another release, e.g. "w4".
 # name_prefix = "co"
 
+# Release config directory under collectors/config/ that every job reads
+# (RELEASE env var). Change it together with name_prefix.
+# release = "clair_obscur"
+
 # Required by the budgets module. MUST be the billing account the GCP
 # project is linked to (`gcloud billing projects describe <project_id>`),
 # not merely an account you can list — otherwise the budget sees $0

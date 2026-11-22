@@ -16,6 +16,8 @@ REQUIRED_ENV = {
 def base_env(monkeypatch):
     for name, value in REQUIRED_ENV.items():
         monkeypatch.setenv(name, value)
+    # Only read when EVENT_ID is set, to resolve the event id.
+    monkeypatch.setenv("RELEASE", "clair_obscur")
     for name in (
         "SPEEDUP",
         "MAX_SLEEP_SECONDS",

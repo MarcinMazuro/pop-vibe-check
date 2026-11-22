@@ -15,7 +15,7 @@ vs Steam players).
 | `steam_charts.csv` | Daily (or hourly around launch) player counts from Steam Charts / Steam Spy. |
 
 `date_utc` is the observation date, not the game's launch date.
-Launch itself is `2025-04-24` (`collectors/config/events.yaml`).
+Launch itself is `2025-04-24` (`collectors/config/clair_obscur/events.yaml`).
 
 Steam collector data from Oskar can replace or extend `steam_charts.csv`
 once those rows exist; this folder is the fallback so gold-YouTube eval

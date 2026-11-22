@@ -157,6 +157,16 @@ variable "steam_task_timeout" {
   default     = "7200s"
 }
 
+variable "release" {
+  description = "Release whose config the jobs read: a directory name under collectors/config/ (e.g. clair_obscur). Set as the RELEASE env var on every job; the code has no default, so a wrong value fails loudly instead of tagging records with another game's events."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9_]*$", var.release))
+    error_message = "release must be lowercase letters, digits and underscores (a directory name under collectors/config/)."
+  }
+}
+
 variable "steam_appid" {
   description = "Steam application id the collector reads reviews for. Default 1903340 is Clair Obscur: Expedition 33."
   type        = string

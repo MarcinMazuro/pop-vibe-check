@@ -21,6 +21,17 @@ variable "name_prefix" {
   default     = "co"
 }
 
+variable "release" {
+  description = <<-EOT
+    Release config the jobs read: a directory under collectors/config/
+    (default 'clair_obscur'). Goes with name_prefix — a second case study
+    sets both, in its own state: e.g. name_prefix = "gta6",
+    release = "gta6".
+  EOT
+  type        = string
+  default     = "clair_obscur"
+}
+
 variable "billing_account_id" {
   description = "Billing account ID ('XXXXXX-YYYYYY-ZZZZZZ') the budget module hangs off. Must be the account the project is linked to (`gcloud billing projects describe`); a mismatch makes the budget see $0 spend. Same value is passed to terraform/bootstrap so the runner SA can manage budgets on that account."
   type        = string

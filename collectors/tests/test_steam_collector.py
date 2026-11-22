@@ -23,6 +23,13 @@ from collectors.steam.main import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _release(monkeypatch):
+    # Runs that are not auto-tagging resolve EVENT_ID against the release's
+    # events.yaml, which RELEASE selects.
+    monkeypatch.setenv("RELEASE", "clair_obscur")
+
+
 def _config(**overrides) -> RunConfig:
     base = dict(
         target_bucket="bucket",

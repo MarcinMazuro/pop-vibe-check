@@ -45,6 +45,11 @@ resource "google_cloud_run_v2_job" "reddit_collector" {
         }
 
         env {
+          name  = "RELEASE"
+          value = var.release
+        }
+
+        env {
           name = "REDDIT_CLIENT_ID"
           value_source {
             secret_key_ref {
@@ -132,6 +137,11 @@ resource "google_cloud_run_v2_job" "youtube_collector" {
         }
 
         env {
+          name  = "RELEASE"
+          value = var.release
+        }
+
+        env {
           name = "YOUTUBE_API_KEY"
           value_source {
             secret_key_ref {
@@ -202,6 +212,11 @@ resource "google_cloud_run_v2_job" "steam_collector" {
         env {
           name  = "TARGET_BUCKET"
           value = var.raw_archive_bucket_name
+        }
+
+        env {
+          name  = "RELEASE"
+          value = var.release
         }
 
         env {
@@ -304,6 +319,11 @@ resource "google_cloud_run_v2_job" "publisher" {
         env {
           name  = "RAW_ARCHIVE_BUCKET"
           value = var.raw_archive_bucket_name
+        }
+
+        env {
+          name  = "RELEASE"
+          value = var.release
         }
 
         env {

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from collectors.common.events_config import load_events, resolve_event
+from collectors.common.release_config import known_releases, release_config_dir
 
 _VALID_YAML = """
 events:
@@ -66,7 +67,20 @@ events:
         load_events(_write(tmp_path, content))
 
 
-def test_repository_events_config_is_valid_and_has_twelve_entries():
+def test_repository_events_config_is_valid_and_has_twelve_entries(monkeypatch):
+    monkeypatch.setenv("RELEASE", "clair_obscur")
     events = load_events()
     assert len(events) == 12
     assert "launch" in events
+
+
+@pytest.mark.parametrize("release", known_releases())
+def test_every_release_has_a_valid_events_config_with_a_launch(release):
+    events = load_events(release_config_dir(release) / "events.yaml")
+    assert "launch" in events
+
+
+def test_load_events_without_release_fails_loudly(monkeypatch):
+    monkeypatch.delenv("RELEASE", raising=False)
+    with pytest.raises(ValueError, match="RELEASE"):
+        load_events()

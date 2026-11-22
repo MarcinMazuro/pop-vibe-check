@@ -28,7 +28,8 @@ Wall time is bounded by `records × MAX_SLEEP_SECONDS`, independent of how long 
 | `SPEEDUP` | deploy-time, overridable | `86400` | Real seconds of history per wall second |
 | `MAX_SLEEP_SECONDS` | deploy-time, overridable | `5` | Clamp on any single inter-record sleep |
 | `RUN_LOAD` | execution-time | `false` | `false` = replay only, `only` = load then exit, `true` = load then replay |
-| `EVENT_ID` | execution-time | unset | Optional lifecycle event filter (validated against `events.yaml`) |
+| `RELEASE` | job literal | — | Release config directory under `collectors/config/`; read only to validate `EVENT_ID` |
+| `EVENT_ID` | execution-time | unset | Optional lifecycle event filter (validated against the release's `events.yaml`) |
 | `WINDOW_FROM` / `WINDOW_TO` | execution-time | unset | Optional `created_utc` bounds (ISO 8601, `WINDOW_TO` exclusive) |
 | `PUBSUB_ENDPOINT` | rarely | regional endpoint | Override for tests |
 

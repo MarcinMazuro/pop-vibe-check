@@ -141,6 +141,7 @@ value anyway.
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `TARGET_BUCKET` | yes | — | Raw archive bucket |
+| `RELEASE` | yes | — | Release config directory under `collectors/config/` (e.g. `clair_obscur`); its `events.yaml` drives `EVENT_ID` validation and `auto` tagging |
 | `AUTHOR_HASH_SALT` | yes | — | Salt, from Secret Manager |
 | `EVENT_ID` | yes | — | Lifecycle event id, or `auto` to tag each review by its own date |
 | `WINDOW_FROM` | yes | — | Inclusive ISO 8601 start |
@@ -155,7 +156,7 @@ value anyway.
 | `STEAM_LANGUAGE` | no | `all` | Steam language name, or `all` |
 | `STEAM_PURCHASE_TYPE` | no | `all` | `all`, `steam` or `non_steam_purchase` |
 
-`TARGET_BUCKET`, `STEAM_APPID` and the salt are set on the Cloud Run Job by
+`TARGET_BUCKET`, `RELEASE`, `STEAM_APPID` and the salt are set on the Cloud Run Job by
 Terraform; the window and event are per-execution.
 
 ## Run it
