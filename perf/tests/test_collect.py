@@ -4,35 +4,40 @@ from typing import Any
 
 from perf.collect import (
     flatten_for_csv,
-    parse_job_metrics,
     parse_timeseries,
     point_value,
+    resource_totals,
     series_points,
     summarize_minutes,
+    write_csv,
 )
 
+VCPU = "dataflow.googleapis.com/job/total_vcpu_time"
+MEMORY = "dataflow.googleapis.com/job/total_memory_usage_time"
 
-def test_parse_job_metrics_keeps_job_level_scalars_only():
-    entries = [
-        {"name": {"name": "TotalVcpuTime", "origin": "dataflow/v1b3"}, "scalar": 7200},
-        {
-            "name": {"name": "TotalVcpuTime", "context": {"tentative": "true"}},
-            "scalar": 7100,
-        },
-        {"name": {"name": "ElementCount", "context": {"step": "s1"}}, "scalar": 99},
-        {"name": {"name": "TotalMemoryUsage"}, "scalar": 1.5e6},
-        {"name": {"name": "MeanByteCount"}, "distribution": {"count": 3}},
-        {"name": {"name": "Flag"}, "scalar": True},
+
+def test_resource_totals_take_the_largest_running_total_per_metric():
+    rows: list[dict[str, Any]] = [
+        {"metric_type": VCPU, "value": 940.0},
+        {"metric_type": VCPU, "value": 600.0},
+        {"metric_type": MEMORY, "value": 3760.0},
+        {"metric_type": MEMORY, "value": None},
     ]
 
-    assert parse_job_metrics(entries) == {
-        "TotalVcpuTime": 7200.0,
-        "TotalMemoryUsage": 1.5e6,
+    assert resource_totals(rows) == {
+        "total_vcpu_time": 940.0,
+        "total_memory_usage_time": 3760.0,
     }
 
 
-def test_parse_job_metrics_handles_no_output():
-    assert parse_job_metrics(None) == {}
+def test_write_csv_replaces_rows_of_the_same_run(tmp_path):
+    path = tmp_path / "runs.csv"
+    write_csv(path, [{"run_id": "a", "x": "1"}], replace_run="a")
+    write_csv(path, [{"run_id": "b", "x": "2"}], replace_run="b")
+    write_csv(path, [{"run_id": "a", "x": "3"}], replace_run="a")
+
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert lines == ["run_id,x", "b,2", "a,3"]
 
 
 def test_summarize_minutes():

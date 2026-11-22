@@ -14,28 +14,33 @@
 checked_on: "2026-11-22"
 currency: USD
 
-# Dataflow service metrics (gcloud dataflow metrics list --source=service).
-# divisor converts the metric's raw unit into the priced unit.
+# Dataflow resource usage: Cloud Monitoring job totals
+# (dataflow.googleapis.com/job/<name>, units from the metric descriptors).
+# divisor converts the metric's unit into the priced unit.
 dataflow:
-  TotalVcpuTime:             # vCPU-seconds -> vCPU-hours
+  total_vcpu_time:                 # s (vCPU-seconds) -> vCPU-hours
     divisor: 3600
     unit: vCPU-hour
-    price: 0.0828            # SKU "vCPU Time Streaming Warsaw"
-  TotalMemoryUsage:          # MB-seconds -> GiB-hours
-    divisor: 3686400
-    unit: GiB-hour
-    price: 0.004268          # SKU "RAM Time Streaming Warsaw"
-  TotalPdUsage:              # GB-seconds -> GiB-hours (standard persistent disk)
+    price: 0.0828                  # SKU "vCPU Time Streaming Warsaw"
+  total_memory_usage_time:         # GB-seconds -> GB-hours
     divisor: 3600
-    unit: GiB-hour
-    price: 0.000065          # SKU "Local Disk Time PD Standard Warsaw"
-  TotalStreamingDataProcessed:   # Streaming Engine, billed by data processed
-    divisor: 1
+    unit: GB-hour
+    price: 0.004268                # SKU "RAM Time Streaming Warsaw" (per GiB-hour)
+  total_pd_usage_time:             # GB-seconds -> GB-hours (standard persistent disk)
+    divisor: 3600
+    unit: GB-hour
+    price: 0.000065                # SKU "Local Disk Time PD Standard Warsaw" (per GiB-hour)
+  total_streaming_data_processed:  # bytes -> GiB
+    divisor: 1073741824
     unit: GiB
-    price: 0.02178           # SKU "Streaming data processed for Warsaw"
-  # If a job opts into resource-based Streaming Engine billing, it is billed
-  # in Streaming Engine Compute Units instead (SKU "Streaming Engine Compute
-  # Unit Warsaw", 0.108 USD per unit) and the line above does not apply.
+    price: 0.02178                 # SKU "Streaming data processed for Warsaw"
+  # Streaming Engine is billed either by data processed (above) or, for jobs
+  # on resource-based billing, in Streaming Engine Compute Units
+  # (job/total_secu_usage; SKU "Streaming Engine Compute Unit Warsaw",
+  # 0.108 USD per unit). Only one applies to a job. The collector records
+  # total_secu_usage but does not price it; the billing export settles
+  # which one this project's jobs use. Monitoring reports GB, the SKUs are
+  # per GiB; the 7% difference is below the estimate's precision.
 
 # Vertex AI online prediction, price per replica-hour of the endpoint's
 # machine type. n1-standard-8 = 8 vCPU + 30 GiB RAM:

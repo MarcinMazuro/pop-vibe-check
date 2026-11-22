@@ -42,10 +42,10 @@ def test_estimate_ignores_unpriced_components_that_were_not_used():
 
 def test_shipped_price_table_prices_a_vcpu_hour():
     prices = load_prices()
-    total, _ = estimate({"TotalVcpuTime": 3600}, 0.0, prices)
+    total, _ = estimate({"total_vcpu_time": 3600}, 0.0, prices)
 
     assert prices["checked_on"]
-    assert total == pytest.approx(prices["dataflow"]["TotalVcpuTime"]["price"])
+    assert total == pytest.approx(prices["dataflow"]["total_vcpu_time"]["price"])
 
 
 def test_replica_hours_integrates_a_step_function():

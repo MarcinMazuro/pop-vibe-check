@@ -5,15 +5,18 @@ automatically). Dataflow keeps a finished job's history for only about 30
 days, so this is what makes a run's numbers durable:
 
 - throughput and correctness counts, from ``events_landing_perf``;
-- the job's Dataflow service metrics (vCPU time, memory, disk, Streaming
-  Engine data);
+- the job's resource usage — Cloud Monitoring's ``dataflow.googleapis.com/
+  job/total_*`` metrics (vCPU time, memory, disk, Streaming Engine data).
+  ``gcloud beta dataflow metrics list`` does not carry these for streaming
+  jobs, only watermark and lag figures;
 - Cloud Monitoring time series: vCPUs, system lag, watermark age, the
   subscription backlog, and — for vertex runs — the endpoint's replicas,
   latency and CPU;
 - a cost estimate from :mod:`perf.cost`.
 
 Results go to BigQuery (``perf_runs``, ``perf_timeseries``) and to CSV
-files under ``perf/results/``.
+files under ``perf/results/``. Collecting a run again replaces its earlier
+rows instead of adding duplicates.
 
 Usage:
     python -m perf.collect --spec perf/results/specs/RUN.json --job-id JOB
@@ -28,7 +31,7 @@ import statistics
 import sys
 import tempfile
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -41,9 +44,21 @@ RESULTS_DIR = Path(__file__).with_name("results")
 REGION = "europe-central2"
 MONITORING_URL = "https://monitoring.googleapis.com/v3/projects/{project}/timeSeries"
 
-# Dataflow service metrics that are per step or tentative duplicates of a
-# job-level value carry one of these context keys.
-_STEP_CONTEXT_KEYS = {"step", "original_name", "output_user_name", "tentative"}
+# Dataflow resource usage, job totals. Units from the metric descriptors:
+# vCPU time in vCPU-seconds, memory and disk in GB-seconds, Streaming
+# Engine data in bytes, SECU in Streaming Engine Compute Units.
+RESOURCE_METRIC_PREFIX = "dataflow.googleapis.com/job/"
+RESOURCE_METRICS = (
+    "total_vcpu_time",
+    "total_memory_usage_time",
+    "total_pd_usage_time",
+    "total_streaming_data_processed",
+    "total_secu_usage",
+    "total_shuffle_data_processed",
+    "total_dcu_usage",
+)
+# Resource totals keep being reported for a few minutes after the job ends.
+RESOURCE_GRACE_MINUTES = 15
 
 
 @dataclass(frozen=True)
@@ -100,28 +115,26 @@ REPLICAS_METRIC = "aiplatform.googleapis.com/prediction/online/replicas"
 # ---------------------------------------------------------------------------
 
 
-def parse_job_metrics(entries: list[dict[str, Any]] | None) -> dict[str, float]:
-    """Extract job-level scalar metrics from ``gcloud dataflow metrics list``.
+def resource_totals(rows: list[dict[str, Any]]) -> dict[str, float]:
+    """Reduce resource-metric samples to one total per metric.
+
+    The ``job/total_*`` metrics are running totals, so the job's total is
+    the largest sample.
 
     Args:
-        entries: The command's JSON output.
+        rows: ``perf_timeseries``-shaped rows of ``job/total_*`` metrics.
 
     Returns:
-        Metric name → value, for job-level scalar metrics only.
+        Short metric name (``total_vcpu_time`` …) → total.
     """
-    metrics: dict[str, float] = {}
-    for entry in entries or []:
-        name_block = entry.get("name") or {}
-        context = name_block.get("context") or {}
-        if _STEP_CONTEXT_KEYS & set(context):
+    totals: dict[str, float] = {}
+    for row in rows:
+        value = row["value"]
+        if value is None:
             continue
-        scalar = entry.get("scalar")
-        if isinstance(scalar, bool) or not isinstance(scalar, int | float):
-            continue
-        name = name_block.get("name")
-        if name:
-            metrics[str(name)] = float(scalar)
-    return metrics
+        name = row["metric_type"].removeprefix(RESOURCE_METRIC_PREFIX)
+        totals[name] = max(totals.get(name, value), value)
+    return totals
 
 
 def summarize_minutes(counts: list[int]) -> dict[str, float | int | None]:
@@ -360,17 +373,39 @@ def bq_load(project: str, dataset: str, table: str, rows: list[dict[str, Any]]) 
         Path(path).unlink(missing_ok=True)
 
 
-def append_csv(path: Path, rows: list[dict[str, Any]]) -> None:
-    """Append rows to a CSV file, writing the header if the file is new."""
+def write_csv(path: Path, rows: list[dict[str, Any]], *, replace_run: str) -> None:
+    """Write rows to a CSV file, replacing any earlier rows of the same run.
+
+    Args:
+        path: CSV file; created with a header if missing.
+        rows: Rows to write (all of run ``replace_run``).
+        replace_run: Run id whose existing rows are dropped first.
+    """
     if not rows:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    new = not path.exists()
-    with path.open("a", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
-        if new:
-            writer.writeheader()
+    kept: list[dict[str, Any]] = []
+    if path.exists():
+        with path.open(newline="", encoding="utf-8") as handle:
+            kept = [r for r in csv.DictReader(handle) if r.get("run_id") != replace_run]
+    fieldnames = list(rows[0])
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(kept)
         writer.writerows(rows)
+
+
+def delete_run_rows(project: str, dataset: str, run_id: str) -> None:
+    """Delete a run's earlier rows from the BigQuery results tables."""
+    for table in ("perf_runs", "perf_timeseries"):
+        try:
+            gcp.bq_execute(
+                project,
+                f"DELETE FROM `{project}.{dataset}.{table}` WHERE run_id = '{run_id}'",
+            )
+        except gcp.CommandError as exc:
+            print(f"  ! could not clear {table} for {run_id}: {exc}", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------
@@ -414,26 +449,31 @@ def collect_run(
     end = parse_time(job.get("currentStateTime") or datetime.now(UTC).isoformat())
     print(f"Collecting {spec.run_id}: job {job['name']} {start:%H:%M}–{end:%H:%M} UTC")
 
-    job_metrics = parse_job_metrics(
-        gcp.run_json(
-            [
-                "gcloud",
-                "dataflow",
-                "metrics",
-                "list",
-                job_id,
-                f"--region={REGION}",
-                "--source=service",
-            ]
-        )
-    )
-
     token = gcp.access_token()
     names = {
         "job_name": job["name"],
         "subscription_id": subscription_id,
         "endpoint_id": endpoint_id,
     }
+
+    resource_rows: list[dict[str, Any]] = []
+    for metric in RESOURCE_METRICS:
+        resource_rows.extend(
+            fetch_series(
+                project,
+                token,
+                SeriesSpec(
+                    RESOURCE_METRIC_PREFIX + metric,
+                    'resource.labels.job_name = "{job_name}"',
+                ),
+                start,
+                end + timedelta(minutes=RESOURCE_GRACE_MINUTES),
+                names,
+                spec.run_id,
+            )
+        )
+    job_metrics = resource_totals(resource_rows)
+
     series_rows: list[dict[str, Any]] = []
     for series in SERIES:
         if series.vertex_only and spec.model != "vertex":
@@ -474,11 +514,15 @@ def collect_run(
         "collected_at": datetime.now(UTC).isoformat(),
     }
 
-    append_csv(RESULTS_DIR / "runs.csv", [flatten_for_csv(row)])
-    append_csv(RESULTS_DIR / "timeseries" / f"{spec.run_id}.csv", series_rows)
+    all_series = series_rows + resource_rows
+    write_csv(RESULTS_DIR / "runs.csv", [flatten_for_csv(row)], replace_run=spec.run_id)
+    timeseries_csv = RESULTS_DIR / "timeseries" / f"{spec.run_id}.csv"
+    timeseries_csv.unlink(missing_ok=True)
+    write_csv(timeseries_csv, all_series, replace_run=spec.run_id)
     if write_bigquery:
+        delete_run_rows(project, dataset, spec.run_id)
         bq_load(project, dataset, "perf_runs", [row])
-        bq_load(project, dataset, "perf_timeseries", series_rows)
+        bq_load(project, dataset, "perf_timeseries", all_series)
 
     print(
         f"  landed {row['records_landed']} / expected {row['records_expected']}, "
