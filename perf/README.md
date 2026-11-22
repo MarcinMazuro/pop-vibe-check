@@ -11,6 +11,8 @@ amplify the data for loads the real dataset is too small for.
 | `collect.py` | Collects one run: throughput and counts, Dataflow service metrics, Cloud Monitoring time series, cost estimate. Writes `perf_runs` / `perf_timeseries` in BigQuery and CSV files in `results/`. |
 | `cost.py` | Prices a run's resource usage with `prices.yaml`. |
 | `amplify.py` | Rewrites `raw_staging_perf` with *k* copies of `raw_staging` (ids suffixed `#perf<n>`). |
+| `loadgen.py` | Load generator: publishes the staged records unordered and batched, optionally at a target rate. The replay publisher caps at ~50 msg/s (one ordering key, a wait per message — E1 measured it), too little to find the pipeline's limit. |
+| `keepawake.py` | Stops Windows idle sleep while a run publishes from this machine. |
 | `experiment.py` | What a run is (`RunSpec`) and how it maps onto the replay build's substitutions. |
 | `sql/` | The E0 query (past replays) and the real-world arrival-rate query. |
 
@@ -30,6 +32,14 @@ always drains its streaming Dataflow job, even when the run fails. A
 vertex run additionally needs a deployed endpoint, which bills until it is
 undeployed — the runner records the replica count but does not touch the
 endpoint.
+
+Load generator: the input subscription is shared with real replays, so
+messages nobody consumes would be written by the next real replay. With
+`--load-source loadgen`, `run.py` publishes only once the experiment's
+job is running, and if publishing fails it drains the job and purges the
+subscription (`gcloud pubsub subscriptions seek … --time=now`). The
+standalone `python -m perf.loadgen` refuses to run without `--yes` for the
+same reason. Keep the machine on and plugged in while it publishes.
 
 ## Before the first run
 
@@ -74,10 +84,16 @@ python -m perf.run --experiment e1 --run-id e1-n2-x10 \
   --model stub --num-workers 2 \
   --staging-table raw_staging_perf --copies 10
 
-# Higher loads: amplify first, then replay the perf staging table
+# Pipeline capacity: amplify, then flood it with the load generator
+# (the replay publisher stops at ~50 msg/s)
 python -m perf.amplify --copies 10
-python -m perf.run --experiment e1 --run-id e1-w4-x10-s5000 \
-  --model stub --speedup 5000 --max-workers 4 \
+python -m perf.run --experiment e1 --run-id e1-n2-lg-x10 \
+  --model stub --num-workers 2 --load-source loadgen \
+  --staging-table raw_staging_perf --copies 10
+
+# A fixed input rate, e.g. for latency at a known load
+python -m perf.run --experiment e4 --run-id e4-r100 \
+  --model stub --num-workers 1 --load-source loadgen --target-rps 100 \
   --staging-table raw_staging_perf --copies 10
 
 # E3: real model (deploy the endpoint first, undeploy after)

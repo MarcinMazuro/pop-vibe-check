@@ -109,6 +109,10 @@ resource "google_bigquery_table" "perf_runs" {
     { name = "notes", type = "STRING", mode = "NULLABLE", description = "Free-text notes for the run." },
     { name = "collected_at", type = "TIMESTAMP", mode = "REQUIRED", description = "When perf/collect.py wrote the row." },
     { name = "num_workers", type = "INTEGER", mode = "NULLABLE", description = "Fixed worker count with autoscaling off; null = autoscaling." },
+    { name = "load_source", type = "STRING", mode = "NULLABLE", description = "publisher (ordered replay) or loadgen (perf/loadgen.py)." },
+    { name = "target_rps", type = "FLOAT", mode = "NULLABLE", description = "Load-generator target rate; null = unlimited or publisher." },
+    { name = "publish_mean_rps", type = "FLOAT", mode = "NULLABLE", description = "Messages per second the load generator achieved." },
+    { name = "publish_peak_rps", type = "INTEGER", mode = "NULLABLE", description = "Highest messages in one second the load generator achieved." },
   ])
 
   deletion_protection = false

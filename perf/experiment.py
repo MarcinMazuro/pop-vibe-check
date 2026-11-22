@@ -23,6 +23,7 @@ PERF_STAGING_TABLE = "raw_staging_perf"
 REAL_STAGING_TABLE = "raw_staging"
 ALLOWED_STAGING_TABLES = (REAL_STAGING_TABLE, PERF_STAGING_TABLE)
 MODELS = ("stub", "vertex")
+LOAD_SOURCES = ("publisher", "loadgen")
 
 # Dataflow label keys start with a lowercase letter; keys and values use
 # lowercase letters, digits, '_' and '-', at most 63 characters.
@@ -65,6 +66,11 @@ class RunSpec:
         endpoint_replicas: Vertex replicas deployed for the run, recorded
             for the results; the runner does not change the endpoint.
         notes: Free text stored with the results.
+        load_source: ``publisher`` (the replay publisher: ordered, about
+            50 msg/s) or ``loadgen`` (perf/loadgen.py: unordered, batched,
+            as fast as asked).
+        target_rps: Load-generator rate in messages per second; ``None``
+            publishes as fast as possible. Only with ``loadgen``.
     """
 
     experiment: str
@@ -81,6 +87,8 @@ class RunSpec:
     wait_timeout_minutes: int = 180
     endpoint_replicas: int | None = None
     notes: str = ""
+    load_source: str = "publisher"
+    target_rps: float | None = None
 
     def __post_init__(self) -> None:
         """Validate the specification.
@@ -110,6 +118,12 @@ class RunSpec:
             raise SpecError("copies must be at least 1.")
         if self.copies > 1 and self.staging_table != PERF_STAGING_TABLE:
             raise SpecError(f"copies > 1 only makes sense with {PERF_STAGING_TABLE}.")
+        if self.load_source not in LOAD_SOURCES:
+            raise SpecError(f"load_source must be one of {LOAD_SOURCES}.")
+        if self.target_rps is not None and self.load_source != "loadgen":
+            raise SpecError("target_rps needs load_source=loadgen.")
+        if self.target_rps is not None and self.target_rps <= 0:
+            raise SpecError("target_rps must be positive.")
         if self.wait_timeout_minutes < 1:
             raise SpecError("wait_timeout_minutes must be at least 1.")
 
@@ -161,6 +175,7 @@ class RunSpec:
             "_RAW_STAGING_TABLE_ID": self.staging_table,
             "_PUBLISHER_STAGING_TABLE": self.staging_table,
             "_WAIT_TIMEOUT_MINUTES": str(self.wait_timeout_minutes),
+            "_PUBLISHER_MODE": ("external" if self.load_source == "loadgen" else "job"),
             # Whole-table replays only: the wait step's expected count
             # must be the staging table's full distinct-id count.
             "_EVENT_ID": "",

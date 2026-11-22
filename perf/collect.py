@@ -39,6 +39,7 @@ import requests
 
 from perf import cost, gcp
 from perf.experiment import PERF_LANDING_TABLE, RunSpec
+from perf.loadgen import LoadSummary
 
 RESULTS_DIR = Path(__file__).with_name("results")
 REGION = "europe-central2"
@@ -424,6 +425,7 @@ def collect_run(
     subscription_id: str = "co-events-dataflow-sub-dev",
     endpoint_id: str = "co-nlp-endpoint-dev",
     write_bigquery: bool = True,
+    load_summary: LoadSummary | None = None,
 ) -> dict[str, Any]:
     """Collect and store the results of one run.
 
@@ -437,6 +439,7 @@ def collect_run(
         subscription_id: Pipeline input subscription (short id).
         endpoint_id: Vertex endpoint id (short id).
         write_bigquery: Also append to ``perf_runs`` / ``perf_timeseries``.
+        load_summary: What the load generator published, for loadgen runs.
 
     Returns:
         The ``perf_runs`` row.
@@ -500,6 +503,10 @@ def collect_run(
         "speedup": spec.speedup,
         "max_workers": spec.num_workers or spec.max_workers,
         "num_workers": spec.num_workers,
+        "load_source": spec.load_source,
+        "target_rps": spec.target_rps,
+        "publish_mean_rps": load_summary.mean_rps if load_summary else None,
+        "publish_peak_rps": load_summary.peak_rps if load_summary else None,
         "machine_type": spec.machine_type,
         "max_batch_size": spec.max_batch_size,
         "endpoint_replicas": spec.endpoint_replicas,

@@ -29,15 +29,17 @@ import time
 from pathlib import Path
 from typing import Any
 
-from perf import gcp
+from perf import gcp, loadgen
 from perf.collect import REGION, RESULTS_DIR, collect_run
 from perf.experiment import (
     ALLOWED_STAGING_TABLES,
+    LOAD_SOURCES,
     MODELS,
     REAL_STAGING_TABLE,
     RunSpec,
     substitutions_arg,
 )
+from perf.keepawake import keep_awake
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TRIGGER = "co-replay-dev"
@@ -51,6 +53,8 @@ TERMINAL_BUILD_STATES = {
     "EXPIRED",
 }
 POLL_SECONDS = 60
+JOB_START_POLL_SECONDS = 30
+JOB_START_TIMEOUT_SECONDS = 30 * 60
 
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -74,6 +78,15 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--endpoint-replicas", type=int, help="Recorded, not applied.")
     parser.add_argument("--wait-timeout-minutes", type=int, default=180)
     parser.add_argument("--notes", default="")
+    parser.add_argument(
+        "--load-source",
+        choices=LOAD_SOURCES,
+        default="publisher",
+        help="publisher: ordered replay (~50 msg/s); loadgen: perf/loadgen.py.",
+    )
+    parser.add_argument(
+        "--target-rps", type=float, help="loadgen rate in msg/s (default: no limit)."
+    )
     parser.add_argument("--yes", action="store_true", help="Do not ask to confirm.")
     parser.add_argument("--no-bigquery", action="store_true", help="CSV results only.")
     return parser.parse_args(argv)
@@ -96,6 +109,8 @@ def spec_from_args(args: argparse.Namespace) -> RunSpec:
         wait_timeout_minutes=args.wait_timeout_minutes,
         endpoint_replicas=args.endpoint_replicas,
         notes=args.notes,
+        load_source=args.load_source,
+        target_rps=args.target_rps,
     )
 
 
@@ -152,6 +167,83 @@ def find_job_id(build_id: str) -> str | None:
     return str(jobs[0]["id"]) if jobs else None
 
 
+def build_status(build_id: str) -> str:
+    """Return a build's current status."""
+    return gcp.run_text(
+        [
+            "gcloud",
+            "builds",
+            "describe",
+            build_id,
+            f"--region={REGION}",
+            "--format=value(status)",
+        ]
+    )
+
+
+def wait_for_running_job(build_id: str) -> str | None:
+    """Wait until the build's Dataflow job is running and return its id.
+
+    Returns:
+        The job id, or ``None`` if the build ended first (it failed before
+        launching a job, so there is nothing to publish to).
+
+    Raises:
+        TimeoutError: If the job is not running within 30 minutes.
+    """
+    deadline = time.monotonic() + JOB_START_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        if build_status(build_id) in TERMINAL_BUILD_STATES:
+            return None
+        job_id = find_job_id(build_id)
+        if job_id:
+            state = gcp.run_text(
+                [
+                    "gcloud",
+                    "dataflow",
+                    "jobs",
+                    "describe",
+                    job_id,
+                    f"--region={REGION}",
+                    "--format=value(currentState)",
+                ]
+            )
+            print(f"  {time.strftime('%H:%M:%S')} job {state}")
+            if state == "JOB_STATE_RUNNING":
+                return job_id
+        time.sleep(JOB_START_POLL_SECONDS)
+    raise TimeoutError("The experiment's Dataflow job did not start in 30 minutes.")
+
+
+def emergency_cleanup(job_id: str | None, subscription: str) -> None:
+    """Stop a load-generator run that failed half way.
+
+    Drains the job, so it stops billing now rather than when the build's
+    wait step times out, and purges the subscription: a drain stops pulling,
+    so anything already published would otherwise stay there and be written
+    by the next real replay.
+
+    Args:
+        job_id: The experiment's Dataflow job, if it was found.
+        subscription: Full path of the pipeline's input subscription.
+    """
+    print("Load generation failed — draining the job and purging the subscription.")
+    if job_id:
+        try:
+            gcp.run_text(
+                ["gcloud", "dataflow", "jobs", "drain", job_id, f"--region={REGION}"]
+            )
+        except gcp.CommandError as exc:
+            print(f"  ! drain failed, drain {job_id} by hand: {exc}", file=sys.stderr)
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    try:
+        gcp.run_text(
+            ["gcloud", "pubsub", "subscriptions", "seek", subscription, f"--time={now}"]
+        )
+    except gcp.CommandError as exc:
+        print(f"  ! seek failed, purge {subscription} by hand: {exc}", file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Command-line entry point."""
     args = parse_args(argv)
@@ -167,6 +259,11 @@ def main(argv: list[str] | None = None) -> int:
         if spec.num_workers
         else f"up to {spec.max_workers}"
     )
+    load = (
+        f"perf/loadgen.py from this machine, {spec.target_rps or 'unlimited'} msg/s"
+        if spec.load_source == "loadgen"
+        else "replay publisher (ordered, ~50 msg/s)"
+    )
     print(
         f"""
 About to run experiment {spec.experiment} / {spec.run_id} in {project}.
@@ -177,6 +274,7 @@ It starts a STREAMING Dataflow job (drained by the build when done).
   workers        {workers} x {spec.machine_type}
   batch size     {spec.max_batch_size or 'template default'}
   staging table  {spec.staging_table} (copies: {spec.copies})
+  load           {load}
   writes to      {substitutions['_OUTPUT_TABLE']} (never promoted)
   code           {commit}
 """
@@ -213,7 +311,25 @@ It starts a STREAMING Dataflow job (drained by the build when done).
     build_id = str(build["id"])
     print(f"Build {build_id} submitted.")
 
-    status = wait_for_build(build_id)
+    subscription = substitutions["_INPUT_SUBSCRIPTION"]
+    load_summary = None
+    with keep_awake():
+        if spec.load_source == "loadgen":
+            started_job: str | None = None
+            try:
+                started_job = wait_for_running_job(build_id)
+                if started_job is not None:
+                    load_summary = loadgen.generate(
+                        project,
+                        substitutions["_DATASET"],
+                        spec.staging_table,
+                        loadgen.topic_for_subscription(subscription),
+                        spec.target_rps,
+                    )
+            except BaseException:
+                emergency_cleanup(started_job or find_job_id(build_id), subscription)
+                raise
+        status = wait_for_build(build_id)
     job_id = find_job_id(build_id)
     if job_id is None:
         print(
@@ -228,9 +344,10 @@ It starts a STREAMING Dataflow job (drained by the build when done).
         git_commit=commit,
         project=project,
         dataset=substitutions["_DATASET"],
-        subscription_id=substitutions["_INPUT_SUBSCRIPTION"].rsplit("/", 1)[-1],
+        subscription_id=subscription.rsplit("/", 1)[-1],
         endpoint_id=(substitutions.get("_VERTEX_ENDPOINT_ID") or "").rsplit("/", 1)[-1],
         write_bigquery=not args.no_bigquery,
+        load_summary=load_summary,
     )
     if status != "SUCCESS":
         print(

@@ -58,10 +58,15 @@ substitutions:
   #                             (its deployed BQ_STAGING_TABLE otherwise);
   #                             set _RAW_STAGING_TABLE_ID to match so the
   #                             wait step counts the same table.
+  #   _PUBLISHER_MODE           "job" runs the replay publisher (default);
+  #                             "external" skips it because an experiment's
+  #                             load generator (perf/loadgen.py) publishes
+  #                             instead. The wait and drain steps run as usual.
   _MAX_BATCH_SIZE: ""
   _LABELS: ""
   _NUM_WORKERS: ""
   _PUBLISHER_STAGING_TABLE: ""
+  _PUBLISHER_MODE: job
 
   # Minutes to wait for every staged id to land before giving up. The
   # full two-source dataset is 263,893 records and the model serves
@@ -195,7 +200,9 @@ steps:
           add_env MAX_SLEEP_SECONDS "${_MAX_SLEEP_SECONDS}"
           add_env BQ_STAGING_TABLE "${_PUBLISHER_STAGING_TABLE}"
 
-          if [ -n "$$env_vars" ]; then
+          if [ "${_PUBLISHER_MODE}" = "external" ]; then
+            echo "Publisher skipped: an external load generator publishes."
+          elif [ -n "$$env_vars" ]; then
             gcloud run jobs execute ${_PUBLISHER_JOB} --region=${_REGION} --wait \
               --update-env-vars="$$env_vars"
           else

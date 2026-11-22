@@ -132,3 +132,30 @@ def test_autoscaling_leaves_num_workers_empty():
 def test_num_workers_must_be_positive():
     with pytest.raises(SpecError):
         spec(num_workers=0)
+
+
+def test_loadgen_runs_skip_the_publisher():
+    subs = spec(load_source="loadgen", target_rps=500.0).substitutions(
+        TRIGGER, "pop-vibe-check"
+    )
+
+    assert subs["_PUBLISHER_MODE"] == "external"
+
+
+def test_publisher_runs_keep_the_publisher():
+    subs = spec().substitutions(TRIGGER, "pop-vibe-check")
+
+    assert subs["_PUBLISHER_MODE"] == "job"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"load_source": "kafka"},
+        {"target_rps": 100.0},  # target rate without the load generator
+        {"load_source": "loadgen", "target_rps": 0.0},
+    ],
+)
+def test_invalid_load_settings_are_rejected(overrides):
+    with pytest.raises(SpecError):
+        spec(**overrides)

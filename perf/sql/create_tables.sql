@@ -48,7 +48,11 @@ CREATE TABLE IF NOT EXISTS `pop-vibe-check.co_analytics_dev.perf_runs` (
   estimated_cost_usd FLOAT64 OPTIONS (description = "Cost estimated from resource usage and perf/prices.yaml; null if prices are not filled in."),
   notes STRING OPTIONS (description = "Free-text notes for the run."),
   collected_at TIMESTAMP NOT NULL OPTIONS (description = "When perf/collect.py wrote the row."),
-  num_workers INT64 OPTIONS (description = "Fixed worker count with autoscaling off; null = autoscaling.")
+  num_workers INT64 OPTIONS (description = "Fixed worker count with autoscaling off; null = autoscaling."),
+  load_source STRING OPTIONS (description = "publisher (ordered replay) or loadgen (perf/loadgen.py)."),
+  target_rps FLOAT64 OPTIONS (description = "Load-generator target rate; null = unlimited or publisher."),
+  publish_mean_rps FLOAT64 OPTIONS (description = "Messages per second the load generator achieved."),
+  publish_peak_rps INT64 OPTIONS (description = "Highest messages in one second the load generator achieved.")
 )
 OPTIONS (
   description = "Performance experiment results, one row per run. Written by perf/collect.py.",
