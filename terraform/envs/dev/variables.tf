@@ -140,3 +140,21 @@ variable "dataform_editor_emails" {
   type        = list(string)
   default     = []
 }
+
+variable "enable_bluesky" {
+  description = "Create the Bluesky collector job (and, in dev, its image triggers). Turn on only after the {name_prefix}-bluesky-app-password-{env} secret has a version — Cloud Run validates secret references when it creates the job."
+  type        = bool
+  default     = false
+}
+
+variable "bluesky_handle" {
+  description = "Bluesky account the collector logs in as. Required when enable_bluesky is on."
+  type        = string
+  default     = ""
+}
+
+variable "bluesky_queries" {
+  description = "Search queries for this release, ';'-separated. Required when enable_bluesky is on."
+  type        = string
+  default     = ""
+}

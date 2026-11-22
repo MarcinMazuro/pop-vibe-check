@@ -79,6 +79,7 @@ module "secrets" {
   collector_reddit_sa_email  = module.iam.collector_reddit_sa_email
   collector_youtube_sa_email = module.iam.collector_youtube_sa_email
   collector_steam_sa_email   = module.iam.collector_steam_sa_email
+  collector_bluesky_sa_email = module.iam.collector_bluesky_sa_email
 }
 
 module "artifact_registry" {
@@ -104,6 +105,8 @@ module "artifact_registry" {
     # Steam SA is created in this apply, so its computed email would make
     # the whole for_each set unplannable.
     "${var.name_prefix}-collector-steam-sa-${local.env}@${var.project_id}.iam.gserviceaccount.com",
+    # Literal for the same reason.
+    "${var.name_prefix}-collector-bsky-sa-${local.env}@${var.project_id}.iam.gserviceaccount.com",
     module.iam.publisher_sa_email,
     # Dataflow workers pull the Flex Template image at launch; no public
     # IPs, so they read Artifact Registry over Private Google Access.
@@ -238,8 +241,13 @@ module "cloud_run_jobs" {
   reddit_collector_sa_email  = module.iam.collector_reddit_sa_email
   youtube_collector_sa_email = module.iam.collector_youtube_sa_email
   steam_collector_sa_email   = module.iam.collector_steam_sa_email
+  bluesky_collector_sa_email = module.iam.collector_bluesky_sa_email
   publisher_sa_email         = module.iam.publisher_sa_email
-  secret_names               = module.secrets.secret_names
+
+  enable_bluesky  = var.enable_bluesky
+  bluesky_handle  = var.bluesky_handle
+  bluesky_queries = var.bluesky_queries
+  secret_names    = module.secrets.secret_names
 
   bq_dataset_id       = module.bigquery.dataset_id
   bq_landing_table_id = module.bigquery.raw_landing_table_id
@@ -285,6 +293,7 @@ module "cloud_build" {
   artifact_registry_repository_id = module.artifact_registry.repository_id
   youtube_job_name                = module.cloud_run_jobs.youtube_job_name
   steam_job_name                  = module.cloud_run_jobs.steam_job_name
+  bluesky_job_name                = module.cloud_run_jobs.bluesky_job_name
   publisher_job_name              = module.cloud_run_jobs.publisher_job_name
   mlflow_service_name             = module.mlflow.service_name
   dataform_repository_name        = module.dataform.repository_name

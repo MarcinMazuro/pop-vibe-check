@@ -80,6 +80,12 @@ variable "steam_job_name" {
   type        = string
 }
 
+variable "bluesky_job_name" {
+  description = "Cloud Run Job the bluesky-collector image is deployed to; null when the composition has no Bluesky job, which skips its triggers."
+  type        = string
+  default     = null
+}
+
 variable "publisher_job_name" {
   description = "Cloud Run Job the publisher image is deployed to."
   type        = string

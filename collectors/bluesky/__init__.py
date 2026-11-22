@@ -1,0 +1,1 @@
+"""Bluesky posts collector."""

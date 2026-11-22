@@ -17,6 +17,7 @@ locals {
     "reddit-client-secret",
     "reddit-user-agent",
     "youtube-api-key",
+    "bluesky-app-password",
     "author-hash-salt",
   ])
 
@@ -53,6 +54,16 @@ locals {
     "author-hash-salt/steam-collector" = {
       secret_name = "author-hash-salt"
       sa_email    = var.collector_steam_sa_email
+    }
+    # An app password, never the account password: it can be revoked on
+    # its own from the Bluesky settings and grants no account management.
+    "bluesky-app-password/bluesky-collector" = {
+      secret_name = "bluesky-app-password"
+      sa_email    = var.collector_bluesky_sa_email
+    }
+    "author-hash-salt/bluesky-collector" = {
+      secret_name = "author-hash-salt"
+      sa_email    = var.collector_bluesky_sa_email
     }
   }
 }

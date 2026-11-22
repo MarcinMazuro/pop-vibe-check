@@ -45,6 +45,10 @@ from collectors.common import (
     resolve_event,
     write_batch,
 )
+from collectors.common.events_config import (  # noqa: F401 - re-exported
+    GENERAL_EVENT_ID,
+    event_tag_for,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("collectors.steam")
@@ -74,9 +78,6 @@ RATE_LIMIT_MAX_WAIT_SECONDS = 300.0
 CHECKPOINT_EVERY_PAGES = 25
 # EVENT_ID value that turns on per-record tagging.
 AUTO_EVENT_ID = "auto"
-# Records whose date falls near no event land here. The raw archive layout
-# allows it: {source}/{event_id_or_general}/...
-GENERAL_EVENT_ID = "general"
 DEFAULT_EVENT_WINDOW_DAYS = 3.0
 # Query partitions. Steam ends `filter=recent` pagination well before the
 # end of a popular game's history — measured on appid 1903340: page 1243
@@ -437,41 +438,6 @@ def fetch_page(
             f"(success={payload.get('success')!r})."
         )
     return payload
-
-
-def event_tag_for(
-    created: datetime,
-    events: dict[str, Event],
-    window_days: float,
-) -> str:
-    """Return the lifecycle event a review belongs to, by its own date.
-
-    Steam's endpoint can only be read newest-first, so a historical window
-    is reached by walking back through everything newer — ~2,800 pages for
-    this release. Doing that once per event is absurd; one walk tags each
-    review by its own date instead.
-
-    Args:
-        created: The review's creation time (UTC).
-        events: Configured events, keyed by id.
-        window_days: Half-width of the window around each event date.
-
-    Returns:
-        The id of the nearest event within the window, or
-        :data:`GENERAL_EVENT_ID` when the review falls near none. Ties go to
-        the earlier event date, then to the smaller id, so tagging is
-        deterministic across runs.
-    """
-    best: tuple[float, str, str] | None = None
-    for event in events.values():
-        event_day = datetime.fromisoformat(f"{event.date_utc}T00:00:00+00:00")
-        distance_days = abs((created - event_day).total_seconds()) / 86400.0
-        if distance_days > window_days:
-            continue
-        candidate = (distance_days, event.date_utc, event.id)
-        if best is None or candidate < best:
-            best = candidate
-    return best[2] if best is not None else GENERAL_EVENT_ID
 
 
 def review_record(

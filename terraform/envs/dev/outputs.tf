@@ -73,6 +73,16 @@ output "steam_collector_sa_email" {
   value       = module.iam.collector_steam_sa_email
 }
 
+output "bluesky_collector_job_name" {
+  description = "Short name of the Bluesky collector Cloud Run Job, or null when enable_bluesky is off."
+  value       = module.cloud_run_jobs.bluesky_job_name
+}
+
+output "bluesky_collector_sa_email" {
+  description = "Email of the Bluesky collector workload SA."
+  value       = module.iam.collector_bluesky_sa_email
+}
+
 output "publisher_job_name" {
   description = "Short name of the replay publisher Cloud Run Job."
   value       = module.cloud_run_jobs.publisher_job_name

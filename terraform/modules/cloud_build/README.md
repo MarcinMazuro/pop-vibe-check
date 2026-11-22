@@ -22,6 +22,7 @@ and the secrets and IAM they need.
 | `co-python-checks-pr-dev` | PR → main | `**/*.py`, `pyproject.toml`, `requirements-dev.txt`, `collectors/config/**` | Cloud Build SA | `cloudbuild.checks.yaml` | ruff, black `--check`, pytest |
 | `co-youtube-collector-pr-dev` | PR → main | `collectors/{youtube,common,config}/**` | Cloud Build SA | `collectors/youtube/cloudbuild.yaml` | image build only |
 | `co-youtube-collector-deploy-dev` | push main | same | Cloud Build SA | same | build, push `:<sha>`, `gcloud run jobs update --image=@digest` |
+| `co-bluesky-collector-pr-dev` / `-deploy-dev` | PR → main / push main | `collectors/{bluesky,common,config}/**` | Cloud Build SA | `collectors/bluesky/cloudbuild.yaml` | as the YouTube pair; **only when `bluesky_job_name` is set** (the job is opt-in) |
 | `co-publisher-pr-dev` | PR → main | `publisher/**`, `collectors/{common,config}/**` | Cloud Build SA | `publisher/cloudbuild.yaml` | image build only |
 | `co-publisher-deploy-dev` | push main | same | Cloud Build SA | same | build, push, deploy to the publisher job |
 | `co-sentiment-pipeline-pr-dev` | PR → main | `dataflow/**`, `nlp/**` | Cloud Build SA | `dataflow/cloudbuild.yaml` | image build only (import check included) |

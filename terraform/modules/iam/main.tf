@@ -25,6 +25,13 @@ locals {
       display_name = "Steam collector"
       description  = "Reads the public Steam store review endpoint and writes raw JSONL to the raw archive bucket. Run as the steam-collector Cloud Run Job."
     }
+    # "bsky", not "bluesky": the account id is
+    # {name_prefix}-{key}-sa-{env} and capped at 30 characters, and
+    # "gta6-collector-bluesky-sa-prod" would already be 30.
+    "collector-bsky" = {
+      display_name = "Bluesky collector"
+      description  = "Searches public Bluesky posts with an app-password session and writes raw JSONL to the raw archive bucket. Run as the bluesky-collector Cloud Run Job."
+    }
     "publisher" = {
       display_name = "Replay publisher"
       description  = "Loads the GCS raw archive into BigQuery staging and replays it chronologically to Pub/Sub with time compression. Run as the publisher Cloud Run Job."

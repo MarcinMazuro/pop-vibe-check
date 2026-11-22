@@ -37,3 +37,8 @@ variable "collector_steam_sa_email" {
   description = "Email of the Steam collector workload SA. Granted secretAccessor on the author-hash salt only — the Steam review endpoint needs no credentials."
   type        = string
 }
+
+variable "collector_bluesky_sa_email" {
+  description = "Email of the Bluesky collector workload SA. Granted secretAccessor on the bluesky-app-password secret and on the author-hash salt."
+  type        = string
+}

@@ -70,6 +70,19 @@ locals {
         _JOB = var.steam_job_name
       }
     }
+    bluesky-collector = {
+      filename = "collectors/bluesky/cloudbuild.yaml"
+      included_files = [
+        "collectors/__init__.py",
+        "collectors/common/**",
+        "collectors/config/**",
+        "collectors/bluesky/**",
+      ]
+      ignored_files = ["**/*.md", "**/tests/**"]
+      substitutions = {
+        _JOB = var.bluesky_job_name
+      }
+    }
     publisher = {
       filename = "publisher/cloudbuild.yaml"
       included_files = [
@@ -111,6 +124,13 @@ locals {
         _TEMPLATE_SPEC_DIR = var.template_spec_dir
       }
     }
+  }
+
+  # An image whose job is not created in this composition (the Bluesky
+  # job is opt-in) gets no triggers: a deploy would have nothing to update.
+  active_images = {
+    for k, v in local.images : k => v
+    if k != "bluesky-collector" || var.bluesky_job_name != null
   }
 
   image_common_substitutions = {
@@ -257,7 +277,7 @@ resource "google_cloudbuild_trigger" "python_checks_pr" {
 # Container images.
 # ----------------------------------------------------------------------------
 resource "google_cloudbuild_trigger" "image_pr" {
-  for_each = { for k, v in local.images : k => v if local.github_enabled }
+  for_each = { for k, v in local.active_images : k => v if local.github_enabled }
 
   project         = var.project_id
   location        = var.region
@@ -282,7 +302,7 @@ resource "google_cloudbuild_trigger" "image_pr" {
 }
 
 resource "google_cloudbuild_trigger" "image_deploy" {
-  for_each = { for k, v in local.images : k => v if local.github_enabled }
+  for_each = { for k, v in local.active_images : k => v if local.github_enabled }
 
   project         = var.project_id
   location        = var.region

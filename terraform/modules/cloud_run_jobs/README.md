@@ -6,6 +6,8 @@ Provisions the Reddit and YouTube collector Cloud Run Jobs and the replay publis
 
 - **`{name_prefix}-reddit-collector-{env}`** — Cloud Run v2 Job running as the Reddit collector SA. Default image is the public `pause` placeholder; override `reddit_image_uri` to the Artifact Registry URI once the real container is built. Memory 2Gi, CPU 1, timeout 1h, max 3 retries (all configurable).
 - **`{name_prefix}-youtube-collector-{env}`** — same shape, runs as the YouTube collector SA.
+- **`{name_prefix}-steam-collector-{env}`** — the Steam reviews collector; the store endpoint needs no credentials, so the salt is its only secret.
+- **`{name_prefix}-bluesky-collector-{env}`** — the Bluesky posts collector, **only when `enable_bluesky = true`**. Cloud Run validates secret references at job creation, so it stays off until the `bluesky-app-password` secret has a version. Its SA's archive write grant exists either way.
 - **`{name_prefix}-publisher-{env}`** — the replay publisher: loads the raw archive into BigQuery staging and replays it to Pub/Sub in chronological order with time compression. Timeout 6h, `max_retries = 0` (an automatic retry of a partial replay would double-publish).
 - **Image deployer grants** (when `deployer_sa_email` is set): `roles/run.developer` on the YouTube collector and publisher jobs, and `roles/iam.serviceAccountUser` on their runtime SAs, for the Cloud Build SA that deploys new images.
 - **`roles/storage.objectAdmin`** for each collector SA and **`roles/storage.objectViewer`** for the publisher SA on the raw archive bucket. These bindings live here, not in `storage/`, because the SAs the bindings reference didn't exist when `storage/` was applied — the convention is "bindings next to whichever module knows about both sides".
@@ -48,6 +50,12 @@ Execution-time params are intentionally not in the template — they change ever
 | `memory` | string | no | `2Gi` | Per-task memory limit |
 | `cpu` | string | no | `1` | Per-task CPU limit |
 | `task_timeout` | string | no | `3600s` | Hard timeout per collector task execution |
+| `bluesky_collector_sa_email` | string | yes | — | Runtime identity for the Bluesky job |
+| `enable_bluesky` | bool | no | `false` | Create the Bluesky job (and its deployer grant) |
+| `bluesky_handle` | string | no | `""` | Account the collector logs in as; required when enabled |
+| `bluesky_queries` | string | no | `""` | `;`-separated search queries; required when enabled |
+| `bluesky_image_uri` | string | no | `gcr.io/google-containers/pause` | Image the Bluesky job is created with; ignored afterwards |
+| `bluesky_task_timeout` | string | no | `7200s` | Hard timeout for the Bluesky collector (a history backfill is long; a live run takes seconds) |
 | `steam_task_timeout` | string | no | `7200s` | Hard timeout for the Steam collector, whose full history walk is thousands of pages |
 | `publisher_task_timeout` | string | no | `21600s` | Hard timeout per publisher replay execution |
 | `max_retries` | number | no | `3` | Automatic retries per collector task on failure (publisher is fixed at 0) |
@@ -58,6 +66,7 @@ Execution-time params are intentionally not in the template — they change ever
 |---|---|
 | `reddit_job_name` | Short job name; use in `gcloud run jobs execute` |
 | `youtube_job_name` | Short job name; use in `gcloud run jobs execute` |
+| `bluesky_job_name` | Short job name, or `null` when `enable_bluesky` is off |
 | `reddit_job_id` | Fully-qualified job resource ID |
 | `youtube_job_id` | Fully-qualified job resource ID |
 | `publisher_job_name` | Short job name of the replay publisher |

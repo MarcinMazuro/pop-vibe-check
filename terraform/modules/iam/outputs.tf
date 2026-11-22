@@ -13,6 +13,11 @@ output "collector_steam_sa_email" {
   value       = google_service_account.workload["collector-steam"].email
 }
 
+output "collector_bluesky_sa_email" {
+  description = "Email of the Bluesky collector workload SA."
+  value       = google_service_account.workload["collector-bsky"].email
+}
+
 output "publisher_sa_email" {
   description = "Email of the replay publisher workload SA."
   value       = google_service_account.workload["publisher"].email
