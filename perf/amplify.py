@@ -115,10 +115,16 @@ def main(argv: list[str] | None = None) -> int:
     if not args.yes and input("Run? [y/N] ").strip().lower() != "y":
         print("Aborted.")
         return 1
-    gcp.run_text(
-        ["bq", f"--project_id={project}", "query", "--use_legacy_sql=false", sql]
-    )
-    print("Done.")
+    gcp.bq_execute(project, sql)
+    target = f"`{project}.{args.dataset}.{PERF_STAGING_TABLE}`"
+    written = int(gcp.bq_query(project, f"SELECT COUNT(*) AS n FROM {target}")[0]["n"])
+    if written != source_rows * args.copies:
+        print(
+            f"Expected {source_rows * args.copies} rows, found {written}.",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"Done: {written} rows.")
     return 0
 
 

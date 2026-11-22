@@ -38,6 +38,39 @@ def _resolve(tool: str) -> str:
     return path
 
 
+# cmd.exe metacharacters. Outside double quotes, cmd.exe interprets them
+# when it runs a .cmd wrapper — '^' is its escape character, so gcloud's
+# "^~^KEY=v~KEY=v" substitution syntax would lose its carets.
+_CMD_SPECIAL = set(' \t"^&|<>(),;=%')
+
+
+def _is_batch(path: str) -> bool:
+    """Whether ``path`` is a Windows batch wrapper (``gcloud.cmd``, ``bq.cmd``)."""
+    return path.lower().endswith((".cmd", ".bat"))
+
+
+def windows_cmd_line(command: list[str]) -> str:
+    """Build a command line that passes arguments intact through cmd.exe.
+
+    Every argument containing a cmd.exe metacharacter is wrapped in double
+    quotes, inside which cmd.exe leaves it alone; the Python process the
+    wrapper starts then strips the quotes when it parses its own argv.
+
+    Args:
+        command: Executable and arguments.
+
+    Returns:
+        The command line string.
+    """
+    parts = []
+    for arg in command:
+        if arg and not (_CMD_SPECIAL & set(arg)):
+            parts.append(arg)
+        else:
+            parts.append('"' + arg.replace('"', '\\"') + '"')
+    return " ".join(parts)
+
+
 def run_text(args: list[str], *, stdin: str | None = None) -> str:
     """Run a CLI command and return its standard output.
 
@@ -52,9 +85,12 @@ def run_text(args: list[str], *, stdin: str | None = None) -> str:
         CommandError: If the command exits non-zero.
     """
     command = [_resolve(args[0]), *args[1:]]
-    # A list of arguments, never a shell string.
     result = subprocess.run(
-        command, input=stdin, text=True, capture_output=True, check=False
+        windows_cmd_line(command) if _is_batch(command[0]) else command,
+        input=stdin,
+        text=True,
+        capture_output=True,
+        check=False,
     )
     if result.returncode != 0:
         raise CommandError(
@@ -76,6 +112,12 @@ def run_json(args: list[str]) -> Any:
     return json.loads(out) if out else None
 
 
+# SQL always goes to `bq query` on standard input, never as an argument:
+# on Windows `bq` is a .cmd wrapper, and cmd.exe cuts a multi-line argument
+# at its first newline — a multi-statement script then silently runs only
+# its first statement.
+
+
 def bq_query(project_id: str, sql: str) -> list[dict[str, Any]]:
     """Run a standard-SQL query with ``bq`` and return the rows.
 
@@ -94,35 +136,29 @@ def bq_query(project_id: str, sql: str) -> list[dict[str, Any]]:
             "--use_legacy_sql=false",
             "--format=json",
             "--max_rows=100000",
-            sql,
-        ]
+        ],
+        stdin=sql,
     )
     return json.loads(out) if out else []
 
 
-def bq_dry_run_bytes(project_id: str, sql: str) -> int:
-    """Return how many bytes a query would process, without running it.
+def bq_execute(project_id: str, sql: str) -> None:
+    """Run a standard-SQL statement or multi-statement script with ``bq``.
 
     Args:
-        project_id: Project that would run the query.
-        sql: Standard SQL.
-
-    Returns:
-        Bytes processed, as estimated by BigQuery.
+        project_id: Project that runs (and is billed for) the script.
+        sql: Standard SQL; several statements separated by ``;`` are fine.
     """
-    out = run_text(
+    run_text(
         [
             "bq",
             f"--project_id={project_id}",
             "query",
             "--use_legacy_sql=false",
-            "--dry_run",
-            "--format=json",
-            sql,
-        ]
+            "--format=none",
+        ],
+        stdin=sql,
     )
-    stats = json.loads(out).get("statistics", {})
-    return int(stats.get("totalBytesProcessed", 0))
 
 
 def current_project() -> str:

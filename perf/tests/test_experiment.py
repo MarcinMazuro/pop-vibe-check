@@ -103,3 +103,13 @@ def test_json_round_trip():
     original = spec(speedup=2.5, notes="first try")
 
     assert RunSpec.from_json(original.to_json()) == original
+
+
+def test_windows_cmd_line_quotes_cmd_metacharacters():
+    from perf.gcp import windows_cmd_line
+
+    line = windows_cmd_line(
+        ["gcloud.cmd", "builds", "--substitutions=^~^_A=a,b~_B=c", ""]
+    )
+
+    assert line == 'gcloud.cmd builds "--substitutions=^~^_A=a,b~_B=c" ""'
