@@ -14,7 +14,9 @@ involves, so the estimate is not a guess later.
 - **Real-time starts as the cheap demonstration** (end of this document),
   not a permanently running job.
 - GTA VI has **no Steam page**: no PC version at launch, so no `appid` and
-  no Steam reviews. A replacement second source is being chosen — see
+  no Steam reviews. **Bluesky** is its second source —
+  [ADR 0005](adr/0005-bluesky-as-second-source-for-gta-vi.md), collector
+  in `collectors/bluesky/`. See
   [GTA VI: the second source](#gta-vi-the-second-source).
 
 Neither item changes the replay design. Replay stays what makes a result
@@ -124,7 +126,7 @@ for early 2027). Candidates looked at on 2026-11-22:
 
 | Candidate | History | Live | Access | Verdict |
 |---|---|---|---|---|
-| **Bluesky** | `app.bsky.feed.searchPosts` with `since` / `until` | same search on a short window, or the Jetstream firehose | free; search needs an account session (app password) — anonymous requests get the first page and then 403 | **recommended** |
+| **Bluesky** | `app.bsky.feed.searchPosts` with `since` / `until` | same search on a short window, or the Jetstream firehose | free; search needs an account session (app password) — anonymous requests get the first page and then 403 | **chosen** (ADR 0005) |
 | Microsoft Store (Xbox) reviews | yes | yes | undocumented endpoint, no API terms | rejected: nothing to cite if it breaks |
 | Metacritic user reviews | yes | yes | no public API; scraping against the site's terms | rejected |
 | Twitch chat | no (no VOD chat API) | yes | free | rejected: no history, low-signal text |
@@ -141,5 +143,8 @@ collection are one code path with different windows. Handles are hashed
 at ingest like every other source. Needed from the operator: a Bluesky
 account and app password, stored in Secret Manager.
 
-If confirmed, it gets its own ADR (as Steam did), and the supervisor is
-told.
+Confirmed 2026-11-22 and recorded in
+[ADR 0005](adr/0005-bluesky-as-second-source-for-gta-vi.md); the
+supervisor still needs to be told. The collector supports both modes
+already: `WINDOW_FROM`/`WINDOW_TO` for history, `WINDOW_LOOKBACK_MINUTES`
+for a scheduled live run.

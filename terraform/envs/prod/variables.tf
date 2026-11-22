@@ -72,8 +72,32 @@ variable "steam_image_uri" {
   default     = "gcr.io/google-containers/pause"
 }
 
+variable "bluesky_image_uri" {
+  description = "Image the Bluesky collector job is created with. See youtube_image_uri."
+  type        = string
+  default     = "gcr.io/google-containers/pause"
+}
+
 variable "publisher_image_uri" {
   description = "Image the publisher job is created with. See youtube_image_uri."
   type        = string
   default     = "gcr.io/google-containers/pause"
+}
+
+variable "enable_bluesky" {
+  description = "Create the Bluesky collector job (and, in dev, its image triggers). Turn on only after the {name_prefix}-bluesky-app-password-{env} secret has a version — Cloud Run validates secret references when it creates the job."
+  type        = bool
+  default     = false
+}
+
+variable "bluesky_handle" {
+  description = "Bluesky account the collector logs in as. Required when enable_bluesky is on."
+  type        = string
+  default     = ""
+}
+
+variable "bluesky_queries" {
+  description = "Search queries for this release, ';'-separated. Required when enable_bluesky is on."
+  type        = string
+  default     = ""
 }

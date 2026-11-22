@@ -10,6 +10,7 @@ to fail loudly on an unknown event.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import yaml
@@ -17,6 +18,9 @@ import yaml
 from collectors.common.release_config import release_config_dir
 
 EVENTS_FILE = "events.yaml"
+# Records whose date falls near no event land here. The raw archive layout
+# allows it: {source}/{event_id_or_general}/...
+GENERAL_EVENT_ID = "general"
 
 
 @dataclass(frozen=True)
@@ -98,3 +102,37 @@ def resolve_event(event_id: str, path: Path | None = None) -> Event:
     except KeyError as exc:
         known = ", ".join(sorted(events)) or "<none>"
         raise KeyError(f"Unknown event_id '{event_id}'. Known ids: {known}.") from exc
+
+
+def event_tag_for(
+    created: datetime,
+    events: dict[str, Event],
+    window_days: float,
+) -> str:
+    """Return the lifecycle event a record belongs to, by its own date.
+
+    Used by collectors that read a long span in one pass (Steam's
+    newest-first walk, Bluesky's sliced search) and so cannot tag a whole
+    run with one ``EVENT_ID``.
+
+    Args:
+        created: The record's creation time (UTC).
+        events: Configured events, keyed by id.
+        window_days: Half-width of the window around each event date.
+
+    Returns:
+        The id of the nearest event within the window, or
+        :data:`GENERAL_EVENT_ID` when the record falls near none. Ties go
+        to the earlier event date, then to the smaller id, so tagging is
+        deterministic across runs.
+    """
+    best: tuple[float, str, str] | None = None
+    for event in events.values():
+        event_day = datetime.fromisoformat(f"{event.date_utc}T00:00:00+00:00")
+        distance_days = abs((created - event_day).total_seconds()) / 86400.0
+        if distance_days > window_days:
+            continue
+        candidate = (distance_days, event.date_utc, event.id)
+        if best is None or candidate < best:
+            best = candidate
+    return best[2] if best is not None else GENERAL_EVENT_ID

@@ -37,3 +37,8 @@ output "steam_job_id" {
   description = "Fully-qualified job resource ID for the Steam collector."
   value       = google_cloud_run_v2_job.steam_collector.id
 }
+
+output "bluesky_job_name" {
+  description = "Short name of the Bluesky collector job, or null when enable_bluesky is off."
+  value       = one(google_cloud_run_v2_job.bluesky_collector[*].name)
+}

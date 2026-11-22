@@ -38,6 +38,7 @@ locals {
       "collector-reddit",
       "collector-youtube",
       "collector-steam",
+      "collector-bsky",
       "publisher",
       "cloud-build",
       "dataflow-worker",
@@ -96,6 +97,7 @@ module "secrets" {
   collector_reddit_sa_email  = module.iam.collector_reddit_sa_email
   collector_youtube_sa_email = module.iam.collector_youtube_sa_email
   collector_steam_sa_email   = module.iam.collector_steam_sa_email
+  collector_bluesky_sa_email = module.iam.collector_bluesky_sa_email
 }
 
 module "artifact_registry" {
@@ -121,6 +123,7 @@ module "artifact_registry" {
     local.sa_emails["collector-reddit"],
     local.sa_emails["collector-youtube"],
     local.sa_emails["collector-steam"],
+    local.sa_emails["collector-bsky"],
     local.sa_emails["publisher"],
     # Dataflow workers pull the Flex Template image at launch; no public
     # IPs, so they read Artifact Registry over Private Google Access.
@@ -231,8 +234,13 @@ module "cloud_run_jobs" {
   reddit_collector_sa_email  = module.iam.collector_reddit_sa_email
   youtube_collector_sa_email = module.iam.collector_youtube_sa_email
   steam_collector_sa_email   = module.iam.collector_steam_sa_email
+  bluesky_collector_sa_email = module.iam.collector_bluesky_sa_email
   publisher_sa_email         = module.iam.publisher_sa_email
-  secret_names               = module.secrets.secret_names
+
+  enable_bluesky  = var.enable_bluesky
+  bluesky_handle  = var.bluesky_handle
+  bluesky_queries = var.bluesky_queries
+  secret_names    = module.secrets.secret_names
 
   bq_dataset_id       = module.bigquery.dataset_id
   bq_landing_table_id = module.bigquery.raw_landing_table_id
@@ -245,6 +253,7 @@ module "cloud_run_jobs" {
   # the registry is per-env but readable within the project.
   youtube_image_uri   = var.youtube_image_uri
   steam_image_uri     = var.steam_image_uri
+  bluesky_image_uri   = var.bluesky_image_uri
   publisher_image_uri = var.publisher_image_uri
 }
 

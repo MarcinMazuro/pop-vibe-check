@@ -6,12 +6,13 @@ per env.
 
 ## What this creates
 
-Five secrets, all named `${name_prefix}-{purpose}-${env}`:
+Six secrets, all named `${name_prefix}-{purpose}-${env}`:
 
 - **`{name_prefix}-reddit-client-id-{env}`** — OAuth client ID for the Reddit app
 - **`{name_prefix}-reddit-client-secret-{env}`** — OAuth client secret
 - **`{name_prefix}-reddit-user-agent-{env}`** — user-agent string Reddit requires for OAuth
 - **`{name_prefix}-youtube-api-key-{env}`** — YouTube Data API v3 key
+- **`{name_prefix}-bluesky-app-password-{env}`** — Bluesky app password the Bluesky collector logs in with (Settings → Privacy and security → App passwords; never the account password)
 - **`{name_prefix}-author-hash-salt-{env}`** — random ≥32-byte salt; SHA-256-hashed with usernames at ingest. Single use, never rotated unless a security incident forces it (rotation invalidates author continuity across the dataset).
 
 Plus six `roles/secretmanager.secretAccessor` bindings:
@@ -22,7 +23,8 @@ Plus six `roles/secretmanager.secretAccessor` bindings:
 | `reddit-client-secret` | Reddit collector SA |
 | `reddit-user-agent` | Reddit collector SA |
 | `youtube-api-key` | YouTube collector SA |
-| `author-hash-salt` | Reddit **and** YouTube collector SAs (both collectors hash usernames) |
+| `bluesky-app-password` | Bluesky collector SA |
+| `author-hash-salt` | Reddit, YouTube, Steam and Bluesky collector SAs (every collector hashes author identifiers) |
 
 All replication is `auto` (Google-managed multi-region key). CMEK upgrade can be a later ADR.
 
@@ -36,6 +38,8 @@ All replication is `auto` (Google-managed multi-region key). CMEK upgrade can be
 | `labels` | map(string) | yes | — | Labels applied to every secret container |
 | `collector_reddit_sa_email` | string | yes | — | Reddit collector SA email (from `iam` module) |
 | `collector_youtube_sa_email` | string | yes | — | YouTube collector SA email (from `iam` module) |
+| `collector_steam_sa_email` | string | yes | — | Steam collector SA email (from `iam` module) |
+| `collector_bluesky_sa_email` | string | yes | — | Bluesky collector SA email (from `iam` module) |
 
 ## Outputs
 

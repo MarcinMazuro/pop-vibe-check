@@ -172,3 +172,38 @@ variable "steam_appid" {
   type        = string
   default     = "1903340"
 }
+
+variable "bluesky_collector_sa_email" {
+  description = "Runtime identity for the Bluesky collector job; granted objectAdmin on the raw archive (always) and secretAccessor on its app password and the salt (secrets module)."
+  type        = string
+}
+
+variable "enable_bluesky" {
+  description = "Create the Bluesky collector job. Leave false until the bluesky-app-password secret has a version: Cloud Run validates secret references at job creation."
+  type        = bool
+  default     = false
+}
+
+variable "bluesky_handle" {
+  description = "Bluesky account the collector logs in as (handle or DID). Not a secret; the app password is."
+  type        = string
+  default     = ""
+}
+
+variable "bluesky_queries" {
+  description = "Search queries for this release, separated by ';' (e.g. '\"GTA 6\";GTA6;\"GTA VI\"'). A post matching several is written once."
+  type        = string
+  default     = ""
+}
+
+variable "bluesky_image_uri" {
+  description = "Image the Bluesky collector job is created with; ignored afterwards (Cloud Build deploys it). Default is the public 'pause' placeholder."
+  type        = string
+  default     = "gcr.io/google-containers/pause"
+}
+
+variable "bluesky_task_timeout" {
+  description = "Hard timeout per Bluesky collector execution. A live run (a short look-back window) takes seconds; a history backfill over months of sliced search takes much longer."
+  type        = string
+  default     = "7200s"
+}

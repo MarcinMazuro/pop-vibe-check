@@ -38,7 +38,7 @@ locals {
       name        = "source"
       type        = "STRING"
       mode        = "REQUIRED"
-      description = "Origin platform: 'reddit' or 'youtube'."
+      description = "Origin platform: 'youtube', 'steam' or 'bluesky' ('reddit' was never collected - API access refused)."
     },
     {
       name        = "parent_id"

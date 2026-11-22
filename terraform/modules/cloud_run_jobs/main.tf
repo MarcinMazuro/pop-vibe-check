@@ -249,6 +249,103 @@ resource "google_cloud_run_v2_job" "steam_collector" {
 }
 
 # ----------------------------------------------------------------------------
+# Bluesky posts collector Cloud Run Job.
+#
+# Off unless enable_bluesky is set: Cloud Run checks a job's secret
+# references when the job is created, and a composition that has not put
+# an app password into the bluesky-app-password secret yet would fail its
+# apply on this job. Turn it on once the secret has a version.
+#
+# The account handle and the search queries are deploy-time literals —
+# neither is a secret, and both belong to one release. The window
+# (WINDOW_FROM/WINDOW_TO or WINDOW_LOOKBACK_MINUTES) and EVENT_ID are
+# execution-time overrides, as for the other collectors.
+# ----------------------------------------------------------------------------
+resource "google_cloud_run_v2_job" "bluesky_collector" {
+  count = var.enable_bluesky ? 1 : 0
+
+  project  = var.project_id
+  location = var.region
+  name     = "${var.name_prefix}-bluesky-collector-${var.env}"
+
+  labels = var.labels
+
+  template {
+    template {
+      service_account = var.bluesky_collector_sa_email
+      timeout         = var.bluesky_task_timeout
+      max_retries     = var.max_retries
+
+      containers {
+        image = var.bluesky_image_uri
+
+        resources {
+          limits = {
+            memory = var.memory
+            cpu    = var.cpu
+          }
+        }
+
+        env {
+          name  = "TARGET_BUCKET"
+          value = var.raw_archive_bucket_name
+        }
+
+        env {
+          name  = "RELEASE"
+          value = var.release
+        }
+
+        env {
+          name  = "BLUESKY_HANDLE"
+          value = var.bluesky_handle
+        }
+
+        env {
+          name  = "BLUESKY_QUERIES"
+          value = var.bluesky_queries
+        }
+
+        env {
+          name = "BLUESKY_APP_PASSWORD"
+          value_source {
+            secret_key_ref {
+              secret  = var.secret_names["bluesky-app-password"]
+              version = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "AUTHOR_HASH_SALT"
+          value_source {
+            secret_key_ref {
+              secret  = var.secret_names["author-hash-salt"]
+              version = "latest"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    # Image deployed by Cloud Build, see the YouTube job above.
+    ignore_changes = [
+      launch_stage,
+      client,
+      client_version,
+      template[0].template[0].containers[0].image,
+    ]
+
+    precondition {
+      condition     = var.bluesky_handle != "" && var.bluesky_queries != ""
+      error_message = "enable_bluesky needs bluesky_handle and bluesky_queries."
+    }
+  }
+}
+
+# ----------------------------------------------------------------------------
 # Replay publisher Cloud Run Job.
 #
 # Loads the GCS raw archive into BigQuery (landing → MERGE → staging)
@@ -382,6 +479,12 @@ resource "google_storage_bucket_iam_member" "steam_raw_archive_writer" {
   member = "serviceAccount:${var.steam_collector_sa_email}"
 }
 
+resource "google_storage_bucket_iam_member" "bluesky_raw_archive_writer" {
+  bucket = var.raw_archive_bucket_name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${var.bluesky_collector_sa_email}"
+}
+
 # The publisher only reads: BigQuery load jobs fetch the JSONL.gz
 # objects from GCS with the caller's identity, so objectViewer is
 # sufficient — unlike the collectors, it never writes to the archive.
@@ -400,10 +503,11 @@ resource "google_storage_bucket_iam_member" "publisher_raw_archive_reader" {
 #     to exactly these jobs rather than the whole project;
 #   - roles/iam.serviceAccountUser on the job's runtime SA: updating a job
 #     re-attaches its service account, which requires actAs on it.
-# The Reddit job keeps its placeholder image and gets no deployer.
+# The Reddit job keeps its placeholder image and gets no deployer; the
+# Bluesky job gets one only when it exists.
 # ----------------------------------------------------------------------------
 locals {
-  deployed_jobs = var.deployer_sa_email == null ? {} : {
+  always_deployed_jobs = {
     youtube-collector = {
       job_name   = google_cloud_run_v2_job.youtube_collector.name
       runtime_sa = var.youtube_collector_sa_email
@@ -417,6 +521,19 @@ locals {
       runtime_sa = var.publisher_sa_email
     }
   }
+
+  # Opt-in jobs, keyed on their flag so the set is known at plan time.
+  optional_deployed_jobs = var.enable_bluesky ? {
+    bluesky-collector = {
+      job_name   = google_cloud_run_v2_job.bluesky_collector[0].name
+      runtime_sa = var.bluesky_collector_sa_email
+    }
+  } : {}
+
+  deployed_jobs = var.deployer_sa_email == null ? {} : merge(
+    local.always_deployed_jobs,
+    local.optional_deployed_jobs,
+  )
 }
 
 resource "google_cloud_run_v2_job_iam_member" "deployer" {
