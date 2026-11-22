@@ -68,9 +68,11 @@ Python 3.12 with the repo's dev requirements (`requests`, `PyYAML`), and
 `gcloud` / `bq` logged in to the project. From the repo root:
 
 ```bash
-# E1: pipeline capacity without the model
-python -m perf.run --experiment e1 --run-id e1-w2-s5000 \
-  --model stub --speedup 5000 --max-workers 2
+# E1: pipeline capacity without the model, at a fixed worker count
+# (autoscaling off, so 1 / 2 / 4 workers can be compared)
+python -m perf.run --experiment e1 --run-id e1-n2-x10 \
+  --model stub --num-workers 2 \
+  --staging-table raw_staging_perf --copies 10
 
 # Higher loads: amplify first, then replay the perf staging table
 python -m perf.amplify --copies 10

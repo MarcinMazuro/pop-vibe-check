@@ -108,6 +108,7 @@ resource "google_bigquery_table" "perf_runs" {
     { name = "estimated_cost_usd", type = "FLOAT", mode = "NULLABLE", description = "Cost estimated from resource usage and perf/prices.yaml; null if prices are not filled in." },
     { name = "notes", type = "STRING", mode = "NULLABLE", description = "Free-text notes for the run." },
     { name = "collected_at", type = "TIMESTAMP", mode = "REQUIRED", description = "When perf/collect.py wrote the row." },
+    { name = "num_workers", type = "INTEGER", mode = "NULLABLE", description = "Fixed worker count with autoscaling off; null = autoscaling." },
   ])
 
   deletion_protection = false

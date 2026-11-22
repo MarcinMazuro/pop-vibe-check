@@ -62,6 +62,9 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--speedup", type=float, help="Publisher time compression.")
     parser.add_argument("--max-sleep-seconds", type=float)
     parser.add_argument("--max-workers", type=int, default=2)
+    parser.add_argument(
+        "--num-workers", type=int, help="Fixed worker count, autoscaling off."
+    )
     parser.add_argument("--machine-type", default="e2-standard-2")
     parser.add_argument("--max-batch-size", type=int)
     parser.add_argument(
@@ -84,6 +87,7 @@ def spec_from_args(args: argparse.Namespace) -> RunSpec:
         model=args.model,
         speedup=args.speedup,
         max_workers=args.max_workers,
+        num_workers=args.num_workers,
         machine_type=args.machine_type,
         max_batch_size=args.max_batch_size,
         staging_table=args.staging_table,
@@ -158,6 +162,11 @@ def main(argv: list[str] | None = None) -> int:
     service_account = trigger["serviceAccount"]
     commit = git_commit()
 
+    workers = (
+        f"exactly {spec.num_workers} (autoscaling off)"
+        if spec.num_workers
+        else f"up to {spec.max_workers}"
+    )
     print(
         f"""
 About to run experiment {spec.experiment} / {spec.run_id} in {project}.
@@ -165,7 +174,7 @@ It starts a STREAMING Dataflow job (drained by the build when done).
 
   model          {spec.model}
   speedup        {spec.speedup or 'publisher default'}
-  workers        up to {spec.max_workers} x {spec.machine_type}
+  workers        {workers} x {spec.machine_type}
   batch size     {spec.max_batch_size or 'template default'}
   staging table  {spec.staging_table} (copies: {spec.copies})
   writes to      {substitutions['_OUTPUT_TABLE']} (never promoted)

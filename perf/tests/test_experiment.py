@@ -113,3 +113,22 @@ def test_windows_cmd_line_quotes_cmd_metacharacters():
     )
 
     assert line == 'gcloud.cmd builds "--substitutions=^~^_A=a,b~_B=c" ""'
+
+
+def test_fixed_workers_pin_both_counts():
+    subs = spec(num_workers=4).substitutions(TRIGGER, "pop-vibe-check")
+
+    assert subs["_NUM_WORKERS"] == "4"
+    assert subs["_MAX_WORKERS"] == "4"
+
+
+def test_autoscaling_leaves_num_workers_empty():
+    subs = spec(max_workers=3).substitutions(TRIGGER, "pop-vibe-check")
+
+    assert subs["_NUM_WORKERS"] == ""
+    assert subs["_MAX_WORKERS"] == "3"
+
+
+def test_num_workers_must_be_positive():
+    with pytest.raises(SpecError):
+        spec(num_workers=0)

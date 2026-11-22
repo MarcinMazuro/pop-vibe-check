@@ -47,7 +47,8 @@ CREATE TABLE IF NOT EXISTS `pop-vibe-check.co_analytics_dev.perf_runs` (
   job_metrics ARRAY<STRUCT<name STRING NOT NULL, value FLOAT64>> OPTIONS (description = "Dataflow service metrics at the end of the job (vCPU time, memory, disk, Streaming Engine data …)."),
   estimated_cost_usd FLOAT64 OPTIONS (description = "Cost estimated from resource usage and perf/prices.yaml; null if prices are not filled in."),
   notes STRING OPTIONS (description = "Free-text notes for the run."),
-  collected_at TIMESTAMP NOT NULL OPTIONS (description = "When perf/collect.py wrote the row.")
+  collected_at TIMESTAMP NOT NULL OPTIONS (description = "When perf/collect.py wrote the row."),
+  num_workers INT64 OPTIONS (description = "Fixed worker count with autoscaling off; null = autoscaling.")
 )
 OPTIONS (
   description = "Performance experiment results, one row per run. Written by perf/collect.py.",

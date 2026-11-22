@@ -49,6 +49,9 @@ class RunSpec:
         speedup: Publisher time-compression factor; ``None`` keeps the
             publisher's deployed default.
         max_workers: Dataflow max workers.
+        num_workers: Fixed worker count with autoscaling off; ``None``
+            keeps autoscaling up to ``max_workers``. When set, the job's
+            max workers is set to the same value.
         machine_type: Dataflow worker machine type.
         max_batch_size: Records per classifier call; ``None`` keeps the
             template default.
@@ -69,6 +72,7 @@ class RunSpec:
     model: str = "stub"
     speedup: float | None = None
     max_workers: int = 2
+    num_workers: int | None = None
     machine_type: str = "e2-standard-2"
     max_batch_size: int | None = None
     staging_table: str = REAL_STAGING_TABLE
@@ -96,6 +100,8 @@ class RunSpec:
             raise SpecError("speedup must be positive.")
         if self.max_workers < 1:
             raise SpecError("max_workers must be at least 1.")
+        if self.num_workers is not None and self.num_workers < 1:
+            raise SpecError("num_workers must be at least 1.")
         if self.max_batch_size is not None and self.max_batch_size < 1:
             raise SpecError("max_batch_size must be at least 1.")
         if self.staging_table not in ALLOWED_STAGING_TABLES:
@@ -142,7 +148,8 @@ class RunSpec:
             "_MODEL": self.model,
             "_SPEEDUP": _fmt(self.speedup),
             "_MAX_SLEEP_SECONDS": _fmt(self.max_sleep_seconds),
-            "_MAX_WORKERS": str(self.max_workers),
+            "_MAX_WORKERS": str(self.num_workers or self.max_workers),
+            "_NUM_WORKERS": _fmt(self.num_workers),
             "_MACHINE_TYPE": self.machine_type,
             "_MAX_BATCH_SIZE": _fmt(self.max_batch_size),
             "_LABELS": labels,

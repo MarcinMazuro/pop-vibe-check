@@ -52,12 +52,15 @@ substitutions:
   # Performance experiments (perf/). Empty keeps today's behaviour.
   #   _MAX_BATCH_SIZE           records per classifier call (template default otherwise)
   #   _LABELS                   Dataflow job labels, "key=value,key=value"
+  #   _NUM_WORKERS              fixed worker count, autoscaling off
+  #                             (must not exceed _MAX_WORKERS)
   #   _PUBLISHER_STAGING_TABLE  staging table the publisher replays from
   #                             (its deployed BQ_STAGING_TABLE otherwise);
   #                             set _RAW_STAGING_TABLE_ID to match so the
   #                             wait step counts the same table.
   _MAX_BATCH_SIZE: ""
   _LABELS: ""
+  _NUM_WORKERS: ""
   _PUBLISHER_STAGING_TABLE: ""
 
   # Minutes to wait for every staged id to land before giving up. The
@@ -111,6 +114,7 @@ steps:
       - MACHINE_TYPE=${_MACHINE_TYPE}
       - MAX_BATCH_SIZE=${_MAX_BATCH_SIZE}
       - LABELS=${_LABELS}
+      - NUM_WORKERS=${_NUM_WORKERS}
     args:
       - -ec
       - |

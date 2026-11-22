@@ -92,7 +92,7 @@ one stays untouched.
 | | What | Varied | Measured |
 |---|---|---|---|
 | E0 | Past replays — **done** | — | ~33 rec/s, see above |
-| E1 | Pipeline with the `stub` classifier (no Vertex cost) | `MAX_WORKERS` 1 / 2 / 4 × increasing `SPEEDUP` | highest rate at which the subscription backlog stays flat |
+| E1 | Pipeline with the `stub` classifier (no Vertex cost) | fixed workers (`--num-workers`, autoscaling off) 1 / 2 / 4 × load (amplified copies) | highest rate at which the subscription backlog stays flat |
 | E2 | `stub`, autoscaling, step load | load profile (flat → step up → step down) | vCPUs over time, time to scale up and down |
 | E3 | Real model on the Vertex Endpoint | replicas 1 / 2 / 4 × `max_batch_size` | throughput, cost per 1,000 records |
 | E4 | Latency | 25 / 50 / 75 / 90 % of the E1/E3 maximum | data freshness, oldest unacked message age |

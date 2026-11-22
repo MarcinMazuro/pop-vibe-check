@@ -50,6 +50,10 @@ MACHINE_TYPE="${MACHINE_TYPE:-e2-standard-2}"
 # billing export carries, so an experiment's cost can be attributed to it.
 MAX_BATCH_SIZE="${MAX_BATCH_SIZE:-}"
 LABELS="${LABELS:-}"
+# NUM_WORKERS pins the job to exactly that many workers with autoscaling
+# off, so an experiment can compare worker counts; it must not exceed
+# MAX_WORKERS. Empty keeps autoscaling (up to MAX_WORKERS) as before.
+NUM_WORKERS="${NUM_WORKERS:-}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -143,6 +147,7 @@ About to launch a STREAMING Dataflow job. It bills until drained.
   dead letters  ${DLQ_TOPIC}
   model         ${NLP_MODEL}
   vertex ep     ${VERTEX_ENDPOINT_ID:--}
+  fixed workers ${NUM_WORKERS:-no (autoscaling)}
   batch size    ${MAX_BATCH_SIZE:-template default}
   labels        ${LABELS:--}
 
@@ -159,6 +164,14 @@ if [[ -n "${MAX_BATCH_SIZE}" ]]; then
 fi
 if [[ -n "${LABELS}" ]]; then
   optional_flags+=("--additional-user-labels=${LABELS}")
+fi
+if [[ -n "${NUM_WORKERS}" ]]; then
+  if (( NUM_WORKERS > MAX_WORKERS )); then
+    echo "NUM_WORKERS (${NUM_WORKERS}) exceeds MAX_WORKERS (${MAX_WORKERS})." >&2
+    exit 1
+  fi
+  optional_flags+=("--num-workers=${NUM_WORKERS}")
+  optional_flags+=("--additional-pipeline-options=autoscaling_algorithm=NONE")
 fi
 
 # --disable-public-ips is not optional: it is what keeps workers off the
