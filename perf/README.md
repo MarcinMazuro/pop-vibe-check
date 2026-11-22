@@ -37,8 +37,8 @@ endpoint.
    `events_landing_perf`, `perf_runs` and `perf_timeseries`; apply it
    (`co-terraform-apply-dev`, or `terraform apply` in `terraform/envs/dev`).
    Without the results tables, `collect.py` still writes CSV files.
-2. **Prices.** Fill in `prices.yaml` from the official pricing pages, with
-   the date you read them. Until then the cost estimate stays empty.
+2. **Prices.** `prices.yaml` holds Warsaw list prices read from the Cloud
+   Billing Catalog on 2026-11-22; re-read them before quoting a figure.
 3. **Billing export** (optional, to check the estimate): someone with a
    billing-account role enables the export to BigQuery. It only records
    from the moment it is enabled.
