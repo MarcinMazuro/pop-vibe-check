@@ -159,3 +159,14 @@ def test_publisher_runs_keep_the_publisher():
 def test_invalid_load_settings_are_rejected(overrides):
     with pytest.raises(SpecError):
         spec(**overrides)
+
+
+def test_prefill_runs_skip_the_publisher():
+    subs = spec(load_source="prefill").substitutions(TRIGGER, "pop-vibe-check")
+
+    assert subs["_PUBLISHER_MODE"] == "external"
+
+
+def test_prefill_has_no_target_rate():
+    with pytest.raises(SpecError):
+        spec(load_source="prefill", target_rps=100.0)

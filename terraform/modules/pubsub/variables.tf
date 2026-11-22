@@ -32,3 +32,9 @@ variable "dataflow_worker_sa_email" {
   description = "Email of the Dataflow worker SA — granted roles/pubsub.subscriber on the Dataflow subscription and roles/pubsub.publisher on the DLQ topic (for the pipeline's explicit dead-letter output)."
   type        = string
 }
+
+variable "perf_publisher_emails" {
+  description = "Service accounts granted roles/pubsub.publisher on the events topic for performance experiments (perf/prefill.cloudbuild.yaml). Empty grants nothing."
+  type        = list(string)
+  default     = []
+}

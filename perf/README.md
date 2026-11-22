@@ -72,6 +72,16 @@ terraform plan   # expect in-place label/description updates only, no replacemen
 If the plan shows a table being **replaced**, stop: replacing drops its data
 (including `perf_runs`). Export the results first.
 
+The prefill build's publish right was granted the same way, on 2026-11-22
+with `gcloud pubsub topics add-iam-policy-binding` (Cloud Build SA,
+`roles/pubsub.publisher`, events topic only). Import it too:
+
+```bash
+SA=co-cloud-build-sa-dev@pop-vibe-check.iam.gserviceaccount.com
+terraform import "module.pubsub.google_pubsub_topic_iam_member.perf_publisher_publish[\"$SA\"]" \
+  "projects/pop-vibe-check/topics/co-events-topic-dev roles/pubsub.publisher serviceAccount:$SA"
+```
+
 ## Running
 
 Python 3.12 with the repo's dev requirements (`requests`, `PyYAML`), and
@@ -84,11 +94,13 @@ python -m perf.run --experiment e1 --run-id e1-n2-x10 \
   --model stub --num-workers 2 \
   --staging-table raw_staging_perf --copies 10
 
-# Pipeline capacity: amplify, then flood it with the load generator
-# (the replay publisher stops at ~50 msg/s)
+# Pipeline capacity: amplify, prefill the subscription from Cloud Build,
+# then let the job drain the full backlog at its own maximum rate.
+# (The replay publisher stops at ~50 msg/s; publishing from a laptop
+# managed ~15 msg/s.) Refuses to start while any Dataflow job runs.
 python -m perf.amplify --copies 10
-python -m perf.run --experiment e1 --run-id e1-n2-lg-x10 \
-  --model stub --num-workers 2 --load-source loadgen \
+python -m perf.run --experiment e1 --run-id e1-n2-pf-x10 \
+  --model stub --num-workers 2 --load-source prefill \
   --staging-table raw_staging_perf --copies 10
 
 # A fixed input rate, e.g. for latency at a known load

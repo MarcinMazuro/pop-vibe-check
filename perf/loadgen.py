@@ -272,6 +272,10 @@ def main(argv: list[str] | None = None) -> int:
         default="co-events-dataflow-sub-dev",
         help="Pipeline subscription; its topic is the target.",
     )
+    parser.add_argument("--project", help="GCP project (gcloud's by default).")
+    parser.add_argument(
+        "--topic", help="Topic path; skips the gcloud lookup (e.g. in Cloud Build)."
+    )
     parser.add_argument(
         "--yes",
         action="store_true",
@@ -287,10 +291,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    from perf import gcp
+    project = args.project
+    if project is None:
+        from perf import gcp
 
-    project = gcp.current_project()
-    topic = topic_for_subscription(args.subscription)
+        project = gcp.current_project()
+    topic = args.topic or topic_for_subscription(args.subscription)
     summary = generate(project, args.dataset, args.staging_table, topic, args.rate)
     print(asdict(summary))
     return 0

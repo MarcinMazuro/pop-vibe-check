@@ -44,6 +44,7 @@ from perf.keepawake import keep_awake
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TRIGGER = "co-replay-dev"
 BUILD_CONFIG = "dataflow/replay.cloudbuild.yaml"
+PREFILL_CONFIG = "perf/prefill.cloudbuild.yaml"
 TERMINAL_BUILD_STATES = {
     "SUCCESS",
     "FAILURE",
@@ -82,7 +83,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--load-source",
         choices=LOAD_SOURCES,
         default="publisher",
-        help="publisher: ordered replay (~50 msg/s); loadgen: perf/loadgen.py.",
+        help="publisher: ordered replay (~50 msg/s); loadgen: perf/loadgen.py "
+        "from this machine; prefill: fill the subscription from Cloud Build first.",
     )
     parser.add_argument(
         "--target-rps", type=float, help="loadgen rate in msg/s (default: no limit)."
@@ -235,13 +237,83 @@ def emergency_cleanup(job_id: str | None, subscription: str) -> None:
             )
         except gcp.CommandError as exc:
             print(f"  ! drain failed, drain {job_id} by hand: {exc}", file=sys.stderr)
+    purge_subscription(subscription)
+
+
+def purge_subscription(subscription: str) -> None:
+    """Drop every message waiting in the subscription (seek to now).
+
+    Experiment messages left there would be written by the next real
+    replay, which reads the same subscription.
+    """
     now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     try:
         gcp.run_text(
             ["gcloud", "pubsub", "subscriptions", "seek", subscription, f"--time={now}"]
         )
+        print(f"Purged {subscription.rsplit('/', 1)[-1]}.")
     except gcp.CommandError as exc:
         print(f"  ! seek failed, purge {subscription} by hand: {exc}", file=sys.stderr)
+
+
+def active_jobs() -> list[str]:
+    """Return the names of Dataflow jobs running in the region."""
+    jobs = gcp.run_json(
+        ["gcloud", "dataflow", "jobs", "list", f"--region={REGION}", "--status=active"]
+    )
+    return [str(job["name"]) for job in jobs or []]
+
+
+def submit_build(
+    config: str, substitutions: dict[str, str], service_account: str
+) -> str:
+    """Submit a build from this working tree and return its id."""
+    build = gcp.run_json(
+        [
+            "gcloud",
+            "builds",
+            "submit",
+            str(REPO_ROOT),
+            f"--config={REPO_ROOT / config}",
+            f"--region={REGION}",
+            f"--service-account={service_account}",
+            f"--substitutions={substitutions_arg(substitutions)}",
+            "--async",
+        ]
+    )
+    return str(build["id"])
+
+
+def prefill(
+    project: str,
+    substitutions: dict[str, str],
+    spec: RunSpec,
+    service_account: str,
+) -> bool:
+    """Fill the subscription from Cloud Build before the experiment's job.
+
+    Returns:
+        Whether the prefill build succeeded. On failure the subscription
+        has already been purged.
+    """
+    subscription = substitutions["_INPUT_SUBSCRIPTION"]
+    topic = loadgen.topic_for_subscription(subscription)
+    build_id = submit_build(
+        PREFILL_CONFIG,
+        {
+            "_DATASET": substitutions["_DATASET"],
+            "_STAGING_TABLE": spec.staging_table,
+            "_TOPIC": topic,
+        },
+        service_account,
+    )
+    print(f"Prefill build {build_id} submitted ({spec.staging_table} -> {topic}).")
+    status = wait_for_build(build_id)
+    if status != "SUCCESS":
+        print(f"Prefill finished {status}; not starting the job.", file=sys.stderr)
+        purge_subscription(subscription)
+        return False
+    return True
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -259,11 +331,13 @@ def main(argv: list[str] | None = None) -> int:
         if spec.num_workers
         else f"up to {spec.max_workers}"
     )
-    load = (
-        f"perf/loadgen.py from this machine, {spec.target_rps or 'unlimited'} msg/s"
-        if spec.load_source == "loadgen"
-        else "replay publisher (ordered, ~50 msg/s)"
-    )
+    load = {
+        "loadgen": (
+            f"perf/loadgen.py from this machine, {spec.target_rps or 'unlimited'} msg/s"
+        ),
+        "prefill": "subscription prefilled from Cloud Build, then the job drains it",
+        "publisher": "replay publisher (ordered, ~50 msg/s)",
+    }[spec.load_source]
     print(
         f"""
 About to run experiment {spec.experiment} / {spec.run_id} in {project}.
@@ -295,23 +369,24 @@ It starts a STREAMING Dataflow job (drained by the build when done).
         return 2
     spec_path.write_text(spec.to_json() + "\n", encoding="utf-8")
 
-    build = gcp.run_json(
-        [
-            "gcloud",
-            "builds",
-            "submit",
-            str(REPO_ROOT),
-            f"--config={REPO_ROOT / BUILD_CONFIG}",
-            f"--region={REGION}",
-            f"--service-account={service_account}",
-            f"--substitutions={substitutions_arg(substitutions)}",
-            "--async",
-        ]
-    )
-    build_id = str(build["id"])
+    subscription = substitutions["_INPUT_SUBSCRIPTION"]
+    if spec.load_source == "prefill":
+        running = active_jobs()
+        if running:
+            print(
+                f"Refusing to prefill while Dataflow jobs run: {running}. A real "
+                "replay reading the subscription would take the experiment's "
+                "messages.",
+                file=sys.stderr,
+            )
+            return 2
+        purge_subscription(subscription)  # start from an empty backlog
+        if not prefill(project, substitutions, spec, service_account):
+            return 1
+
+    build_id = submit_build(BUILD_CONFIG, substitutions, service_account)
     print(f"Build {build_id} submitted.")
 
-    subscription = substitutions["_INPUT_SUBSCRIPTION"]
     load_summary = None
     with keep_awake():
         if spec.load_source == "loadgen":
@@ -331,6 +406,9 @@ It starts a STREAMING Dataflow job (drained by the build when done).
                 raise
         status = wait_for_build(build_id)
     job_id = find_job_id(build_id)
+    if spec.load_source != "publisher" and status != "SUCCESS":
+        # The job may not have consumed everything that was published.
+        purge_subscription(subscription)
     if job_id is None:
         print(
             "The build launched no Dataflow job; nothing to collect.", file=sys.stderr

@@ -23,7 +23,7 @@ PERF_STAGING_TABLE = "raw_staging_perf"
 REAL_STAGING_TABLE = "raw_staging"
 ALLOWED_STAGING_TABLES = (REAL_STAGING_TABLE, PERF_STAGING_TABLE)
 MODELS = ("stub", "vertex")
-LOAD_SOURCES = ("publisher", "loadgen")
+LOAD_SOURCES = ("publisher", "loadgen", "prefill")
 
 # Dataflow label keys start with a lowercase letter; keys and values use
 # lowercase letters, digits, '_' and '-', at most 63 characters.
@@ -67,8 +67,10 @@ class RunSpec:
             for the results; the runner does not change the endpoint.
         notes: Free text stored with the results.
         load_source: ``publisher`` (the replay publisher: ordered, about
-            50 msg/s) or ``loadgen`` (perf/loadgen.py: unordered, batched,
-            as fast as asked).
+            50 msg/s), ``loadgen`` (perf/loadgen.py from this machine,
+            while the job runs) or ``prefill`` (perf/loadgen.py in Cloud
+            Build, before the job starts, so the job drains a full
+            backlog at its own maximum rate).
         target_rps: Load-generator rate in messages per second; ``None``
             publishes as fast as possible. Only with ``loadgen``.
     """
@@ -175,7 +177,7 @@ class RunSpec:
             "_RAW_STAGING_TABLE_ID": self.staging_table,
             "_PUBLISHER_STAGING_TABLE": self.staging_table,
             "_WAIT_TIMEOUT_MINUTES": str(self.wait_timeout_minutes),
-            "_PUBLISHER_MODE": ("external" if self.load_source == "loadgen" else "job"),
+            "_PUBLISHER_MODE": "job" if self.load_source == "publisher" else "external",
             # Whole-table replays only: the wait step's expected count
             # must be the staging table's full distinct-id count.
             "_EVENT_ID": "",
