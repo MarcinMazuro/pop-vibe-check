@@ -12,15 +12,16 @@ Entry point: `python -m collectors.youtube.main`.
 | Variable | Source | Purpose |
 |---|---|---|
 | `TARGET_BUCKET` | Cloud Run Job literal | GCS bucket to write into (`co-raw-archive-dev`) |
+| `RELEASE` | Cloud Run Job literal | Release config directory under `collectors/config/` (e.g. `clair_obscur`); required, no default |
 | `YOUTUBE_API_KEY` | Secret Manager | YouTube Data API v3 key |
 | `AUTHOR_HASH_SALT` | Secret Manager | Per-project salt for username hashing |
-| `EVENT_ID` | Execution-time | Lifecycle event id (must exist in `config/events.yaml`) |
+| `EVENT_ID` | Execution-time | Lifecycle event id (must exist in `config/<release>/events.yaml`) |
 | `WINDOW_FROM` | Execution-time | Start of collection window (ISO 8601 UTC) |
 | `WINDOW_TO` | Execution-time | End of collection window (ISO 8601 UTC) |
 
 ## Behaviour
 
-- Videos come from `config/youtube_videos.yaml`, filtered to those whose
+- Videos come from `config/<release>/youtube_videos.yaml`, filtered to those whose
   `event_ids` include `EVENT_ID`. Placeholder ids (prefixed `REPLACE`) are
   skipped with a warning — populate real video ids before running.
 - Uses `commentThreads.list` (1 quota unit/page; daily quota 10,000).
@@ -35,7 +36,7 @@ Entry point: `python -m collectors.youtube.main`.
 # From the repository root (so collectors.common is importable).
 uv venv --python 3.12
 uv pip install -r collectors/youtube/requirements.txt
-export TARGET_BUCKET=co-raw-archive-dev
+export TARGET_BUCKET=co-raw-archive-dev RELEASE=clair_obscur
 export YOUTUBE_API_KEY=...
 export AUTHOR_HASH_SALT=...
 export EVENT_ID=launch WINDOW_FROM=2025-04-24T00:00:00Z WINDOW_TO=2025-04-26T00:00:00Z

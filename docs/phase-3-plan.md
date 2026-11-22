@@ -1,8 +1,21 @@
 # Phase 3 — a second release, and real-time analysis
 
 Two scope items confirmed on 2026-10-14, after the first release's
-pipeline was working end to end. Neither has started. This document is
-what the work actually involves, so the estimate is not a guess later.
+pipeline was working end to end. This document is what the work actually
+involves, so the estimate is not a guess later.
+
+**Decided 2026-11-22:**
+
+- The second release is **Grand Theft Auto VI** (launched 2026-11-19 on
+  PS5 and Xbox Series X|S). Its launch is days old, which is what makes it
+  the right case for the live path: the hype peak is happening now.
+- **One BigQuery dataset per release** (item 2 below), so `name_prefix`
+  stays the only switch.
+- **Real-time starts as the cheap demonstration** (end of this document),
+  not a permanently running job.
+- GTA VI has **no Steam page**: no PC version at launch, so no `appid` and
+  no Steam reviews. A replacement second source is being chosen — see
+  [GTA VI: the second source](#gta-vi-the-second-source).
 
 Neither item changes the replay design. Replay stays what makes a result
 reproducible ([ADR 0002](adr/0002-replay-runs-as-one-build-with-a-completeness-gate.md));
@@ -24,15 +37,16 @@ The parts that already parameterise cleanly:
 
 The parts that do not, and are therefore the work:
 
-1. **Release configuration is baked into the images.**
-   `collectors/config/events.yaml` and `youtube_videos.yaml` name one
-   release, and both are `COPY`'d into the collector containers. Two
-   releases means either a config per release in the image
-   (`events-<release>.yaml`, selected by an env var) or the configs moved
-   to GCS and read at start-up. The GCS option costs a read and a
-   permission; the in-image option costs a rebuild per config edit, which
-   is already how it works today.
-2. **One dataset or two.** Separate datasets per release keep the
+1. **Release configuration is baked into the images.** *Done:* each
+   release has its own directory, `collectors/config/<release>/`, with its
+   `events.yaml` and `youtube_videos.yaml`. All directories are in every
+   image; the `RELEASE` env var, set on every job from the Terraform
+   variable `release`, picks one. It has no default — a job that fell back
+   to another game's config would tag records with the wrong events and
+   nothing downstream would notice. The GCS alternative (configs read at
+   start-up) was not taken: it costs a read and a permission to save a
+   rebuild, and a config edit already triggers a rebuild today.
+2. **One dataset or two.** *Decided: one per release.* Separate datasets per release keep the
    reporting views trivially unchanged and keep `name_prefix` the only
    switch. One shared dataset with a `release` column would allow
    cross-release comparison in a single query — which is a thesis
@@ -44,8 +58,8 @@ The parts that do not, and are therefore the work:
 4. **Cost doubles** for anything that runs continuously. Currently that is
    nothing, which is why a second release is cheap to add today.
 
-Rough size: a day for the configuration split, plus collection time per
-release (YouTube is quota-bound, Steam is stream-cap-bound — see
+Rough size: a day for the configuration split (done), plus collection
+time per release (YouTube is quota-bound, Steam is stream-cap-bound — see
 [`collectors/steam/README.md`](../collectors/steam/README.md)).
 
 ---
@@ -100,3 +114,32 @@ without a standing bill.
 
 Rough size: an evening for the scheduled collection plus the demo run; a
 separate decision, with its own budget line, for leaving it running.
+
+---
+
+## GTA VI: the second source
+
+Steam is out for GTA VI until a PC version ships (reported, unofficially,
+for early 2027). Candidates looked at on 2026-11-22:
+
+| Candidate | History | Live | Access | Verdict |
+|---|---|---|---|---|
+| **Bluesky** | `app.bsky.feed.searchPosts` with `since` / `until` | same search on a short window, or the Jetstream firehose | free; search needs an account session (app password) — anonymous requests get the first page and then 403 | **recommended** |
+| Microsoft Store (Xbox) reviews | yes | yes | undocumented endpoint, no API terms | rejected: nothing to cite if it breaks |
+| Metacritic user reviews | yes | yes | no public API; scraping against the site's terms | rejected |
+| Twitch chat | no (no VOD chat API) | yes | free | rejected: no history, low-signal text |
+
+Volume probe (one page of 100, anonymous): every sampled hour was full —
+an hour two days after launch, an hour of the second trailer
+(2025-05-06), and six hours of the first trailer (2023-12-05). The
+first-trailer result is notable since Bluesky was invite-only at the
+time, so pre-launch coverage is thinner than post-launch but not empty.
+
+Bluesky fits the existing pattern: a time-windowed search is the same
+shape as the Steam and YouTube collectors, so history and live
+collection are one code path with different windows. Handles are hashed
+at ingest like every other source. Needed from the operator: a Bluesky
+account and app password, stored in Secret Manager.
+
+If confirmed, it gets its own ADR (as Steam did), and the supervisor is
+told.

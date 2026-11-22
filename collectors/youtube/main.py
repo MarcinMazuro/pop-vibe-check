@@ -25,6 +25,7 @@ import yaml
 from googleapiclient.discovery import build
 
 from collectors.common import build_record, hash_author, resolve_event, write_batch
+from collectors.common.release_config import release_config_dir
 from collectors.common.retry import retry_transient
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -36,9 +37,7 @@ COMMENT_THREADS_PAGE_SIZE = 100
 # Records per GCS object.
 BATCH_SIZE = 500
 
-_VIDEOS_CONFIG_PATH = (
-    Path(__file__).resolve().parent.parent / "config" / "youtube_videos.yaml"
-)
+VIDEOS_FILE = "youtube_videos.yaml"
 
 
 @dataclass(frozen=True)
@@ -133,7 +132,7 @@ def load_videos_for_event(event_id: str, path: Path | None = None) -> list[str]:
         FileNotFoundError: If the config file does not exist.
         ValueError: If the config is malformed.
     """
-    config_path = path if path is not None else _VIDEOS_CONFIG_PATH
+    config_path = path if path is not None else release_config_dir() / VIDEOS_FILE
     if not config_path.is_file():
         raise FileNotFoundError(f"YouTube videos config not found at {config_path}.")
 

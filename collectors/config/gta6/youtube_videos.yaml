@@ -1,0 +1,26 @@
+# Grand Theft Auto VI - curated YouTube videos per event.
+#
+# Consumed by the YouTube collector when RELEASE=gta6. Each entry maps a
+# canonical video to the lifecycle events it is relevant to (event_ids must
+# match ids in events.yaml).
+#
+# An event is listed only when the video already existed on that date: the
+# collector filters comments to the event window by publishedAt.
+#
+# Ids verified 2026-11-22 against YouTube's public oEmbed endpoint (title
+# and channel). Comment counts not yet checked: run videos.list with the
+# collector's API key before the first production collection.
+#
+# Still to add before collecting: the launch trailer, launch-week reviews
+# and reaction videos (launch, review_embargo, user_review_bombing), found
+# with a date-windowed search.list (100 quota units per call - use
+# sparingly) and verified the same way.
+
+videos:
+  - id: QdBZY2fkU-0 # Rockstar Games, 2023-12-04
+    title: Grand Theft Auto VI Trailer 1
+    event_ids: [trailer_1, delay_to_may_2026]
+
+  - id: VQRLujxTm3c # Rockstar Games, 2025-05-06
+    title: Grand Theft Auto VI Trailer 2
+    event_ids: [trailer_2, delay_to_nov_2026]

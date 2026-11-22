@@ -233,6 +233,7 @@ module "cloud_run_jobs" {
   region      = var.region
   labels      = local.labels
 
+  release                    = var.release
   raw_archive_bucket_name    = module.storage.raw_archive_bucket_name
   reddit_collector_sa_email  = module.iam.collector_reddit_sa_email
   youtube_collector_sa_email = module.iam.collector_youtube_sa_email

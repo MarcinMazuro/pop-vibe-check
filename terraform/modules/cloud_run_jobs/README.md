@@ -31,6 +31,7 @@ Execution-time params are intentionally not in the template — they change ever
 | `env` | string | yes | — | Environment name; suffixed into job names |
 | `region` | string | yes | — | Region the jobs run in |
 | `labels` | map(string) | yes | — | Labels applied to every job |
+| `release` | string | yes | — | Wired into the `RELEASE` env var on every job: the directory under `collectors/config/` holding this release's `events.yaml` and `youtube_videos.yaml` |
 | `raw_archive_bucket_name` | string | yes | — | Wired into `TARGET_BUCKET` env var |
 | `reddit_collector_sa_email` | string | yes | — | Runtime identity for the Reddit job |
 | `youtube_collector_sa_email` | string | yes | — | Runtime identity for the YouTube job |

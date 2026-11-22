@@ -11,11 +11,12 @@ Entry point: `python -m collectors.reddit.main`.
 | Variable | Source | Purpose |
 |---|---|---|
 | `TARGET_BUCKET` | Cloud Run Job literal | GCS bucket to write into (`co-raw-archive-dev`) |
+| `RELEASE` | Cloud Run Job literal | Release config directory under `collectors/config/` (e.g. `clair_obscur`); required, no default |
 | `REDDIT_CLIENT_ID` | Secret Manager | Reddit OAuth client id |
 | `REDDIT_CLIENT_SECRET` | Secret Manager | Reddit OAuth client secret |
 | `REDDIT_USER_AGENT` | Secret Manager | e.g. `pop-vibe-check/0.1 by u/<handle>` |
 | `AUTHOR_HASH_SALT` | Secret Manager | Per-project salt for username hashing |
-| `EVENT_ID` | Execution-time | Lifecycle event id (must exist in `config/events.yaml`) |
+| `EVENT_ID` | Execution-time | Lifecycle event id (must exist in `config/<release>/events.yaml`) |
 | `WINDOW_FROM` | Execution-time | Start of collection window (ISO 8601 UTC) |
 | `WINDOW_TO` | Execution-time | End of collection window (ISO 8601 UTC) |
 
@@ -33,7 +34,7 @@ Entry point: `python -m collectors.reddit.main`.
 # From the repository root (so collectors.common is importable).
 uv venv --python 3.12
 uv pip install -r collectors/reddit/requirements.txt
-export TARGET_BUCKET=co-raw-archive-dev
+export TARGET_BUCKET=co-raw-archive-dev RELEASE=clair_obscur
 export REDDIT_CLIENT_ID=... REDDIT_CLIENT_SECRET=... REDDIT_USER_AGENT='pop-vibe-check/0.1 by u/<handle>'
 export AUTHOR_HASH_SALT=...
 export EVENT_ID=launch WINDOW_FROM=2025-04-24T00:00:00Z WINDOW_TO=2025-04-24T06:00:00Z

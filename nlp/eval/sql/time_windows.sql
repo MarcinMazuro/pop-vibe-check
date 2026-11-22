@@ -1,5 +1,5 @@
 -- Sentiment aggregates around Clair Obscur: Expedition 33's worldwide
--- launch (collectors/config/events.yaml → launch / 2025-04-24).
+-- launch (collectors/config/clair_obscur/events.yaml → launch / 2025-04-24).
 --
 -- Windows (half-open, UTC):
 --   week_before  [launch - 7d, launch)
@@ -57,7 +57,7 @@ FROM labelled
 GROUP BY window_id, event_tag, source
 ORDER BY window_id, event_tag, source;
 
--- Per-event_tag over the whole table (calendar of collectors/config/events.yaml).
+-- Per-event_tag over the whole table (calendar of collectors/config/clair_obscur/events.yaml).
 -- Uncomment to run as a second statement in the bq CLI (or run separately):
 --
 -- SELECT

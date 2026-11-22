@@ -232,7 +232,7 @@ Shared library imported by both collectors. Suggested files: `author_hash.py`, `
 - `batch_id` should be unique per process invocation (a UUID is fine) so concurrent writes don't collide
 - The bucket name comes from env var `TARGET_BUCKET`
 
-**Event config loader.** Reads `collectors/config/events.yaml` and resolves `event_id` → `(name, type, date_utc)`. Used by the GCS writer to know which directory to write under.
+**Event config loader.** Reads `collectors/config/<release>/events.yaml` (release chosen by the `RELEASE` env var, which has no default) and resolves `event_id` → `(name, type, date_utc)`. Used by the GCS writer to know which directory to write under.
 
 **Retry helper.** Exponential backoff for transient API errors (HTTP 429, 5xx). Both PRAW and the YouTube client offer this built-in; if you prefer raw requests, a small `tenacity`-based wrapper is enough.
 
@@ -309,7 +309,7 @@ Entry point: `python -m collectors.youtube.main`.
 
 **Algorithm:**
 
-1. Load `collectors/config/youtube_videos.yaml` (a manually curated list of canonical videos per event — official trailers, top reviews, top reaction videos).
+1. Load `collectors/config/<release>/youtube_videos.yaml` (a manually curated list of canonical videos per event — official trailers, top reviews, top reaction videos).
 2. Filter the list to videos relevant to `EVENT_ID` (each entry has an `event_ids` array; could also be a global pool).
 3. For each video, call `commentThreads.list` paginated. **Each call costs 1 quota unit, the daily quota is 10,000** — prefer this endpoint.
 4. For each top-level comment, walk replies (`replies.comments` is included in the response).
@@ -329,9 +329,15 @@ Entry point: `python -m collectors.youtube.main`.
 - `requirements.txt` (likely `google-api-python-client`)
 - `cloudbuild.yaml` for image build → push to `europe-central2-docker.pkg.dev/pop-vibe-check/co-images-dev/youtube-collector:$COMMIT_SHA`
 
-### `collectors/config/`
+### `collectors/config/<release>/`
 
-**`events.yaml`** — the 12 lifecycle events of Clair Obscur. One entry per event:
+One directory per studied release (`clair_obscur/` today). Every image
+bakes in all of them; the `RELEASE` env var, set on each Cloud Run Job by
+Terraform, picks one. It has no default, so a job pointed at the wrong
+release fails instead of tagging records with another game's events.
+Adding a release is a new directory with both files below.
+
+**`events.yaml`** — the lifecycle events of the release (12 for Clair Obscur). One entry per event:
 
 ```yaml
 events:

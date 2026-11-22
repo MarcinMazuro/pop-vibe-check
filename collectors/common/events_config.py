@@ -1,8 +1,10 @@
-"""Loader for the Clair Obscur lifecycle event configuration.
+"""Loader for a release's lifecycle event configuration.
 
-Reads ``collectors/config/events.yaml`` and resolves an ``event_id`` to its
-name, type, and date. The GCS writer uses the resolved id to choose the output
-directory, and the collectors use it to fail loudly on an unknown event.
+Reads ``collectors/config/<release>/events.yaml`` (the release is chosen
+by the ``RELEASE`` environment variable, see ``release_config``) and
+resolves an ``event_id`` to its name, type, and date. The GCS writer uses
+the resolved id to choose the output directory, and the collectors use it
+to fail loudly on an unknown event.
 """
 
 from __future__ import annotations
@@ -12,7 +14,9 @@ from pathlib import Path
 
 import yaml
 
-_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "events.yaml"
+from collectors.common.release_config import release_config_dir
+
+EVENTS_FILE = "events.yaml"
 
 
 @dataclass(frozen=True)
@@ -38,17 +42,19 @@ def load_events(path: Path | None = None) -> dict[str, Event]:
 
     Args:
         path: Optional override for the YAML config location. Defaults to
-            ``collectors/config/events.yaml`` resolved relative to this package
-            so it works inside the container.
+            the ``events.yaml`` of the release named by ``RELEASE``,
+            resolved relative to this package so it works inside the
+            container.
 
     Returns:
         A mapping from ``event_id`` to its :class:`Event`.
 
     Raises:
         FileNotFoundError: If the config file does not exist.
-        ValueError: If the file is malformed or contains duplicate event ids.
+        ValueError: If the file is malformed or contains duplicate event ids,
+            or (without ``path``) if ``RELEASE`` is unset or unknown.
     """
-    config_path = path if path is not None else _CONFIG_PATH
+    config_path = path if path is not None else release_config_dir() / EVENTS_FILE
     if not config_path.is_file():
         raise FileNotFoundError(f"Events config not found at {config_path}.")
 
