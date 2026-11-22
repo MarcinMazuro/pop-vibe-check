@@ -58,3 +58,13 @@ output "dataform_assertions_dataset_id" {
   description = "Short ID of the dataset holding Dataform's assertion views; null when dataform_sa_email is not set."
   value       = one(google_bigquery_dataset.dataform_assertions[*].dataset_id)
 }
+
+output "perf_table_ids" {
+  description = "Short table ids used by the performance experiments (perf/): amplified staging input, landing output, and the two results tables."
+  value = {
+    raw_staging    = google_bigquery_table.raw_staging_perf.table_id
+    events_landing = google_bigquery_table.events_landing_perf.table_id
+    runs           = google_bigquery_table.perf_runs.table_id
+    timeseries     = google_bigquery_table.perf_timeseries.table_id
+  }
+}

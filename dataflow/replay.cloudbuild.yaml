@@ -49,6 +49,17 @@ substitutions:
   _MAX_WORKERS: "2"
   _MACHINE_TYPE: e2-standard-2
 
+  # Performance experiments (perf/). Empty keeps today's behaviour.
+  #   _MAX_BATCH_SIZE           records per classifier call (template default otherwise)
+  #   _LABELS                   Dataflow job labels, "key=value,key=value"
+  #   _PUBLISHER_STAGING_TABLE  staging table the publisher replays from
+  #                             (its deployed BQ_STAGING_TABLE otherwise);
+  #                             set _RAW_STAGING_TABLE_ID to match so the
+  #                             wait step counts the same table.
+  _MAX_BATCH_SIZE: ""
+  _LABELS: ""
+  _PUBLISHER_STAGING_TABLE: ""
+
   # Minutes to wait for every staged id to land before giving up. The
   # full two-source dataset is 263,893 records and the model serves
   # roughly 12,000 an hour per 8 vCPU, so a complete replay is hours, not
@@ -98,6 +109,8 @@ steps:
       - VERTEX_MODEL_VERSION=${_VERTEX_MODEL_VERSION}
       - MAX_WORKERS=${_MAX_WORKERS}
       - MACHINE_TYPE=${_MACHINE_TYPE}
+      - MAX_BATCH_SIZE=${_MAX_BATCH_SIZE}
+      - LABELS=${_LABELS}
     args:
       - -ec
       - |
@@ -176,6 +189,7 @@ steps:
           add_env WINDOW_TO "${_WINDOW_TO}"
           add_env SPEEDUP "${_SPEEDUP}"
           add_env MAX_SLEEP_SECONDS "${_MAX_SLEEP_SECONDS}"
+          add_env BQ_STAGING_TABLE "${_PUBLISHER_STAGING_TABLE}"
 
           if [ -n "$$env_vars" ]; then
             gcloud run jobs execute ${_PUBLISHER_JOB} --region=${_REGION} --wait \

@@ -44,6 +44,13 @@ TEMPLATE_SHA=""
 MAX_WORKERS="${MAX_WORKERS:-2}"
 MACHINE_TYPE="${MACHINE_TYPE:-e2-standard-2}"
 
+# Optional, for performance experiments (perf/). Empty means "not passed":
+# the job keeps the template's max_batch_size default and gets no extra
+# labels. LABELS is "key=value,key=value" — Dataflow job labels, which the
+# billing export carries, so an experiment's cost can be attributed to it.
+MAX_BATCH_SIZE="${MAX_BATCH_SIZE:-}"
+LABELS="${LABELS:-}"
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --yes) ASSUME_YES="true"; shift ;;
@@ -136,12 +143,22 @@ About to launch a STREAMING Dataflow job. It bills until drained.
   dead letters  ${DLQ_TOPIC}
   model         ${NLP_MODEL}
   vertex ep     ${VERTEX_ENDPOINT_ID:--}
+  batch size    ${MAX_BATCH_SIZE:-template default}
+  labels        ${LABELS:--}
 
 SUMMARY
 
 if [[ "${ASSUME_YES}" != "true" ]]; then
   read -r -p "Launch? [y/N] " reply
   [[ "${reply}" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 1; }
+fi
+
+optional_flags=()
+if [[ -n "${MAX_BATCH_SIZE}" ]]; then
+  optional_flags+=("--parameters=max_batch_size=${MAX_BATCH_SIZE}")
+fi
+if [[ -n "${LABELS}" ]]; then
+  optional_flags+=("--additional-user-labels=${LABELS}")
 fi
 
 # --disable-public-ips is not optional: it is what keeps workers off the
@@ -167,7 +184,8 @@ gcloud dataflow flex-template run "${JOB_NAME}" \
   --parameters="vertex_project=${VERTEX_PROJECT}" \
   --parameters="vertex_location=${VERTEX_LOCATION}" \
   --parameters="vertex_model_version=${VERTEX_MODEL_VERSION}" \
-  --parameters="sdk_container_image=${SDK_IMAGE}"
+  --parameters="sdk_container_image=${SDK_IMAGE}" \
+  ${optional_flags[@]+"${optional_flags[@]}"}
 
 cat <<NEXT
 

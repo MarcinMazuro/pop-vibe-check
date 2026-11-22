@@ -112,6 +112,8 @@ the built-in metrics are not precise enough.
 
 ## What gets built
 
+Built in [`perf/`](../perf/README.md); the summary below is the design.
+
 - **Experiment runner.** One command per run, wrapping
   `dataflow/launch.sh` and the replay publisher: `SPEEDUP`,
   `MAX_WORKERS`, `MACHINE_TYPE`, model, `max_batch_size`, replica count.
@@ -150,9 +152,14 @@ alert threshold for the experiment period.
 
 - **Quotas.** Dataflow vCPU and Vertex quotas in `europe-central2` may cap
   E1 and E3 before the pipeline does.
-- **Shared environment.** Experiments use the same dev pipeline,
-  subscription and tables as replays. Announce runs so no replay
-  overlaps, and keep experiment output out of `events` (`_PROMOTE=false`).
+- **Shared environment.** Experiments use the same dev pipeline and
+  subscription as replays, so announce runs and never overlap one with a
+  replay. They must **not** write `events_landing`: `dataflow/promote.sql`
+  merges all of it into `events`, so experiment rows would leak into the
+  analytics at the next real replay (synthetic ids inserted, real labels
+  overwritten by fresher stub labels). `_PROMOTE=false` alone does not
+  prevent that. Experiments therefore write `events_landing_perf` and read
+  amplified data from `raw_staging_perf` — see `perf/README.md`.
 - **Endpoint left running.** The endpoint costs money while a model is
   deployed. Undeploy after every E3 session (`enable_nlp_endpoint`).
 

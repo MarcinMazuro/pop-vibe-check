@@ -1,0 +1,39 @@
+# Unit prices for perf/cost.py. Fill these in from the official pricing
+# pages for europe-central2 and record the date you read them — prices
+# change, and the thesis has to say which ones it used.
+#
+#   Dataflow:  https://cloud.google.com/dataflow/pricing
+#   Vertex AI: https://cloud.google.com/vertex-ai/pricing (prediction nodes)
+#
+# A null price means "not filled in": the cost estimate is then left empty
+# rather than silently undercounted.
+checked_on: null      # e.g. "2026-11-25"
+currency: USD
+
+# Dataflow service metrics (gcloud dataflow metrics list --source=service).
+# divisor converts the metric's raw unit into the priced unit. Check the
+# raw units against the Dataflow job metrics documentation before trusting
+# the estimate.
+dataflow:
+  TotalVcpuTime:             # vCPU-seconds -> vCPU-hours
+    divisor: 3600
+    unit: vCPU-hour
+    price: null
+  TotalMemoryUsage:          # MB-seconds -> GB-hours
+    divisor: 3686400
+    unit: GB-hour
+    price: null
+  TotalPdUsage:              # GB-seconds -> GB-hours (standard persistent disk)
+    divisor: 3600
+    unit: GB-hour
+    price: null
+  TotalStreamingDataProcessed:   # Streaming Engine data processed
+    divisor: 1
+    unit: GB
+    price: null
+
+# Vertex AI online prediction: price per replica-hour of the endpoint's
+# machine type. Replica-hours come from the replicas time series.
+vertex:
+  machine_type: n1-standard-8
+  replica_hour_price: null
