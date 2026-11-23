@@ -1,0 +1,40 @@
+% PLAYGROUND — a toy document for trying out the thesis setup.
+% Nothing here is part of the thesis. Break it, change it, learn from it.
+% It uses the thesis's own preamble (../config/preamble.tex), so whatever
+% works here works in the thesis.
+
+\documentclass[a4paper, 12pt, oneside]{report}
+
+% Author notes on; \workingdraftfalse hides them all.
+\newif\ifworkingdraft
+\workingdrafttrue
+
+\input{preamble}
+\addbibresource{references.bib}
+
+\DeclareAcronym{tp}{short = TP, long = temperatura pokojowa}
+\DeclareAcronym{bpm}{short = BPM, long = bulgotanie na minutę}
+
+\title{Rosół według przepisu babci\\\large dokument do zabawy szablonem}
+\author{Zespół kuchenny}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+
+\chapter*{Wykaz skrótów}
+\addcontentsline{toc}{chapter}{Wykaz skrótów}
+\printacronyms[heading=none]
+
+\include{chapters/introduction}
+\include{chapters/ingredients}
+\include{chapters/cooking}
+
+\printbibliography[heading=bibintoc, title={Bibliografia}]
+\listoffigures
+\listoftables
+\lstlistoflistings
+
+\end{document}

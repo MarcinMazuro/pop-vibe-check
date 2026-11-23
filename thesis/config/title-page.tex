@@ -1,0 +1,37 @@
+% Title page. WETI requires the one generated in MojaPG: save it as
+% thesis/front/title-page-mojapg.pdf and it replaces this placeholder.
+
+\IfFileExists{front/title-page-mojapg.pdf}{%
+  \includepdf[pages=1]{front/title-page-mojapg.pdf}%
+}{%
+  \begin{titlepage}
+    \centering
+    {\large\bfseries \University\par}
+    \vspace{0.3em}
+    {\Faculty\par}
+    {\Department\par}
+    \vspace{3cm}
+    {\large Praca dyplomowa inżynierska\par}
+    \vspace{0.3em}
+    {\small kierunek: \FieldOfStudy\par}
+    \vspace{1.2cm}
+    {\LARGE\bfseries \TitlePL\par}
+    \vspace{0.8cm}
+    {\large\itshape \TitleEN\par}
+    \vfill
+    \begin{flushright}
+      \begin{tabular}{@{}l@{\quad}l@{}}
+        \AuthorA & nr albumu: \StudentIdA               \\
+        \AuthorB & nr albumu: \StudentIdB               \\
+        \AuthorC & nr albumu: \StudentIdC               \\[1em]
+        \multicolumn{2}{@{}l@{}}{Promotor: \Supervisor} \\
+      \end{tabular}
+    \end{flushright}
+    \vspace{2cm}
+    {Gdańsk, \DefenceYear\par}
+    \ifworkingdraft
+      \vspace{0.5em}
+      {\small\color{gray} Zastępcza strona tytułowa — wersja robocza\par}
+    \fi
+  \end{titlepage}
+}

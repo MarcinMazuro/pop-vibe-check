@@ -190,3 +190,12 @@ cloudbuild-*.yaml.local
 
 node_modules/
 .df-credentials.json
+
+# =============================================================================
+# Thesis (kept last: these re-include paths ignored above)
+# =============================================================================
+
+# The thesis shares its editor settings and the playground, so
+# these ARE committed — unlike the per-developer configs above.
+!thesis/.vscode/
+!thesis/playground/

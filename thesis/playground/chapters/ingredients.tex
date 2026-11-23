@@ -1,0 +1,42 @@
+% !TeX root = ../main.tex
+\chapter{Składniki}
+\label{chap:ingredients}
+
+Składniki na garnek o pojemności \qty{5}{\liter} zestawiono w tabeli~\ref{tab:ingredients}.
+Liczby dziesiętne zapisuje się poleceniem \code{\\num}, które samo stawia polski przecinek: \num{0.5} zamiast 0.5.
+
+% The caption goes ABOVE a table, and the table is referenced in the text
+% before it appears.
+\begin{table}[htbp]
+  \caption{Składniki rosołu na garnek \qty{5}{\liter}}
+  \label{tab:ingredients}
+  \centering
+  \begin{tabular}{@{}l S[table-format=1.2] l@{}}
+    \toprule
+    Składnik                       & {Ilość} & Jednostka \\
+    \midrule
+    Kurczak cwel (porcja rosołowa) & 1.50    & kg        \\
+    Marchewka                      & 0.40    & kg        \\
+    Pietruszkaa (korzeń)           & 0.20    & kg        \\
+    XDD                            & 0.15    & kg        \\
+    Cebula                         & 1       & szt.      \\
+    Liść laurowy                   & 2       & szt.      \\
+    Ziele angielskie               & 4       & szt.      \\
+    Sól                            & 0.02    & kg        \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Warzywa najlepiej kupić na targu, a jeśli to niemożliwe -- w sklepie, który nie przechowuje ich w temperaturze pokojowej (\ac{tp}) przez tydzień.
+Przy pierwszym użyciu skrót rozwinięto ręcznie, w miejscowniku, którego pakiet sam by nie odmienił.
+Każde następne użycie to już tylko \ac{tp}, a pełna nazwa w mianowniku trafia do wykazu skrótów.
+\marcin{Wariant B skrótów: \texttt{\textbackslash ac} zawsze daje skrót, odmianę piszemy sami.}
+
+\section{Czego nie dodawać}
+\label{sec:forbidden}
+
+\begin{itemize}
+  \item kostek rosołowych -- babcia by się obraziła~\cite{babcia1987zupy},
+  \item makaronu do garnka -- gotuje się go osobno,
+  \item pośpiechu.
+\end{itemize}

@@ -1,0 +1,106 @@
+% Shared preamble: packages and typography for the thesis AND the playground,
+% so whatever works in the playground works in the thesis.
+% Page geometry is a placeholder until the PG editorial guidelines are in.
+%
+% A document may switch author notes off BEFORE loading this file:
+%   \newif\ifworkingdraft \workingdraftfalse
+% Otherwise it is a working draft (notes and the "wersja robocza" footer on).
+% (\csname keeps a literal \ifworkingdraft out of the skipped branch, which
+% TeX would otherwise count as an unmatched conditional.)
+\ifcsname ifworkingdraft\endcsname\else
+  \expandafter\newif\csname ifworkingdraft\endcsname
+  \workingdrafttrue
+\fi
+
+% --- Language and fonts -------------------------------------------------------
+\usepackage[english, main=polish]{babel}
+\usepackage{amsmath}
+\usepackage{fontspec}
+\usepackage{unicode-math}
+\setmainfont{TeX Gyre Termes}
+\setsansfont{TeX Gyre Heros}
+\setmonofont{DejaVu Sans Mono}[Scale=MatchLowercase]
+\setmathfont{TeX Gyre Termes Math}
+\usepackage[autostyle]{csquotes}   % \enquote{...} -> „...”
+\usepackage{microtype}
+\usepackage{indentfirst}           % Polish: indent the first paragraph too
+
+% One-letter words (w, z, i, a, o, u) never end a line — no manual "~".
+\usepackage{luavlna}
+\singlechars{polish}{AaIiOoUuWwZz}
+
+% --- Page (placeholder until the PG guidelines) -------------------------------
+\usepackage[a4paper, margin=2.5cm, marginparwidth=2.1cm]{geometry}
+\usepackage[onehalfspacing]{setspace}
+\usepackage{xcolor}
+
+\usepackage{fancyhdr}
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \fancyfoot[C]{\thepage}%
+  \ifworkingdraft\fancyfoot[R]{\scriptsize\color{gray}wersja robocza, \today}\fi
+  \renewcommand{\headrulewidth}{0pt}%
+}
+\pagestyle{plain}
+
+% --- Headings (Polish convention: a full stop after the number) --------------
+\usepackage{titlesec}
+\titleformat{\chapter}[hang]{\normalfont\huge\bfseries}{\thechapter.}{0.6em}{}
+\titlespacing*{\chapter}{0pt}{0pt}{1.5em}
+\titleformat{\section}{\normalfont\Large\bfseries}{\thesection.}{0.6em}{}
+\titleformat{\subsection}{\normalfont\large\bfseries}{\thesubsection.}{0.6em}{}
+
+% --- Floats, tables, numbers ---------------------------------------------------
+\usepackage{graphicx}
+\graphicspath{{figures/}}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{caption}
+\captionsetup{font=small, labelfont=bf, labelsep=period}
+\captionsetup[table]{position=above, skip=6pt}  % table caption ABOVE
+\captionsetup[figure]{position=below}           % figure caption BELOW
+\usepackage{siunitx}
+\sisetup{output-decimal-marker={,}, group-separator={\,}, group-minimum-digits=4}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usepackage{pdfpages}
+
+% --- Code ----------------------------------------------------------------------
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{blue!60!black}\bfseries,
+  commentstyle=\color{gray}\itshape,
+  stringstyle=\color{red!60!black},
+  numbers=left, numberstyle=\tiny\color{gray},
+  frame=tb, breaklines=true, showstringspaces=false,
+  columns=fullflexible, keepspaces=true, captionpos=t,
+}
+\renewcommand{\lstlistingname}{Listing}
+\renewcommand{\lstlistlistingname}{Spis listingów}
+\newcommand{\code}{\lstinline[basicstyle=\ttfamily\small]}
+
+% --- Bibliography (style is a placeholder until the supervisor decides) -------
+\usepackage[backend=biber, style=numeric-comp, sorting=none]{biblatex}
+
+% --- Acronyms: variant B ------------------------------------------------------
+% \ac{x} always prints the short form. Write the first use out by hand in the
+% right grammatical case: "...w temperaturze pokojowej (\ac{tp})...".
+\usepackage{acro}
+\acsetup{first-style=short, make-links=true}
+
+% --- Author notes in the margin, hidden in the final version ----------------
+\ifworkingdraft
+  \usepackage[textsize=scriptsize]{todonotes}
+\else
+  \usepackage[disable]{todonotes}
+\fi
+\newcommand{\marcin}[1]{\todo[color=blue!25, author=Marcin]{#1}}
+\newcommand{\oskar}[1]{\todo[color=green!25, author=Oskar]{#1}}
+\newcommand{\kacper}[1]{\todo[color=orange!30, author=Kacper]{#1}}
+\newcommand{\supervisor}[1]{\todo[color=red!25, author=Promotor]{#1}}
+
+% --- Links (last) -------------------------------------------------------------
+% hypertexnames=false: the title page and the table of contents are both
+% "page 1", which would otherwise give duplicate link targets.
+\usepackage[unicode, hidelinks, hypertexnames=false]{hyperref}

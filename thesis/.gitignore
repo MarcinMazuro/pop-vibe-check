@@ -1,0 +1,42 @@
+# Build output — every document builds into its own build/ folder.
+build/
+*.pdf
+!figures/**/*.pdf
+!front/title-page-mojapg.pdf
+
+# LaTeX auxiliary files, in case something builds outside build/.
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lol
+*.lot
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+*.xdv
+
+# latexindent backups and logs (VS Code keeps them in .cache/)
+.cache/
+*.bak[0-9]*
+indent.log
+
+# Zotero / Better BibTeX temporary files
+*.bib.sav
+
+# Python caches (playground/scripts)
+__pycache__/
+
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+
+

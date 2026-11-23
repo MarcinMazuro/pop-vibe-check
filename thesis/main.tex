@@ -1,0 +1,40 @@
+% The thesis. Write in chapters/; this file only lists the parts in order.
+% Settings (packages, title page, metadata) live in ../config.
+
+\documentclass[a4paper, 12pt, oneside, openany]{report}
+
+% Working draft: author notes and a "wersja robocza" footer are shown.
+% Switch to \workingdraftfalse for the final version.
+\newif\ifworkingdraft
+\workingdrafttrue
+
+\input{metadata}
+\input{preamble}
+\hypersetup{pdftitle={\TitlePL}, pdfauthor={\AuthorA, \AuthorB, \AuthorC}}
+\addbibresource{references.bib}
+\input{acronyms}
+
+\begin{document}
+
+% --- Front matter -------------------------------------------------------------
+\pagenumbering{roman}
+\input{title-page}
+\input{front/abstract-pl}
+\input{front/abstract-en}
+\tableofcontents
+\chapter*{Wykaz skrótów}
+\addcontentsline{toc}{chapter}{Wykaz skrótów}
+\printacronyms[heading=none]
+
+% --- Chapters (the outline is added once the team agrees on it) --------------
+\cleardoublepage
+\pagenumbering{arabic}
+\include{chapters/01-introduction}
+
+% --- Back matter --------------------------------------------------------------
+\printbibliography[heading=bibintoc, title={Bibliografia}]
+\listoffigures
+\listoftables
+\lstlistoflistings
+
+\end{document}

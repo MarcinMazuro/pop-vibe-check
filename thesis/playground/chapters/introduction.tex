@@ -1,0 +1,26 @@
+% !TeX root = ../main.tex
+\chapter{Wstęp}
+\label{chap:introduction}
+
+% One sentence per line: the PDF still shows one paragraph, but a git diff
+% shows exactly which sentence changed. An empty line starts a new paragraph.
+Rosół jest zupą, o której każda babcia ma własne zdanie~\cite{babcia1987zupy}.
+W niniejszym dokumencie przedstawiono przepis sprawdzony w wielu niedzielnych obiadach.
+Celem pracy jest pokazanie, że przygotowanie rosołu da się opisać tak samo starannie jak system przetwarzania strumieniowego~\cite{kuchcik2021bulion, garnek2019teoria}.
+
+\section{Motywacja}
+\label{sec:motivation}
+
+Rosół gotuje się wolno -- to jego zaleta, a nie wada.
+Cytaty zapisuje się poleceniem \code{\\enquote}, które daje polskie cudzysłowy: \enquote{nie ma pośpiechu przy rosole}~\cite[s.~12]{babcia1987zupy}.
+Zakresy liczb pisze się półpauzą bez spacji: rosół gotuje się 2--3 godziny.
+Jednoliterowe wyrazy, takie jak w, z, i, a, o, u, same przechodzą do następnego wiersza, bez ręcznego wstawiania tyld.\footnote{Zajmuje się tym pakiet \texttt{luavlna}.}
+
+% Notes cannot hold long unbreakable words: the margin is only 2 cm wide.
+\oskar{To jest notatka na marginesie. Zniknie, gdy w preambule wyłączymy wersję roboczą.}
+
+\section{Struktura dokumentu}
+\label{sec:structure}
+
+W rozdziale~\ref{chap:ingredients} opisano składniki, a w rozdziale~\ref{chap:cooking} -- sposób przygotowania, w tym wzór na czas gotowania (równanie~\eqref{eq:time}).
+\kacper{Odwołania działają też do tabel, rysunków i listingów -- kliknij w PDF.}

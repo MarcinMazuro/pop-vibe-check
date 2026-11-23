@@ -1,0 +1,29 @@
+# latexindent — shared formatting rules for every .tex file in the repo.
+# VS Code applies them on Ctrl+S (LaTeX Workshop); CI only builds the PDF.
+#
+# Sentences are NOT split automatically: Polish abbreviations (np., m.in.,
+# tzw., inż.) confuse latexindent's sentence detection. "One sentence per
+# line" is a writing habit, not a formatter rule (see README.md).
+
+defaultIndent: "  "
+
+# Text inside the document body is not indented.
+noAdditionalIndent:
+  document: 1
+
+# Environments whose content is left exactly as typed.
+verbatimEnvironments:
+  verbatim: 1
+  lstlisting: 1
+
+# Align the & columns of tables.
+lookForAlignDelims:
+  tabular: 1
+  tabularx: 1
+
+removeTrailingWhitespace:
+  beforeProcessing: 1
+  afterProcessing: 1
+
+modifyLineBreaks:
+  condenseMultipleBlankLinesInto: 1
