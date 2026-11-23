@@ -100,7 +100,7 @@ resource "google_bigquery_table" "perf_runs" {
       type        = "RECORD"
       mode        = "REPEATED"
       description = "Dataflow service metrics at the end of the job (vCPU time, memory, disk, Streaming Engine data …)."
-      fields      = [
+      fields = [
         { name = "name", type = "STRING", mode = "REQUIRED" },
         { name = "value", type = "FLOAT", mode = "NULLABLE" },
       ]
