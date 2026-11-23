@@ -24,6 +24,7 @@ packages = [
     "nlp.training",
     "nlp.tracking",
     "nlp.eval",
+    "perf",
 ]
 
 # ---------------------------------------------------------------------------
@@ -39,7 +40,7 @@ target-version = ["py312"]
 [tool.ruff]
 line-length = 88
 target-version = "py312"
-src = ["collectors", "publisher", "dataflow", "nlp"]
+src = ["collectors", "publisher", "dataflow", "nlp", "perf"]
 
 [tool.ruff.lint]
 # E/W: pycodestyle (PEP 8), F: pyflakes, I: isort, D: pydocstyle (docstrings),
@@ -60,6 +61,7 @@ convention = "google"
 "publisher/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104"]
 "dataflow/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104", "E402"]
 "nlp/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104", "D107"]
+"perf/tests/*" = ["ANN", "D100", "D101", "D102", "D103", "D104", "D107"]
 
 # ---------------------------------------------------------------------------
 # Static typing
@@ -70,7 +72,7 @@ strict = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 ignore_missing_imports = true
-files = ["collectors", "publisher", "dataflow", "nlp"]
+files = ["collectors", "publisher", "dataflow", "nlp", "perf"]
 
 [[tool.mypy.overrides]]
 # Tests use pytest fixtures and assert-style bodies; full annotations add noise.
@@ -86,7 +88,7 @@ disallow_incomplete_defs = false
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["dataflow.tests.*", "nlp.tests.*"]
+module = ["dataflow.tests.*", "nlp.tests.*", "perf.tests.*"]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 check_untyped_defs = true

@@ -1,0 +1,40 @@
+# Prefill the pipeline's input subscription for a capacity experiment.
+#
+# Publishes every row of a staging table (perf/loadgen.py, unordered and
+# batched) from inside Google's network. perf/run.py --load-source prefill
+# runs this first and starts the experiment's Dataflow job afterwards, so
+# the job drains a full backlog at its own maximum rate and the publish
+# rate no longer matters. (Publishing from a home connection managed about
+# 15 msg/s.)
+#
+# Never run it on its own: until a perf job consumes what it publishes, the
+# messages sit in the subscription real replays also read. run.py checks
+# that no Dataflow job is running before it prefills, and purges the
+# subscription if the experiment does not start.
+substitutions:
+  _DATASET: co_analytics_dev
+  _STAGING_TABLE: raw_staging_perf
+  _TOPIC: ""
+
+steps:
+  - id: prefill
+    name: python:3.12-slim
+    entrypoint: bash
+    args:
+      - -ec
+      - |
+        [ -n "${_TOPIC}" ] || { echo "_TOPIC is required." >&2; exit 1; }
+        # The publisher's own pins: the generator builds messages with the
+        # publisher's code, which needs exactly these.
+        pip install --quiet --no-cache-dir --disable-pip-version-check \
+          --root-user-action=ignore -r publisher/requirements.txt
+        python -m perf.loadgen --yes \
+          --project "${PROJECT_ID}" \
+          --dataset "${_DATASET}" \
+          --staging-table "${_STAGING_TABLE}" \
+          --topic "${_TOPIC}"
+
+timeout: 3600s
+
+options:
+  logging: CLOUD_LOGGING_ONLY

@@ -178,6 +178,9 @@ module "pubsub" {
 
   publisher_sa_email       = module.iam.publisher_sa_email
   dataflow_worker_sa_email = module.iam.dataflow_worker_sa_email
+
+  # perf/ prefill build publishes as the Cloud Build SA (dev only).
+  perf_publisher_emails = [module.iam.cloud_build_sa_email]
 }
 
 module "dataflow" {

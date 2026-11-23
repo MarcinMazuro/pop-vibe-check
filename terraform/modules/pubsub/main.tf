@@ -66,6 +66,23 @@ resource "google_pubsub_topic_iam_member" "publisher_sa_publish" {
 }
 
 # ----------------------------------------------------------------------------
+# Topic-level publish IAM for performance experiments (perf/).
+#
+# The prefill build (perf/prefill.cloudbuild.yaml) fills the pipeline's
+# subscription before an experiment's job starts, so the job drains a full
+# backlog at its own maximum rate. It runs as the Cloud Build SA, which
+# otherwise has no right to publish. Empty by default: prod grants nothing.
+# ----------------------------------------------------------------------------
+resource "google_pubsub_topic_iam_member" "perf_publisher_publish" {
+  for_each = toset(var.perf_publisher_emails)
+
+  project = var.project_id
+  topic   = google_pubsub_topic.events.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${each.value}"
+}
+
+# ----------------------------------------------------------------------------
 # Dead-letter topic + inspection subscription.
 #
 # Two distinct paths can land a record here, and it is worth being precise
