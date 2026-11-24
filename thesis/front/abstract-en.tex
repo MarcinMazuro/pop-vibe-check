@@ -3,7 +3,15 @@
 \begin{otherlanguage}{english}
   \chapter*{Abstract}
 
-  \todo{Abstract last.}
+  % FIRST DRAFT (2026-11-23) -- rewrite once the chapters settle.
+  The thesis presents a system that measures how audience sentiment changes around a pop-culture release, using public opinions from several platforms.
+  The system collects YouTube comments and Steam store reviews, replaces author identifiers with pseudonyms and keeps the opinions in an immutable archive.
+  The archive is replayed as an event stream in global chronological order with compressed time, and an Apache Beam pipeline on Dataflow detects the language of each opinion and classifies its sentiment with a multilingual XLM-RoBERTa model served by Vertex AI.
+  The model lifecycle, from training to deployment, follows MLOps practices with MLflow experiment tracking, and the whole Google Cloud infrastructure is defined as code in Terraform.
+  Results are presented on a Looker Studio dashboard built on views defined in Dataform.
+  In a case study of the game \enquote{Clair Obscur: Expedition 33} the system processed \num{263893} opinions in 47 languages.
+  Two replays of the same data produced an identical table fingerprint, and the pipeline reached a throughput of 345 to 970 records per second with one to four workers.
+  The model achieved a macro-F1 of 0.60 on the held-out part of the gold set, agrees with Steam reviewers' own recommendations for 95\% of opinions with a clear polarity, and closely follows how those recommendations change between events.
 
   \bigskip
   \noindent\textbf{Keywords:} sentiment analysis, stream processing, MLOps, MLflow, Apache Beam, Google Cloud Platform, Terraform.

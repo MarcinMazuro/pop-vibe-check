@@ -1,7 +1,8 @@
 % The thesis. Write in chapters/; this file only lists the parts in order.
 % Settings (packages, title page, metadata) live in ../config.
+% Order and names of the parts follow the PG template (SzablonPracyPG_main.tex).
 
-\documentclass[a4paper, 12pt, oneside, openany]{report}
+\documentclass[a4paper, 10pt, oneside, openany]{report}
 
 % Working draft: author notes and a "wersja robocza" footer are shown.
 % Switch to \workingdraftfalse for the final version.
@@ -17,24 +18,44 @@
 \begin{document}
 
 % --- Front matter -------------------------------------------------------------
-\pagenumbering{roman}
-\input{title-page}
+% PG: Arabic page numbers throughout, counting from the title page.
+\input{title-page}   % title page and statement (oświadczenie) from MojaPG
 \input{front/abstract-pl}
 \input{front/abstract-en}
 \tableofcontents
-\chapter*{Wykaz skrótów}
-\addcontentsline{toc}{chapter}{Wykaz skrótów}
+\chapter*{Wykaz ważniejszych oznaczeń i skrótów}
+\addcontentsline{toc}{chapter}{Wykaz ważniejszych oznaczeń i skrótów}
 \printacronyms[heading=none]
 
-% --- Chapters (the outline is added once the team agrees on it) --------------
-\cleardoublepage
-\pagenumbering{arabic}
+% --- Chapters (first draft of the outline, 2026-11-23) ------------------------
 \include{chapters/01-introduction}
+\include{chapters/02-sentiment-analysis}
+\include{chapters/03-technology-review}
+\include{chapters/04-requirements}
+\include{chapters/05-system-design}
+\include{chapters/06-implementation}
+\include{chapters/07-user-guide}
+\include{chapters/08-evaluation}
+\include{chapters/09-summary}
 
 % --- Back matter --------------------------------------------------------------
-\printbibliography[heading=bibintoc, title={Bibliografia}]
+\printbibliography[heading=bibintoc, title={Wykaz literatury}]
+
+% Lists: single line spacing, each one in the table of contents.
+\begingroup
+\singlespacing
+\clearpage\phantomsection
+\addcontentsline{toc}{chapter}{\listfigurename}
 \listoffigures
+\clearpage\phantomsection
+\addcontentsline{toc}{chapter}{\listtablename}
 \listoftables
+\clearpage\phantomsection
+\addcontentsline{toc}{chapter}{\lstlistlistingname}
 \lstlistoflistings
+\endgroup
+
+% Appendices (PG: after the lists).
+\include{chapters/appendix-a-queries}
 
 \end{document}

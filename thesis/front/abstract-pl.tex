@@ -2,7 +2,15 @@
 \chapter*{Streszczenie}
 
 % Written last, once the thesis is done: problem, goal, what was built, key result.
-\todo{Streszczenie na koniec.}
+% FIRST DRAFT (2026-11-23) -- rewrite once the chapters settle.
+Praca opisuje system, który mierzy zmiany nastrojów odbiorców wokół premiery dzieła popkulturowego na podstawie publicznych opinii z wielu serwisów.
+System pobiera komentarze z serwisu YouTube i recenzje ze sklepu Steam, zastępuje identyfikatory autorów pseudonimami i przechowuje opinie w niezmiennym archiwum.
+Archiwum jest odtwarzane jako strumień zdarzeń w globalnej kolejności chronologicznej, z przyspieszonym upływem czasu, a potok Apache Beam w usłudze Dataflow wykrywa język każdej opinii i klasyfikuje jej wydźwięk wielojęzycznym modelem XLM-RoBERTa serwowanym przez Vertex AI.
+Cykl życia modelu, od trenowania po wdrożenie, jest zarządzany zgodnie z praktykami MLOps, z rejestrem przebiegów MLflow, a cała infrastruktura w Google Cloud jest opisana kodem w Terraform.
+Wyniki prezentuje panel w Looker Studio, oparty na widokach zdefiniowanych w Dataform.
+W studium przypadku gry \enquote{Clair Obscur: Expedition 33} system przetworzył \num{263893} opinie w 47 językach.
+Dwa odtworzenia tych samych danych dały identyczny odcisk tabeli wyników, a potok osiągnął przepustowość od 345 do 970 rekordów na sekundę przy jednej do czterech maszyn roboczych.
+Model osiągnął F1 makro \num{0.60} na odłożonej części zbioru wzorcowego, a jego oceny są zgodne z rekomendacjami autorów recenzji Steam w \qty{95}{\percent} opinii o wyraźnym wydźwięku i wiernie odtwarzają zmiany tych rekomendacji między wydarzeniami.
 
 \bigskip
 \noindent\textbf{Słowa kluczowe:} analiza sentymentu, przetwarzanie strumieniowe, MLOps, MLflow, Apache Beam, Google Cloud Platform, Terraform.
