@@ -2,8 +2,134 @@
 \chapter{Wstęp}
 \label{chap:introduction}
 
-% Placeholder until the team agrees on the outline.
-% One sentence per line; an empty line starts a new paragraph.
-Premiery popkulturowe wywołują w mediach społecznościowych gwałtowne, krótkotrwałe fale opinii.
-Uchwycenie ich dynamiki wymaga przetwarzania danych w miarę ich napływu~\cite{akidau2018streaming}.
-\todo{Rozdział do napisania po ustaleniu spisu treści.}
+% FIRST DRAFT, generated from the repository documentation (docs/, ADRs) and
+% the PAI course documents. Every number comes from the repository or from a
+% read-only query on the reporting views (2026-11-23). Rework it in your own
+% words; you have to be able to defend every sentence.
+
+W tygodniu gali The Game Awards, między 8 a 14 grudnia 2025~r., komentarze pod filmami o grze \enquote{Clair Obscur: Expedition 33} były wyraźnie życzliwe.
+Wskaźnik wydźwięku netto, czyli udział opinii pozytywnych pomniejszony o udział negatywnych, wynosił dla nich $+\num{0.41}$.
+Dwa tygodnie później, gdy organizatorzy Indie Game Awards odebrali grze przyznane wcześniej wyróżnienia, ten sam wskaźnik spadł do $-\num{0.10}$.
+Recenzje w sklepie Steam zareagowały słabiej i wcześniej: ich wskaźnik spadł już w tygodniu gali, z $\num{0.71}$ tydzień wcześniej do $\num{0.61}$, i do końca roku nie wrócił do poprzedniego poziomu.
+\todo{Źródło dla przebiegu nagród (TGA 2025, Indie Game Awards) -- uruchomić find-sources.}
+
+Takich zmian nie widać, czytając pojedyncze komentarze.
+Do opisanych wyżej liczb potrzeba było zebrać ponad \num{260000} opinii w kilkudziesięciu językach, nadać każdej etykietę wydźwięku i ułożyć je na osi czasu obok dat zapowiedzi, premiery, kontrowersji i nagród.
+Niniejsza praca opisuje system, który robi to automatycznie, w chmurze obliczeniowej, i w taki sposób, aby każdy wynik dało się powtórzyć.
+
+\section{Problem}
+\label{sec:intro-problem}
+
+Analiza wydźwięku, nazywana też analizą sentymentu, jest jednym z najlepiej opisanych zadań przetwarzania języka naturalnego (\ac{nlp})~\cite{pang2008opinion,liu2015sentiment}.
+Od dawna wiadomo również, że nastroje wyrażane w mediach społecznościowych układają się w szeregi czasowe, które reagują na wydarzenia i bywają powiązane z wynikami sondaży czy sprzedaży~\cite{oconnor2010tweets,asur2010predicting,thelwall2011sentiment}.
+Trudność nie leży więc w samej idei, tylko w tym, co dzieje się między publicznym komentarzem a punktem na wykresie.
+
+Pierwszy kłopot to dostęp do danych.
+Każdy serwis udostępnia opinie na innych zasadach.
+YouTube Data API rozlicza zapytania w jednostkach limitu, których projekt dostaje dziennie \num{10000}~\cite{docyoutubequota}.
+Sklep Steam publikuje recenzje bez uwierzytelniania, ale przerywa pojedynczy strumień wyników na długo przed końcem historii.
+Serwis Reddit, pierwotnie planowany jako drugie źródło, odmówił nam dostępu do swojego interfejsu programistycznego (\ac{api}).
+
+Drugi kłopot to języki.
+Zebrane recenzje Steam powstały w 47 językach, a po angielsku napisano niespełna połowę z nich (\qty{42}{\percent}).
+Model nauczony na tekstach angielskich radzi sobie z takim zbiorem słabo: nasz pierwszy model trafiał w \qty{53.3}{\percent} przypadków, czyli tak samo często jak reguła, która każdej opinii przypisuje klasę pozytywną (rozdział~\ref{chap:implementation}).
+
+Trzeci kłopot to czas.
+Opinia ma sens dopiero w kontekście chwili, w której powstała, a dane z różnych źródeł trzeba ułożyć w jednej, wspólnej kolejności chronologicznej.
+Kolejki komunikatów w chmurze nie gwarantują takiej kolejności same z siebie~\cite{docpubsubordering}.
+
+Czwarty kłopot to powtarzalność.
+Wynik pracy dyplomowej musi dać się odtworzyć z danych źródłowych i kodu.
+Interfejsy serwisów zmieniają się, limity się wyczerpują, a komentarze znikają, więc system nie może zakładać, że kiedyś pobierze te same dane jeszcze raz.
+
+Piąty kłopot to koszt.
+Zadanie przetwarzania strumieniowego w chmurze nalicza opłaty przez cały czas działania, a model językowy serwowany przez punkt końcowy kosztuje kilkadziesiąt groszy za każdą godzinę pracy maszyny.
+Studencki projekt z miesięcznym budżetem rzędu 50~zł musi więc uruchamiać drogie zasoby tylko na czas obliczeń i umieć je wyłączyć nawet wtedy, gdy coś pójdzie nie tak.
+
+\section{Motywacja}
+\label{sec:intro-motivation}
+
+Z wyników takiego systemu mogą korzystać wydawcy i działy marketingu, które chcą wiedzieć, jak odbiorcy przyjęli zwiastun, premierę albo komunikat kryzysowy.
+Przydają się też badaczom nastrojów w sieci, bo zamiast pojedynczego zrzutu danych dostają przebieg w czasie z rozbiciem na źródła i języki.
+Recenzje gier na Steam są przy tym materiałem wyjątkowym: autor sam deklaruje, czy poleca grę, więc każda recenzja niesie słabą etykietę, z którą można porównać decyzję modelu~\cite{lin2019empirical}.
+
+Nas, jako zespół, interesowała przede wszystkim strona inżynierska.
+Chcieliśmy zbudować przetwarzanie strumieniowe, które daje się zweryfikować, a nie tylko pokazać.
+Dlatego zamiast podłączać się do żywego strumienia, archiwizujemy surowe opinie i odtwarzamy je jako strumień w ich rzeczywistej kolejności, z przyspieszonym upływem czasu.
+Dzięki temu ten sam przebieg można powtórzyć i porównać wyniki co do rekordu.
+Drugim motywem były praktyki operacjonalizacji uczenia maszynowego (ang. \textit{Machine Learning Operations}, \ac{mlops}): powtarzalne trenowanie, ocena, wersjonowanie i wdrażanie modelu, opisane w literaturze jako warunek utrzymania systemów uczących się w dłuższym okresie~\cite{sculley2015hidden,kreuzberger2023machine}.
+
+Trzecim motywem była możliwość wielokrotnego użycia.
+Wszystkie zasoby chmurowe są opisane kodem, a nazwy zasobów mają wspólny przedrostek, więc kolejne studium przypadku, na przykład zapowiadana gra \enquote{Wiedźmin 4}, wymaga zmiany konfiguracji, a nie przepisania systemu.
+Kod projektu jest publiczny~\cite{popvibecheck}.
+
+\section{Cel i zakres pracy}
+\label{sec:intro-goal}
+
+Celem pracy jest zaprojektowanie, implementacja i ocena systemu, który pobiera publiczne opinie o premierze dzieła popkulturowego z wielu źródeł, odtwarza je jako chronologiczny strumień, klasyfikuje ich wydźwięk wielojęzycznym modelem językowym zarządzanym zgodnie z praktykami \ac{mlops} i pokazuje zmiany nastrojów w czasie na panelu analitycznym, a wszystko to na platformie Google Cloud Platform (\ac{gcp}).
+Cel ten rozbiliśmy na siedem zadań szczegółowych:
+\begin{enumerate}
+  \item pozyskanie opinii z serwisów YouTube i Steam z pseudonimizacją autorów i zapisem w niezmiennym archiwum,
+  \item odtwarzanie archiwum jako strumienia zdarzeń we wspólnej kolejności chronologicznej, z przyspieszeniem upływu czasu,
+  \item potok przetwarzania strumieniowego, który wykrywa język i wydźwięk każdej opinii i zapisuje wynik w hurtowni danych,
+  \item wytrenowanie, ocena i wdrożenie wielojęzycznego modelu klasyfikacji wydźwięku wraz z rejestrem przebiegów i wersji,
+  \item warstwa raportowa i panel analityczny pokazujący wydźwięk w czasie, według wydarzeń, źródeł i języków,
+  \item ocena jakości klasyfikacji, powtarzalności przetwarzania, wydajności i kosztów,
+  \item studium przypadku gry \enquote{Clair Obscur: Expedition 33} od zapowiedzi w czerwcu 2024~r. do aktualizacji rocznicowej w kwietniu 2026~r.
+\end{enumerate}
+
+Zakres ma też granice, które warto nazwać od razu.
+System klasyfikuje wydźwięk w trzech klasach (pozytywny, neutralny, negatywny) i nie rozpoznaje emocji.
+\todo[inline]{Karta tematu wymienia \enquote{klasyfikację sentymentu i emocji}. Jeżeli emocje nie zostaną zrealizowane, trzeba przed złożeniem pracy uzgodnić z promotorem zmianę celu w MojaPG (docs/review-criteria.md).}
+Analizujemy dane historyczne odtwarzane jako strumień, a nie żywy strumień z serwisów; pobieranie przyrostowe i stale działający potok opisujemy jako kierunek dalszych prac.
+Studium przypadku dotyczy jednego tytułu, choć system od początku projektowaliśmy tak, żeby nie był z nim związany.
+
+\section{Podział pracy w zespole}
+\label{sec:intro-team}
+
+Praca powstała w zespole trzyosobowym.
+Fundamenty, czyli konfigurację projektu w chmurze, pierwsze moduły infrastruktury i kolektor YouTube, budowaliśmy wspólnie.
+Po uruchomieniu pierwszego pełnego przebiegu podzieliliśmy pozostałą pracę na trzy równoległe ścieżki, opisane w planie fazy pierwszej projektu i zestawione w tabeli~\ref{tab:team-split}.
+
+\begin{table}[hbp]
+  \caption{Podział głównych obszarów pracy w zespole}
+  \label{tab:team-split}
+  \centering
+  \small
+  \begin{tabular}{|p{0.2\textwidth}|p{0.7\textwidth}|}
+    \hline
+    Osoba             & Zakres prac                                                                                                                                                                                           \\
+    \hline
+    Marcin Mazuro     & potok przetwarzania strumieniowego (Apache Beam, Dataflow), wydawca odtworzeń, scalanie wyników i odcisk powtarzalności, odtworzenie jako jedno uruchomienie w Cloud Build, ciągła integracja i wdrażanie \\
+    \hline
+    Oskar Lewandowski & kompletność danych: kolektor recenzji Steam, rozszerzenie zbioru YouTube na pełny cykl życia gry, weryfikacja dat wydarzeń, badania wydajności, skalowalności i kosztów                                      \\
+    \hline
+    Kacper Kozak      & model klasyfikacji wydźwięku (DistilBERT, XLM-RoBERTa), zbiór wzorcowy i ocena, serwer MLflow, punkt końcowy Vertex AI, warstwa raportowa i panel w Looker Studio                                       \\
+    \hline
+  \end{tabular}
+\end{table}
+
+\todo[inline]{Sprawdzić i uzupełnić podział: tabela powstała na podstawie ścieżek A, B i C z docs/phase-1-plan.md oraz właścicieli dokumentów wydajnościowych. Zgodnie z zasadami redakcji nazwiska autorów trzeba też wpisać w nagłówki podrozdziałów, które każdy z nas napisał.}
+
+Ścieżki łączyły dwa ustalone na początku kontrakty.
+Pierwszy to interfejs klasyfikatora, dzięki któremu potok mógł działać z deterministyczną zaślepką, zanim powstał prawdziwy model.
+Drugi to wspólny format rekordu opinii, dzięki któremu potok nie zależy od tego, z którego serwisu opinia pochodzi.
+Decyzje zmieniające te ustalenia zapisywaliśmy jako zapisy decyzji architektonicznych (\ac{adr}) w repozytorium.
+
+\section{Struktura pracy}
+\label{sec:intro-structure}
+
+Rozdział~\ref{chap:sentiment} omawia podstawy analizy wydźwięku: przyjętą terminologię, metody klasyfikacji od słownikowych po modele typu transformer oraz badania nad zmianami opinii w czasie wokół wydarzeń.
+Rozdział~\ref{chap:technology} przegląda technologie, z których można zbudować taki system: przetwarzanie strumieniowe, platformy \ac{mlops}, usługi analityczne w chmurze, infrastrukturę jako kod i narzędzia wizualizacji.
+Kończy go zestawienie wybranych narzędzi z uzasadnieniem wyboru.
+
+Rozdział~\ref{chap:requirements} przedstawia założenia projektowe: studium przypadku z osią dwunastu wydarzeń, źródła danych, użytkowników, wymagania funkcjonalne i niefunkcjonalne oraz modele przypadków użycia i klas.
+Rozdział~\ref{chap:design} opisuje projekt systemu, czyli architekturę, logikę odtworzenia, model danych, projekt panelu i sposób ochrony prywatności autorów opinii.
+
+Rozdział~\ref{chap:implementation} jest najdłuższy, bo opisuje implementację wraz z problemami, które napotkaliśmy po drodze.
+Należą do nich odmowa dostępu do serwisu Reddit, ograniczenia strumienia recenzji Steam, cztery nieudane uruchomienia potoku, wyścig wątków w bibliotece wykrywania języka i zmiana modelu z angielskiego DistilBERT na wielojęzyczny XLM-RoBERTa, trenowany wyłącznie na procesorach.
+Rozdział~\ref{chap:user-guide} jest instrukcją korzystania z panelu oraz instalacji i obsługi systemu.
+
+Rozdział~\ref{chap:evaluation} opisuje testy i ocenę: jakość klasyfikacji na zbiorze wzorcowym i na ocenach autorów recenzji Steam, powtarzalność przetwarzania, wydajność, koszty oraz wyniki studium przypadku.
+Rozdział~\ref{chap:summary} podsumowuje, co udało się zrobić, czego nie, i w którą stronę warto system rozwijać.
+Dodatek~A zawiera zapytania, którymi wyliczyliśmy wyniki z rozdziału~\ref{chap:evaluation}.

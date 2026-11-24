@@ -1,0 +1,149 @@
+% !TeX root = ../main.tex
+\chapter{Analiza sentymentu: podstawy i przegląd literatury}
+\label{chap:sentiment}
+
+% FIRST DRAFT. Claims about the literature follow the abstracts of the cited
+% works; check each against the full text before submission.
+
+Zanim opiszemy system, trzeba ustalić, co właściwie mierzy.
+Słowa \enquote{opinia}, \enquote{sentyment}, \enquote{wydźwięk} i \enquote{nastrój} bywają w literaturze i w mowie potocznej używane zamiennie, a w tej pracy każde z nich oznacza coś innego.
+Rozdział zaczyna się więc od definicji, następnie przegląda metody automatycznej klasyfikacji wydźwięku, od słownikowych po modele typu transformer, i kończy się omówieniem badań, które śledzą opinie w czasie, wokół konkretnych wydarzeń.
+
+\section{Pojęcia i przyjęta terminologia}
+\label{sec:sentiment-terms}
+
+Pang i Lee w przeglądzie z 2008~r. traktują eksplorację opinii (ang. \textit{opinion mining}) i analizę sentymentu (ang. \textit{sentiment analysis}) jako dwie nazwy jednej dziedziny: automatycznego rozpoznawania, co autor tekstu sądzi o jego przedmiocie~\cite{pang2008opinion}.
+Liu proponuje bardziej formalną definicję, w której opinia jest piątką: obiekt, którego dotyczy, jego aspekt, wydźwięk wypowiedzi, autor i czas jej wyrażenia~\cite{liu2015sentiment}.
+Ta definicja dobrze pasuje do naszego problemu, bo dwa jej elementy, autor i czas, są w systemie pierwszoplanowe.
+Autora reprezentujemy wyłącznie pseudonimem, a czas wyznacza miejsce opinii w odtwarzanym strumieniu.
+
+Liu wyróżnia też trzy poziomy analizy: całego dokumentu, pojedynczego zdania i aspektu~\cite{liu2015sentiment}.
+Analiza aspektowa odpowiedziałaby na pytanie, co dokładnie się podoba, na przykład fabuła, a co nie, na przykład wydajność.
+My pracujemy na poziomie dokumentu, czyli całego komentarza albo całej recenzji.
+Recenzja Steam ma średnio 248 znaków, a komentarz YouTube 123 znaki, więc w większości przypadków dokument ma długość jednego lub dwóch zdań i poziom dokumentu niewiele różni się od poziomu zdania.
+
+W pracy używamy następujących pojęć.
+\emph{Wydźwięk} (sentyment) to klasa przypisana jednej opinii: pozytywna, neutralna albo negatywna.
+Klasa neutralna obejmuje zarówno wypowiedzi bez oceny, na przykład pytania o datę premiery, jak i wypowiedzi, w których pochwała i krytyka się równoważą.
+\emph{Nastrój} to stan zbiorowości, a nie pojedynczej osoby.
+Mierzymy go przez agregację wydźwięku wielu opinii z określonego okresu, źródła lub okna wydarzenia.
+Do agregacji służy \emph{wskaźnik wydźwięku netto}, zdefiniowany jako
+\begin{equation}
+  N = \frac{n_{\mathrm{pos}} - n_{\mathrm{neg}}}{n_{\mathrm{pos}} + n_{\mathrm{neu}} + n_{\mathrm{neg}}},
+  \label{eq:net-sentiment}
+\end{equation}
+gdzie $n_{\mathrm{pos}}$, $n_{\mathrm{neu}}$ i $n_{\mathrm{neg}}$ to liczby opinii w poszczególnych klasach.
+Wskaźnik przyjmuje wartości od $-1$ do $1$ i ma tę zaletę, że da się go policzyć dla dowolnej sumy grup, dodając liczniki i dzieląc raz na końcu.
+Średnia wskaźników policzonych osobno dla grup o różnej liczebności dałaby inny, mylący wynik, dlatego warstwa raportowa przechowuje liczniki, a nie gotowe udziały.
+
+Od wydźwięku odróżniamy \emph{emocję}.
+Klasyfikacja emocji przypisuje tekstowi jedną z wielu kategorii, takich jak radość, złość czy zaskoczenie; zbiór GoEmotions rozróżnia ich 27, plus klasę neutralną~\cite{demszky2020goemotions}.
+Emocje nie są przedmiotem tej pracy, choć zbiór GoEmotions wykorzystaliśmy pośrednio, jako część danych treningowych po sprowadzeniu jego etykiet do trzech klas wydźwięku.
+
+Dwa ostatnie pojęcia dotyczą oceny modelu.
+\emph{Zbiór wzorcowy} to próbka opinii z naszych danych, której wydźwięk oznaczyli ludzie według spisanych wytycznych.
+\emph{Słaba etykieta} to sygnał o wydźwięku, który nie pochodzi od oceniającego, ale da się go uzyskać bez dodatkowej pracy.
+W recenzjach Steam taką etykietą jest deklaracja autora, czy poleca grę.
+Etykieta ta jest słaba, bo recenzja polecająca grę może zawierać ostre uwagi, ale ma dwie zalety: jest dostępna dla każdej z ponad \num{250000} recenzji i nie zależy od nas.
+
+\section{Metody klasyfikacji wydźwięku}
+\label{sec:sentiment-methods}
+
+Metody klasyfikacji wydźwięku rozwijały się w trzech falach.
+Każda z nich jest wciąż używana, bo każda ma inny stosunek kosztu do jakości.
+
+\subsection{Metody słownikowe}
+\label{sec:sentiment-lexicon}
+
+Najstarsze podejście korzysta ze słownika, w którym każdemu słowu przypisano wydźwięk i jego siłę.
+Wydźwięk tekstu wynika z sumy wydźwięków słów, skorygowanej regułami dla zaprzeczeń i wzmocnień.
+Taboada i współautorzy opisali taki kalkulator, SO-CAL, i pokazali, że słownik zbudowany starannie, z uwzględnieniem zaprzeczeń i słów wzmacniających, zachowuje sensowną jakość w różnych dziedzinach bez dodatkowego trenowania~\cite{taboada2011lexiconbased}.
+Hutto i Gilbert dostosowali to podejście do tekstów z mediów społecznościowych.
+Ich model VADER uwzględnia między innymi wielkie litery, wykrzykniki, emotikony i slang, a na krótkich wpisach z Twittera osiągnął w ocenie autorów lepszą trafność niż pojedynczy ludzcy oceniający~\cite{hutto2014vader}.
+
+Metody słownikowe są tanie, szybkie i łatwe do wyjaśnienia, bo zawsze wiadomo, które słowa przesądziły o wyniku.
+Ich słabością jest zależność od języka i dziedziny.
+Słowo \enquote{brutalny} w recenzji gry akcji bywa pochwałą, a słowniki dla języków innych niż angielski są mniejsze albo nie ma ich wcale.
+Przy danych w kilkudziesięciu językach musielibyśmy utrzymywać kilkadziesiąt słowników.
+W projekcie rolę podejścia słownikowego pełniła prosta reguła słów kluczowych, którą wykorzystywaliśmy jako punkt odniesienia; na zbiorze wzorcowym osiągnęła dokładność \num{0.417}.
+
+\subsection{Klasyczne uczenie maszynowe}
+\label{sec:sentiment-classic-ml}
+
+Pang, Lee i Vaithyanathan potraktowali wydźwięk recenzji filmowych jako zadanie klasyfikacji tekstu i porównali naiwny klasyfikator bayesowski, model maksymalnej entropii i maszynę wektorów nośnych~\cite{pang2002thumbs}.
+Modele uczone na cechach w postaci obecności słów okazały się lepsze od reguł ułożonych przez ludzi, ale autorzy zauważyli też, że wydźwięk jest trudniejszy do klasyfikacji niż temat tekstu.
+Zdanie \enquote{fabuła miała wszystko, żeby się udać} zawiera same pozytywne słowa, a wyraża rozczarowanie.
+
+Klasyczne modele potrzebują oznaczonych danych, a ręczne oznaczanie jest drogie.
+Jednym z obejść jest nadzór odległy (ang. \textit{distant supervision}): Go, Bhayani i Huang oznaczyli wpisy z Twittera automatycznie, na podstawie emotikonów, i na tak zebranym zbiorze, znanym później jako Sentiment140, wytrenowali klasyfikatory wydźwięku~\cite{go2009twitter}.
+Ten sam pomysł, czyli wykorzystanie sygnału, który autor tekstu zostawił przy okazji, wraca w naszej pracy w postaci rekomendacji autorów recenzji Steam.
+
+\subsection{Sieci neuronowe i modele typu transformer}
+\label{sec:sentiment-transformers}
+
+Kolejnym krokiem były sieci neuronowe, które uczą się reprezentacji tekstu zamiast korzystać z ręcznie zaprojektowanych cech.
+Socher i współautorzy zbudowali zbiór Stanford Sentiment Treebank, w którym wydźwięk oznaczono nie tylko dla całych zdań, ale i dla ich fragmentów, oraz rekurencyjną sieć, która składa wydźwięk zdania z wydźwięków jego części~\cite{socher2013recursive}.
+Binarna wersja tego zbioru, SST-2, stała się jednym ze standardowych testów modeli językowych.
+
+Przełom przyniosła architektura transformer, oparta wyłącznie na mechanizmie uwagi, bez warstw rekurencyjnych~\cite{vaswani2017attention}.
+Model BERT pokazał, że transformer wstępnie wytrenowany na dużym korpusie bez etykiet, z zadaniem odgadywania zamaskowanych słów, można potem dostroić do konkretnego zadania, dodając tylko jedną warstwę wyjściową~\cite{devlin2019bert}.
+Wcześniej podobny schemat, czyli wstępne trenowanie modelu językowego i dostrajanie (ang. \textit{fine-tuning}) do klasyfikacji tekstu, zaproponowali Howard i Ruder~\cite{howard2018universal}.
+Model RoBERTa dowiódł, że BERT był niedotrenowany: dłuższe uczenie na większej ilości danych, bez części zadań pomocniczych, daje wyraźnie lepsze wyniki przy tej samej architekturze~\cite{liu2019roberta}.
+
+Dla systemu, który ma działać tanio, liczy się również rozmiar modelu.
+DistilBERT, uzyskany przez destylację wiedzy z modelu BERT, jest o \qty{40}{\percent} mniejszy i o \qty{60}{\percent} szybszy, a zachowuje około \qty{97}{\percent} jego zdolności rozumienia języka~\cite{sanh2019distilbert}.
+To dlatego był naszym pierwszym wyborem.
+Dla danych wielojęzycznych odpowiednikiem jest XLM-RoBERTa (XLM-R), wstępnie wytrenowany na ponad dwóch terabajtach przefiltrowanego tekstu w stu językach~\cite{conneau2020unsupervised}.
+Ważną własnością takiego modelu jest transfer międzyjęzykowy: model dostrojony na danych w kilku językach klasyfikuje też teksty w językach, których nie było w danych dostrajających, choć zwykle z niższą trafnością.
+Z tej własności korzystamy na przykład dla recenzji po polsku, dla których nie mieliśmy żadnych oznaczonych danych.
+
+Gotowe implementacje tych modeli, wraz z wagami wstępnie wytrenowanych wersji, udostępnia biblioteka Transformers firmy Hugging Face~\cite{wolf2020transformers}, z której korzystaliśmy przy trenowaniu i serwowaniu modeli.
+Model bazowy \code{xlm-roberta-base} pobraliśmy z jej repozytorium modeli~\cite{docxlmrbase}.
+
+\subsection{Zbiory danych i specyfika mediów społecznościowych}
+\label{sec:sentiment-social-media}
+
+Teksty z mediów społecznościowych różnią się od recenzji filmowych, na których powstawały pierwsze metody.
+Są krótkie, pełne skrótów, emotikonów, wzmianek o innych użytkownikach i adresów stron, często ironiczne.
+Dlatego powstały dla nich osobne zbiory i konkursy.
+Zadanie 4 konkursu SemEval-2017 dotyczyło analizy wydźwięku wpisów z Twittera w języku angielskim i arabskim~\cite{rosenthal2017semeval2017}.
+Zbiór TweetEval ujednolicił siedem zadań klasyfikacji wpisów, w tym wydźwięk, ironię i emocje, pod wspólnym protokołem oceny~\cite{barbieri2020tweeteval}.
+XLM-T rozszerzył to podejście na wiele języków i udostępnił zbiór wpisów z oznaczonym wydźwiękiem w ośmiu językach~\cite{barbieri2022xlmt}.
+Wielojęzyczny zbiór opinii z trzema klasami wydźwięku udostępnia też zespół clapAI w serwisie Hugging Face~\cite{clapaimultilingualsentiment}.
+
+Trzy z tych zbiorów (TweetEval, XLM-T i clapAI), uzupełnione o GoEmotions, złożyły się na dane, na których dostrajaliśmy model XLM-R.
+Żaden z nich nie dotyczy gier, więc różnica dziedzin pozostaje.
+Zmniejszaliśmy ją, dodając do danych treningowych oznaczone komentarze z naszego zbioru, a jakość mierzyliśmy wyłącznie na komentarzach z naszego zbioru, odłożonych przed trenowaniem.
+
+Na koniec warto wspomnieć o podejściu, które zyskało popularność w ostatnich latach: klasyfikacji wydźwięku przez duże modele językowe (\ac{llm}) sterowane poleceniem, bez dostrajania.
+\todo{Źródło o klasyfikacji wydźwięku przez LLM bez dostrajania -- find-sources.}
+Nie wybraliśmy go z dwóch powodów.
+Koszt wywołania dużego modelu dla każdej z ćwierci miliona opinii przekraczał nasz budżet, a odpowiedzi modelu zdalnego, którego wersji nie kontrolujemy, trudno uczynić powtarzalnymi.
+
+\section{Analiza opinii w czasie wokół wydarzeń}
+\label{sec:sentiment-time}
+
+Pojedyncza ocena wydźwięku rzadko jest celem sama w sobie.
+Ciekawsze jest to, jak nastroje zmieniają się w czasie i czy te zmiany mówią coś o świecie poza siecią.
+
+O'Connor i współautorzy porównali wydźwięk wpisów z Twittera z sondażami zaufania konsumentów i poparcia dla prezydenta Stanów Zjednoczonych.
+Po wygładzeniu szeregów czasowych korelacja w niektórych zestawieniach sięgała \num{0.8}, choć autorzy zastrzegli, że prosta metoda słownikowa jest daleka od precyzyjnej~\cite{oconnor2010tweets}.
+Asur i Huberman pokazali, że sama liczba wpisów o filmie przed premierą pozwala przewidzieć jego wpływy kasowe lepiej niż rynek prognoz, a wydźwięk wpisów po premierze dodatkowo poprawia prognozę~\cite{asur2010predicting}.
+Bollen, Mao i Zeng podzielili nastrój na kilka wymiarów i ustalili, że jeden z nich, spokój, poprawia przewidywanie dziennych zmian indeksu Dow Jones, z trafnością kierunku zmian rzędu \qty{86.7}{\percent}~\cite{bollen2011twitter}.
+
+Najbliżej naszego problemu leży praca Thelwalla, Buckleya i Paltoglou, którzy przyjrzeli się wydźwiękowi wpisów wokół głośnych wydarzeń.
+Ich wynik był przekorny: popularne wydarzenia zwykle wiązały się ze wzrostem siły wydźwięku negatywnego, nawet gdy samo wydarzenie nie było złą wiadomością~\cite{thelwall2011sentiment}.
+Wynika z tego praktyczny wniosek dla naszej analizy.
+Porównywanie okna wydarzenia z resztą okresu ma sens tylko wtedy, gdy punkt odniesienia pochodzi z tego samego źródła.
+Komentarze pod zwiastunem i recenzje kupujących różnią się już na wejściu, niezależnie od wydarzenia, dlatego efekt wydarzenia liczymy względem tła z tego samego serwisu (podrozdział~\ref{sec:impl-reporting}).
+
+Recenzje gier w sklepie Steam badali Lin i współautorzy, traktując je jako źródło informacji zwrotnej dla twórców~\cite{lin2019empirical}.
+Dla nas Steam ma jeszcze jedną zaletę, opisaną w poprzednim podrozdziale: autor recenzji sam deklaruje, czy poleca grę.
+Pozwala to sprawdzić model na całym zbiorze, a nie tylko na kilkuset ręcznie oznaczonych opiniach.
+
+Przegląd prac prowadzi do trzech obserwacji, które ukształtowały projekt systemu.
+Po pierwsze, wiarygodny przebieg nastrojów wymaga danych z więcej niż jednego źródła, bo każde źródło ma inny profil użytkowników i inny zwyczajowy ton.
+Po drugie, wynik zależy od metody klasyfikacji na tyle mocno, że trzeba umieć go policzyć ponownie, gdy metoda się zmieni.
+To oznacza przechowywanie surowych danych i możliwość odtworzenia całego przetwarzania.
+Po trzecie, przy danych wielojęzycznych model wielojęzyczny jest koniecznością, a nie ulepszeniem, co boleśnie sprawdziliśmy na pierwszym, angielskim modelu.
+Jak te obserwacje przełożyły się na wybór konkretnych technologii, opisuje następny rozdział.
