@@ -56,10 +56,9 @@ Każda z nich jest wciąż używana, bo każda ma inny stosunek kosztu do jakoś
 \label{sec:sentiment-lexicon}
 
 Najstarsze podejście korzysta ze słownika, w którym każdemu słowu przypisano wydźwięk i jego siłę.
-Wydźwięk tekstu wynika z sumy wydźwięków słów, skorygowanej regułami dla zaprzeczeń i wzmocnień.
-Taboada i współautorzy opisali taki kalkulator, SO-CAL, i pokazali, że słownik zbudowany starannie, z uwzględnieniem zaprzeczeń i słów wzmacniających, zachowuje sensowną jakość w różnych dziedzinach bez dodatkowego trenowania~\cite{taboada2011lexiconbased}.
-Hutto i Gilbert dostosowali to podejście do tekstów z mediów społecznościowych.
-Ich model VADER uwzględnia między innymi wielkie litery, wykrzykniki, emotikony i slang, a na krótkich wpisach z Twittera osiągnął w ocenie autorów lepszą trafność niż pojedynczy ludzcy oceniający~\cite{hutto2014vader}.
+Wydźwięk tekstu to suma wydźwięków słów, poprawiona regułami dla zaprzeczeń (\enquote{nie najlepszy}) i wzmocnień (\enquote{bardzo dobry}).
+Dobrze widać to na modelu VADER, który Hutto i Gilbert przygotowali z myślą o mediach społecznościowych.
+Bierze on pod uwagę wielkie litery, wykrzykniki, emotikony i slang, a na krótkich wpisach z Twittera osiągnął w ocenie autorów lepszą trafność niż pojedynczy ludzcy oceniający~\cite{hutto2014vader}.
 
 Metody słownikowe są tanie, szybkie i łatwe do wyjaśnienia, bo zawsze wiadomo, które słowa przesądziły o wyniku.
 Ich słabością jest zależność od języka i dziedziny.
@@ -86,27 +85,26 @@ Socher i współautorzy zbudowali zbiór Stanford Sentiment Treebank, w którym 
 Binarna wersja tego zbioru, SST-2, stała się jednym ze standardowych testów modeli językowych.
 
 Przełom przyniosła architektura transformer, oparta wyłącznie na mechanizmie uwagi, bez warstw rekurencyjnych~\cite{vaswani2017attention}.
-Model BERT pokazał, że transformer wstępnie wytrenowany na dużym korpusie bez etykiet, z zadaniem odgadywania zamaskowanych słów, można potem dostroić do konkretnego zadania, dodając tylko jedną warstwę wyjściową~\cite{devlin2019bert}.
-Wcześniej podobny schemat, czyli wstępne trenowanie modelu językowego i dostrajanie (ang. \textit{fine-tuning}) do klasyfikacji tekstu, zaproponowali Howard i Ruder~\cite{howard2018universal}.
-Model RoBERTa dowiódł, że BERT był niedotrenowany: dłuższe uczenie na większej ilości danych, bez części zadań pomocniczych, daje wyraźnie lepsze wyniki przy tej samej architekturze~\cite{liu2019roberta}.
+Model BERT pokazał, że transformer wstępnie wytrenowany na dużym korpusie bez etykiet, z zadaniem odgadywania zamaskowanych słów, można potem dostosować do konkretnego zadania przez dostrajanie (ang. \textit{fine-tuning}), dodając tylko jedną warstwę wyjściową~\cite{devlin2019bert}.
+Ten schemat, czyli drogie trenowanie ogólne raz, a potem tanie dostrajanie do własnego problemu, jest dokładnie tym, czego potrzebowaliśmy.
+Nie mieliśmy ani danych, ani budżetu, żeby trenować model od zera.
 
 Dla systemu, który ma działać tanio, liczy się również rozmiar modelu.
 DistilBERT, uzyskany przez destylację wiedzy z modelu BERT, jest o \qty{40}{\percent} mniejszy i o \qty{60}{\percent} szybszy, a zachowuje około \qty{97}{\percent} jego zdolności rozumienia języka~\cite{sanh2019distilbert}.
 To dlatego był naszym pierwszym wyborem.
-Dla danych wielojęzycznych odpowiednikiem jest XLM-RoBERTa (XLM-R), wstępnie wytrenowany na ponad dwóch terabajtach przefiltrowanego tekstu w stu językach~\cite{conneau2020unsupervised}.
+Dla danych wielojęzycznych odpowiednikiem jest XLM-RoBERTa (XLM-R), model z rodziny BERT wstępnie wytrenowany na ponad dwóch terabajtach przefiltrowanego tekstu w stu językach~\cite{conneau2020unsupervised}.
 Ważną własnością takiego modelu jest transfer międzyjęzykowy: model dostrojony na danych w kilku językach klasyfikuje też teksty w językach, których nie było w danych dostrajających, choć zwykle z niższą trafnością.
 Z tej własności korzystamy na przykład dla recenzji po polsku, dla których nie mieliśmy żadnych oznaczonych danych.
 
 Gotowe implementacje tych modeli, wraz z wagami wstępnie wytrenowanych wersji, udostępnia biblioteka Transformers firmy Hugging Face~\cite{wolf2020transformers}, z której korzystaliśmy przy trenowaniu i serwowaniu modeli.
-Model bazowy \code{xlm-roberta-base} pobraliśmy z jej repozytorium modeli~\cite{docxlmrbase}.
+Z repozytorium modeli Hugging Face pochodzi też nasz model bazowy, \code{xlm-roberta-base}.
 
 \subsection{Zbiory danych i specyfika mediów społecznościowych}
 \label{sec:sentiment-social-media}
 
 Teksty z mediów społecznościowych różnią się od recenzji filmowych, na których powstawały pierwsze metody.
 Są krótkie, pełne skrótów, emotikonów, wzmianek o innych użytkownikach i adresów stron, często ironiczne.
-Dlatego powstały dla nich osobne zbiory i konkursy.
-Zadanie 4 konkursu SemEval-2017 dotyczyło analizy wydźwięku wpisów z Twittera w języku angielskim i arabskim~\cite{rosenthal2017semeval2017}.
+Dlatego powstały dla nich osobne zbiory danych.
 Zbiór TweetEval ujednolicił siedem zadań klasyfikacji wpisów, w tym wydźwięk, ironię i emocje, pod wspólnym protokołem oceny~\cite{barbieri2020tweeteval}.
 XLM-T rozszerzył to podejście na wiele języków i udostępnił zbiór wpisów z oznaczonym wydźwiękiem w ośmiu językach~\cite{barbieri2022xlmt}.
 Wielojęzyczny zbiór opinii z trzema klasami wydźwięku udostępnia też zespół clapAI w serwisie Hugging Face~\cite{clapaimultilingualsentiment}.
@@ -129,7 +127,7 @@ Ciekawsze jest to, jak nastroje zmieniają się w czasie i czy te zmiany mówią
 O'Connor i współautorzy porównali wydźwięk wpisów z Twittera z sondażami zaufania konsumentów i poparcia dla prezydenta Stanów Zjednoczonych.
 Po wygładzeniu szeregów czasowych korelacja w niektórych zestawieniach sięgała \num{0.8}, choć autorzy zastrzegli, że prosta metoda słownikowa jest daleka od precyzyjnej~\cite{oconnor2010tweets}.
 Asur i Huberman pokazali, że sama liczba wpisów o filmie przed premierą pozwala przewidzieć jego wpływy kasowe lepiej niż rynek prognoz, a wydźwięk wpisów po premierze dodatkowo poprawia prognozę~\cite{asur2010predicting}.
-Bollen, Mao i Zeng podzielili nastrój na kilka wymiarów i ustalili, że jeden z nich, spokój, poprawia przewidywanie dziennych zmian indeksu Dow Jones, z trafnością kierunku zmian rzędu \qty{86.7}{\percent}~\cite{bollen2011twitter}.
+Premiera filmu to wydarzenie tego samego rodzaju co premiery, które śledzimy, tyle że nas interesuje sam nastrój, a nie to, co mówi o sprzedaży.
 
 Najbliżej naszego problemu leży praca Thelwalla, Buckleya i Paltoglou, którzy przyjrzeli się wydźwiękowi wpisów wokół głośnych wydarzeń.
 Ich wynik był przekorny: popularne wydarzenia zwykle wiązały się ze wzrostem siły wydźwięku negatywnego, nawet gdy samo wydarzenie nie było złą wiadomością~\cite{thelwall2011sentiment}.

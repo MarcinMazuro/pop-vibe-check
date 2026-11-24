@@ -17,9 +17,9 @@ Tam, gdzie ten wymóg przesądzał o wyborze, piszemy o tym wprost.
 
 Przetwarzanie wsadowe zakłada, że zbiór danych jest skończony i znany w chwili rozpoczęcia obliczeń.
 Przetwarzanie strumieniowe zakłada coś przeciwnego: dane napływają bez końca, a wynik trzeba podawać, zanim strumień się skończy~\cite{kleppmann2017designing}.
-Akidau i współautorzy zwrócili uwagę, że przy takich danych trzeba rozróżniać dwa zegary: czasu zdarzenia, czyli chwili, w której coś się wydarzyło, oraz czasu przetwarzania, czyli chwili, w której system się o tym dowiedział~\cite{akidau2015dataflow}.
+Akidau i współautorzy zwrócili uwagę, że przy takich danych trzeba rozróżniać dwa zegary: czas zdarzenia, czyli chwilę, w której coś się wydarzyło, oraz czas przetwarzania, czyli chwilę, w której system się o tym dowiedział~\cite{akidau2015dataflow}.
 Opinie napisane w tej samej minucie mogą dotrzeć do systemu w dowolnej kolejności, a niektóre z dużym opóźnieniem.
-Znacznik wodny (ang. \textit{watermark}) jest szacunkiem chwili, do której system zna już wszystkie zdarzenia, i to on decyduje, kiedy wynik dla danego okna czasowego można uznać za gotowy~\cite{akidau2018streaming}.
+W tym samym modelu znacznik wodny (ang. \textit{watermark}) szacuje chwilę, do której system zna już wszystkie zdarzenia, i decyduje, kiedy wynik dla okna czasowego można uznać za gotowy.
 
 W naszym projekcie rozróżnienie zegarów ma wymiar bardzo praktyczny.
 Odtwarzamy archiwum, w którym półtora roku opinii mieści się w kilku godzinach, więc czas przetwarzania nie mówi nic o tym, kiedy opinia powstała.
@@ -28,17 +28,16 @@ Potok musi pobierać czas zdarzenia z samego rekordu.
 \subsection{Silniki przetwarzania}
 \label{sec:tech-engines}
 
-Model przetwarzania opisany przez Akidaua i współautorów wywodzi się z wewnętrznych systemów Google, między innymi z systemu MillWheel~\cite{akidau2013millwheel}, i stał się podstawą otwartej biblioteki Apache Beam.
+Model Akidaua i współautorów powstał w Google i stał się podstawą otwartej biblioteki Apache Beam.
 Beam oddziela definicję potoku od silnika, który go wykonuje: ten sam program w języku Java, Python lub Go może działać lokalnie, na silniku Apache Flink, Apache Spark albo w usłudze Google Cloud Dataflow~\cite{docbeamguide}.
 Dataflow jest usługą zarządzaną, która sama tworzy maszyny robocze, skaluje ich liczbę i przechowuje stan potoku~\cite{docdataflow}.
-W trybie Streaming Engine stan i przetasowywanie danych przenoszone są z maszyn roboczych do usługi, co zmniejsza wymagania wobec ich dysków~\cite{docdataflowstreamingengine}.
-W naszej konfiguracji oznaczało to dysk 30~GB zamiast domyślnych 400~GB na maszynę.
-Potok pakuje się jako szablon Flex Template, czyli obraz kontenera z kodem i zależnościami, uruchamiany jednym poleceniem z parametrami~\cite{docflextemplates}.
+Włączyliśmy tryb Streaming Engine, w którym stan i przetasowywanie danych trzyma usługa, a nie maszyny robocze.
+Dzięki temu każdej maszynie wystarcza dysk 30~GB zamiast domyślnych 400~GB.
+Potok pakujemy jako szablon Flex Template, czyli obraz kontenera z kodem i zależnościami, uruchamiany jednym poleceniem z parametrami.
 
 Apache Flink od początku projektowano jako silnik strumieniowy, w którym przetwarzanie wsadowe jest szczególnym przypadkiem przetwarzania strumienia~\cite{carbone2015apache}.
-Ma rozbudowane zarządzanie stanem i czasem zdarzenia, a w chmurze Google można go uruchomić na własnym klastrze lub w usługach firm trzecich~\cite{docflink}.
-Apache Spark przetwarza strumień jako ciąg małych porcji wsadowych; tak działały strumienie dyskretyzowane opisane przez Zaharię i współautorów~\cite{zaharia2013discretized}, a ich następcą jest Structured Streaming~\cite{docsparkstreaming}.
-Zaletą Sparka jest jeden silnik dla analizy wsadowej, strumieniowej i uczenia maszynowego~\cite{zaharia2016apache}.
+Apache Spark podchodzi do tego od drugiej strony.
+Dzieli strumień na małe porcje wsadowe i przetwarza je tym samym silnikiem, którego używa do analizy wsadowej i uczenia maszynowego~\cite{zaharia2016apache}.
 
 Dla tej pracy oba silniki mają tę samą wadę: wymagają utrzymywania klastra albo korzystania z usługi zewnętrznej, a nasz budżet i wymóg pracy na usługach zarządzanych GCP przemawiały za Dataflow.
 Wybierając Beam, nie zamykaliśmy sobie przy tym drogi do Flinka czy Sparka, bo potok w Beam można by w razie potrzeby uruchomić na nich bez przepisywania.
@@ -49,7 +48,7 @@ Część transformacji Beam w języku Python, na przykład zapis do BigQuery prz
 \label{sec:tech-messaging}
 
 Między źródłem danych a potokiem stoi kolejka komunikatów, która przyjmuje zdarzenia od wydawców i dostarcza je subskrybentom.
-Apache Kafka przechowuje komunikaty w podzielonym na partycje dzienniku i gwarantuje kolejność w obrębie partycji~\cite{wang2015building,dockafka}.
+Apache Kafka przechowuje komunikaty w dzienniku podzielonym na partycje i gwarantuje kolejność w obrębie partycji~\cite{wang2015building}.
 Google Cloud Pub/Sub jest usługą zarządzaną bez partycji widocznych dla użytkownika; dostarcza komunikaty co najmniej raz, a kolejność gwarantuje wyłącznie dla komunikatów z tym samym kluczem porządkującym, gdy subskrypcja ma włączone porządkowanie~\cite{docpubsub,docpubsubordering}.
 
 Żadna z tych kolejek nie zapewnia globalnej kolejności wszystkich komunikatów bez dodatkowych zabiegów.
@@ -61,40 +60,36 @@ Za Pub/Sub przemawiało to, że nie wymaga utrzymywania brokerów, jest rozlicza
 \label{sec:tech-mlops}
 
 Sculley i współautorzy z Google opisali system uczący się jako niewielki fragment kodu modelu otoczony dużą ilością kodu do zbierania danych, konfiguracji, monitorowania i serwowania, w którym łatwo zaciągnąć dług techniczny~\cite{sculley2015hidden}.
-Amershi i współautorzy na przykładzie zespołów Microsoftu pokazali, że wytwarzanie systemów uczących się różni się od klasycznej inżynierii oprogramowania przede wszystkim zarządzaniem danymi i wersjonowaniem modeli~\cite{amershi2019software}.
 Z takich obserwacji wyrosło pojęcie \ac{mlops}.
 Kreuzberger, Kühl i Hirschl definiują je jako zestaw praktyk, zasad i narzędzi łączących uczenie maszynowe z ciągłą integracją i wdrażaniem, obejmujący automatyzację potoków, wersjonowanie danych, kodu i modeli, śledzenie eksperymentów, rejestr modeli i monitorowanie~\cite{kreuzberger2023machine}.
-Podobny obraz dają książki Treveila i współautorów oraz Huyen~\cite{treveil2020introducing,huyen2022designing}, a Breck i współautorzy zaproponowali listę testów, którą można sprawdzić gotowość systemu uczącego się do produkcji~\cite{breck2017ml}.
 
 Narzędziem, które najczęściej pojawia się w tym kontekście, jest MLflow.
 Jego twórcy z firmy Databricks opisali je jako otwartą platformę, która rejestruje parametry, metryki i artefakty przebiegów trenowania, pakuje modele w jednolitym formacie i prowadzi ich rejestr~\cite{zaharia2018accelerating}.
-Przebiegi można zapisywać w lokalnym katalogu albo na serwerze śledzenia z bazą danych i magazynem artefaktów~\cite{docmlflowtracking}.
-Alternatywą jest Kubeflow, platforma potoków uczenia maszynowego działająca na Kubernetesie~\cite{dockubeflow}, która daje więcej możliwości, ale wymaga klastra.
-W ekosystemie Google rolę śledzenia eksperymentów pełni też usługa zarządzana Agent Platform Experiments~\cite{docvertexexperiments}.
+Przebiegi można zapisywać w lokalnym katalogu albo na serwerze śledzenia z bazą danych i magazynem artefaktów.
+Alternatywą jest Kubeflow, platforma potoków uczenia maszynowego działająca na Kubernetesie, która daje więcej możliwości, ale wymaga klastra.
+W ekosystemie Google eksperymenty śledzi też usługa zarządzana Agent Platform Experiments.
 
 Wybraliśmy MLflow, bo jest niezależny od dostawcy chmury, wymaga najmniej infrastruktury i jest wprost wymieniony w temacie pracy jako platforma do zarządzania cyklem życia modelu.
-Do trenowania i serwowania użyliśmy natomiast usług Agent Platform: środowiska notatników Workbench~\cite{docvertexworkbench}, rejestru modeli i punktu końcowego, który udostępnia model przez sieć~\cite{docvertexdeploy}.
+Do trenowania i serwowania użyliśmy natomiast usług Agent Platform: środowiska notatników Workbench, rejestru modeli i punktu końcowego, który udostępnia model przez sieć~\cite{docvertexdeploy}.
 Usługi te nosiły wcześniej nazwę Vertex AI i od niej pochodzi identyfikator \code{vertex}, którego używamy w kodzie projektu.
 
 \section{Usługi chmurowe do analityki danych}
 \label{sec:tech-cloud}
 
 Chmura obliczeniowa w ujęciu NIST to model, w którym zasoby obliczeniowe udostępnia się na żądanie, przez sieć, z rozliczeniem za faktyczne zużycie i z możliwością szybkiego zwiększania i zmniejszania skali~\cite{mell2011nist}.
-Armbrust i współautorzy zwrócili uwagę na konsekwencję ekonomiczną tego modelu: sto maszyn przez godzinę kosztuje tyle samo co jedna maszyna przez sto godzin~\cite{armbrust2010view}.
-Ta obserwacja jest podstawą sposobu, w jaki korzystamy z chmury.
+Dla nas najważniejsze jest rozliczanie za zużycie, bo od niego zależy, ile kosztuje zasób, który przez większość czasu nic nie robi.
 Najdroższe zasoby, czyli zadanie Dataflow i punkt końcowy modelu, istnieją tylko na czas przetwarzania, a reszta usług jest rozliczana za zużycie.
 
-Hurtownią danych w GCP jest BigQuery, kolumnowa baza odpytywana językiem \ac{sql}, bez serwerów do zarządzania, rozliczana za przetworzone dane albo zarezerwowaną moc obliczeniową~\cite{docbigquery,lakshmanan2019google}.
-Jej silnik wywodzi się z systemu Dremel, który dzięki kolumnowemu zapisowi danych i drzewiastemu wykonywaniu zapytań odpowiada w sekundach na zapytania o miliardy wierszy~\cite{melnik2010dremel}.
-Dla nas ważne są trzy cechy BigQuery.
+Hurtownią danych w GCP jest BigQuery, kolumnowa baza odpytywana językiem \ac{sql}, bez serwerów do zarządzania, rozliczana za przetworzone dane albo zarezerwowaną moc obliczeniową~\cite{docbigquery}.
+Dla nas ważne są trzy jej cechy.
 Polecenie \code{ORDER BY} sortuje cały wynik, co wykorzystujemy do ustalenia globalnej kolejności opinii.
 Instrukcja \code{MERGE} pozwala scalać wyniki z deduplikacją po identyfikatorze.
-Widoki autoryzowane mogą czytać tabelę źródłową, do której odbiorca widoku nie ma dostępu~\cite{docauthorizedviews}, co pozwala ukryć dane osobowe przed panelem.
+Widoki autoryzowane mogą czytać tabelę źródłową, do której odbiorca widoku nie ma dostępu, co pozwala ukryć dane osobowe przed panelem.
 
-Surowe dane przechowujemy w Cloud Storage, magazynie obiektów rozliczanym za zajmowane miejsce~\cite{doccloudstorage}.
-Kod pobierający dane i odtwarzający strumień działa jako zadania Cloud Run Jobs, czyli kontenery uruchamiane na żądanie, które kończą się po wykonaniu pracy~\cite{doccloudrunjobs}.
-Do definiowania widoków raportowych służy Dataform, narzędzie wbudowane w BigQuery, w którym widoki opisuje się w plikach SQL z testami poprawności danych~\cite{docdataform}.
-Podobne możliwości daje dbt~\cite{docdbt}, ale wymaga osobnego środowiska uruchomieniowego i przechowywania poświadczeń.
+Surowe dane leżą w Cloud Storage, magazynie obiektów rozliczanym za zajmowane miejsce.
+Kod pobierający dane i odtwarzający strumień działa jako zadania Cloud Run Jobs, czyli kontenery uruchamiane na żądanie, które kończą się po wykonaniu pracy.
+Widoki raportowe definiujemy w Dataform, narzędziu wbudowanym w BigQuery, w którym widoki opisuje się w plikach SQL z testami poprawności danych~\cite{docdataform}.
+Podobne możliwości daje dbt, ale wymaga osobnego środowiska uruchomieniowego i przechowywania poświadczeń.
 
 Region przetwarzania, \code{europe-central2} w Warszawie, wybraliśmy ze względu na ochronę danych.
 Pseudonimy autorów i treści opinii nie opuszczają Unii Europejskiej, co upraszcza zgodność z ogólnym rozporządzeniem o ochronie danych (\ac{rodo})~\cite{rodo2016}.
@@ -103,16 +98,15 @@ Pseudonimy autorów i treści opinii nie opuszczają Unii Europejskiej, co upras
 \label{sec:tech-iac}
 
 Infrastruktura jako kod (\ac{iac}) to praktyka, w której zasoby, sieci i uprawnienia opisuje się w plikach tekstowych przechowywanych w repozytorium i stosuje automatycznie, zamiast klikać je w konsoli~\cite{morris2021infrastructure}.
-Rahman, Mahdavi-Hezaveh i Williams w przeglądzie badań nad \ac{iac} wskazali, że takie pliki są pełnoprawnym kodem, z błędami, defektami bezpieczeństwa i potrzebą testowania~\cite{rahman2019systematic}.
+Skoro infrastruktura jest kodem, ma też jego wady: błędy, luki w uprawnieniach i potrzebę przeglądu przed każdą zmianą.
 
-Najpopularniejszym narzędziem tego typu jest Terraform firmy HashiCorp.
-Zasoby opisuje się w nim deklaratywnie, w języku HCL, a narzędzie porównuje opis z zapisanym stanem i wylicza plan zmian, który można przejrzeć przed zastosowaniem~\cite{docterraform,brikman2022terraform}.
-Pulumi pozwala opisywać te same zasoby w językach ogólnego przeznaczenia, takich jak Python czy TypeScript~\cite{docpulumi}.
-AWS CloudFormation jest narzędziem jednego dostawcy, związanym z chmurą Amazon~\cite{doccloudformation}.
+W Terraform firmy HashiCorp zasoby opisuje się deklaratywnie, w języku HCL, a narzędzie porównuje opis z zapisanym stanem i wylicza plan zmian, który można przejrzeć przed zastosowaniem~\cite{docterraform}.
+Pulumi pozwala opisywać te same zasoby w językach ogólnego przeznaczenia, takich jak Python czy TypeScript.
+AWS CloudFormation działa tylko w chmurze Amazon.
 
 Wybraliśmy Terraform z trzech powodów.
 Ma dojrzałego dostawcę dla Google Cloud, plan zmian dobrze nadaje się do przeglądu w zgłoszeniu zmian, a deklaratywny opis łatwo sparametryzować przedrostkiem nazw, dzięki któremu kolejne studium przypadku dostaje własny komplet zasobów.
-Zmiany infrastruktury przechodzą przez potok ciągłej integracji i wdrażania (\ac{cicd}) w usłudze Cloud Build~\cite{doccloudbuild}, który dla zgłoszenia zmian wylicza plan, a po scaleniu czeka na zatwierdzenie przez człowieka.
+Zmiany infrastruktury przechodzą przez potok ciągłej integracji i wdrażania (\ac{cicd}) w usłudze Cloud Build, który dla zgłoszenia zmian wylicza plan, a po scaleniu czeka na zatwierdzenie przez człowieka.
 
 \section{Wizualizacja danych}
 \label{sec:tech-visualisation}
@@ -123,9 +117,9 @@ Z tych zasad wynikają nasze wymagania wobec panelu: przy każdym wyniku liczno�
 
 Do budowy panelu rozważaliśmy cztery narzędzia.
 Data Studio jest bezpłatnym narzędziem Google z wbudowanym połączeniem z BigQuery, które potrafi wykonywać zapytania z uprawnieniami osoby oglądającej raport~\cite{doclookerstudio}.
-Grafana jest nastawiona na szeregi czasowe i monitorowanie systemów~\cite{docgrafana}, a Power BI to rozbudowane narzędzie biznesowe firmy Microsoft~\cite{docpowerbi}.
-Streamlit pozwala zbudować panel jako aplikację w języku Python~\cite{docstreamlit}.
-Z tej ostatniej możliwości skorzystaliśmy przejściowo, zanim powstał raport w Data Studio; aplikacja działała w Cloud Run za usługą Identity-Aware Proxy (\ac{iap})~\cite{dociap}, a 2 listopada 2026~r. zastąpił ją raport w Data Studio.
+Grafana jest nastawiona na szeregi czasowe i monitorowanie systemów, a Power BI to rozbudowane narzędzie biznesowe firmy Microsoft.
+Streamlit pozwala zbudować panel jako aplikację w języku Python.
+Z tej możliwości skorzystaliśmy przejściowo: aplikacja działała w Cloud Run za usługą Identity-Aware Proxy (\ac{iap}), dopóki 2 listopada 2026~r. nie zastąpił jej raport w Data Studio.
 
 \section{Zestawienie wybranych technologii}
 \label{sec:tech-summary}
