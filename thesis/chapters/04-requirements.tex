@@ -1,0 +1,352 @@
+% !TeX root = ../main.tex
+\chapter{Założenia projektowe i analiza wymagań}
+\label{chap:requirements}
+
+% FIRST DRAFT. Requirements, actors, use cases and the class model come from
+% the PAI course documents (SRODA4.*, October 2026); the diagrams are copied
+% from them. Event dates come from collectors/config/events.yaml and record
+% counts from the reporting views.
+
+Ten rozdział opisuje, co system ma robić, dla kogo i na jakich danych.
+Zaczynamy od studium przypadku, bo to ono wyznaczyło większość wymagań: liczbę i rodzaj źródeł, zakres czasu i skalę danych.
+Dalej opisujemy źródła opinii, użytkowników systemu, wymagania funkcjonalne i niefunkcjonalne, a na końcu model przypadków użycia i model klas dziedziny.
+Wymagania i modele opracowaliśmy jesienią 2026~r. w formie dokumentacji projektowej, a tutaj przedstawiamy je w skróconej postaci.
+
+\section{Studium przypadku i oś wydarzeń}
+\label{sec:req-case-study}
+
+Studium przypadku jest gra \enquote{Clair Obscur: Expedition 33} francuskiego studia Sandfall Interactive.
+\todo{Źródło: studio, wydawca, data premiery -- find-sources.}
+Wybraliśmy ją, bo jej historia nie jest płaska.
+Grę zapowiedziano w czerwcu 2024~r., wydano 24 kwietnia 2025~r., kilka dni po premierze wybuchł spór o tekstury wygenerowane przez sztuczną inteligencję, potem przyszła fala uznania krytyków, a w grudniu 2025~r. seria nagród na gali The Game Awards i, dziewięć dni później, odebranie wyróżnień przez organizatorów Indie Game Awards.
+Dla systemu, który ma wykrywać zmiany nastrojów, taka historia jest lepszym testem niż premiera bez niespodzianek.
+
+Cykl życia gry opisaliśmy dwunastoma wydarzeniami, które przedstawia rysunek~\ref{fig:event-timeline}.
+Daty wydarzeń zweryfikowaliśmy 12 września 2026~r. z publicznymi źródłami.
+Dwa wpisy z pierwszej, roboczej listy okazały się błędne: pokaz, który uznaliśmy za prezentację Sony, był w rzeczywistości pokazem Xbox Developer Direct, a zapowiadane demo gry nigdy się nie ukazało.
+Trzeci wpis, nominacja do nagrody The Game Awards 2024, nie miał miejsca i usunęliśmy go z listy.
+
+\begin{figure}[hbp]
+  \centering
+  \begin{tikzpicture}[font=\footnotesize, x=1cm, y=1cm]
+    % Steam reviews exist only from the launch onward.
+    \fill[gray!30] (-0.12,-5.38) rectangle (0.12,-11.8);
+    \draw[thick, -{Latex}] (0,0.3) -- (0,-12.0);
+    \foreach \y/\t in {0/{VI 2024}, -3.5/{I 2025}, -9.5/{I 2026}} {
+      \draw (-0.18,\y) -- (0.18,\y);
+      \node[anchor=east] at (-0.25,\y) {\t};
+    }
+    \node[anchor=east, align=right] at (-0.25,-7.6) {okres recenzji\\Steam};
+    \foreach \py/\ly/\txt in {
+        -0.13/-0.13/{9.06.2024: zapowiedź na Xbox Games Showcase},
+        -1.32/-1.12/{20.08.2024: pokaz dla prasy na Gamescom 2024},
+        -1.43/-1.58/{27.08.2024: zwiastun rozgrywki \enquote{Flying Waters}},
+        -3.87/-3.87/{23.01.2025: pokaz na Xbox Developer Direct 2025},
+        -5.37/-4.62/{23.04.2025: koniec embarga na recenzje},
+        -5.38/-5.06/{24.04.2025: premiera},
+        -5.42/-5.50/{26.04.2025: spór o tekstury wygenerowane przez AI},
+        -5.43/-5.94/{27.04.2025: milion sprzedanych egzemplarzy},
+        -5.68/-6.38/{12.05.2025: fala uznania krytyków},
+        -9.17/-8.98/{11.12.2025: The Game Awards 2025},
+        -9.32/-9.44/{20.12.2025: Indie Game Awards odbierają wyróżnienia},
+        -11.38/-11.38/{24.04.2026: aktualizacja rocznicowa}} {
+      \fill (0,\py) circle (2pt);
+      \draw[gray] (0.05,\py) -- (0.6,\ly);
+      \node[anchor=west] at (0.65,\ly) {\txt};
+    }
+  \end{tikzpicture}
+  \caption{Oś dwunastu wydarzeń cyklu życia gry; odległości na osi są proporcjonalne do czasu, szary pas oznacza okres, z którego pochodzą recenzje Steam}
+  \label{fig:event-timeline}
+\end{figure}
+
+Wydarzenia zapisaliśmy w pliku konfiguracyjnym \code{collectors/config/events.yaml}.
+Każde ma stały identyfikator, na przykład \code{launch} albo \code{tga_2025_sweep}, nazwę, typ i datę.
+Identyfikator wydarzenia trafia do każdej opinii jako jej znacznik i jest podstawą wszystkich zestawień w podziale na wydarzenia.
+Tabela~\ref{tab:event-coverage} pokazuje, ile opinii z każdego źródła ostatecznie przypisaliśmy do poszczególnych wydarzeń.
+
+\begin{table}[hbp]
+  \caption{Liczba opinii przypisanych do wydarzeń w podziale na źródła}
+  \label{tab:event-coverage}
+  \centering
+  \small
+  \begin{tabular}{|l|l|r|r|}
+    \hline
+    Data       & Wydarzenie                                  & YouTube       & Steam          \\
+    \hline
+    09.06.2024 & zapowiedź na Xbox Games Showcase            & \num{1711}    & --             \\
+    20.08.2024 & pokaz dla prasy na Gamescom 2024            & --            & --             \\
+    27.08.2024 & zwiastun \enquote{Flying Waters}            & \num{1257}    & --             \\
+    23.01.2025 & pokaz na Xbox Developer Direct 2025         & \num{292}     & --             \\
+    23.04.2025 & koniec embarga na recenzje                  & --            & --             \\
+    24.04.2025 & premiera                                    & \num{909}     & \num{3915}     \\
+    26.04.2025 & spór o tekstury generowane przez AI         & --            & \num{5742}     \\
+    27.04.2025 & milion sprzedanych egzemplarzy              & \num{477}     & \num{12163}    \\
+    12.05.2025 & fala uznania krytyków                       & \num{351}     & \num{13715}    \\
+    11.12.2025 & The Game Awards 2025                        & \num{3328}    & \num{4749}     \\
+    20.12.2025 & Indie Game Awards odbierają wyróżnienia     & \num{3502}    & \num{5075}     \\
+    24.04.2026 & aktualizacja rocznicowa                     & \num{427}     & \num{895}      \\
+    \hline
+    --         & poza oknami wydarzeń                        & --            & \num{205385}   \\
+    \hline
+    \multicolumn{2}{|l|}{Razem}                              & \num{12254}   & \num{251639}   \\
+    \hline
+  \end{tabular}
+\end{table}
+
+Z tabeli widać asymetrię, która jest własnością źródeł, a nie błędem zbierania.
+Recenzje w sklepie mogą pisać tylko osoby, które grę kupiły, więc przed premierą Steam milczy, a cała wiedza o nastrojach pochodzi z komentarzy pod zwiastunami.
+Po premierze proporcje się odwracają.
+Dwa wydarzenia nie mają żadnych danych: pokaz dla prasy na Gamescom nie miał publicznego materiału wideo z komentarzami, a koniec embarga na recenzje wypadł dzień przed premierą, więc recenzje z tego okresu przypisały się do premiery jako wydarzenia najbliższego w czasie.
+\todo{Potwierdzić przyczynę braku danych dla Gamescom 2024.}
+
+\section{Źródła danych}
+\label{sec:req-sources}
+
+Pierwotny projekt zakładał dwa źródła: komentarze z serwisu YouTube i wpisy z serwisu Reddit.
+Dwa źródła nie były wyborem przypadkowym.
+Głównym argumentem za odtwarzaniem strumienia w globalnej kolejności chronologicznej jest to, że opinie przychodzą z niezależnych serwisów, z różnymi zegarami; przy jednym źródle ten mechanizm działałby, ale niczego by nie dowodził.
+
+\subsection{YouTube}
+\label{sec:req-youtube}
+
+Komentarze pobieramy przez YouTube Data API w wersji~3, metodą \code{commentThreads.list}, która zwraca komentarze najwyższego poziomu wraz z odpowiedziami~\cite{docyoutubecommentthreads}.
+Każde wywołanie tej metody kosztuje jedną jednostkę dziennego limitu, który wynosi \num{10000} jednostek, a wyszukiwanie filmów metodą \code{search.list} kosztuje sto jednostek~\cite{docyoutubequota}.
+Ta różnica przesądziła o sposobie doboru materiału.
+Zamiast wyszukiwać filmy automatycznie, utrzymujemy ręcznie dobraną listę 23 filmów przypisanych do wydarzeń: oficjalnych zwiastunów, materiałów wydawcy i najczęściej komentowanych recenzji.
+Każdy identyfikator filmu przed dodaniem do listy sprawdziliśmy przez API, łącznie z kanałem, datą publikacji i liczbą komentarzy.
+Kolektor pobiera komentarze spod filmów przypisanych do wydarzenia i zostawia tylko te, które opublikowano w zadanym oknie czasowym.
+
+\subsection{Reddit: odmowa dostępu}
+\label{sec:req-reddit}
+
+Kolektor serwisu Reddit napisaliśmy w czerwcu 2026~r., razem z kolektorem YouTube, zgodnie z dokumentacją uwierzytelniania OAuth tego serwisu.
+Wniosek o dostęp do interfejsu programistycznego został jednak odrzucony i nie istniała żadna zgodna z regulaminem droga obejścia tej decyzji~\cite{redditdataapi}.
+Pobieranie danych z pominięciem oficjalnego interfejsu odrzuciliśmy, bo narusza warunki korzystania z serwisu, a wynik pracy, którego nie da się powtórzyć zgodnie z prawem, nie jest wynikiem.
+Rozważaliśmy też serwis X, ale jego bezpłatny dostęp do interfejsu nie pozwalał na pobieranie danych w potrzebnej skali.
+Kod kolektora Reddit pozostał w repozytorium, kompletny i przetestowany, jako dowód wykonanej pracy i gotowe rozwiązanie na wypadek, gdyby dostęp kiedyś się pojawił.
+
+\subsection{Steam}
+\label{sec:req-steam}
+
+Drugim źródłem zostały recenzje gry w sklepie Steam, co zapisaliśmy w decyzji architektonicznej z 20 września 2026~r.
+Punkt dostępowy sklepu, opisany w dokumentacji Steamworks~\cite{docsteamreviews}, zwraca recenzje w formacie \ac{json} przez zwykłe połączenie HTTPS, bez klucza, bez rejestracji i bez wniosku o przydział limitu.
+Nie ma tu więc procesu akceptacji, w którym ktoś mógłby nam odmówić.
+Recenzje przychodzą stronami po sto, od najnowszych, a przy sprawdzeniu 5 września 2026~r. gra miała ich \num{277523}.
+
+Steam okazał się lepszy od pierwotnego planu w trzech sprawach.
+Schemat danych pasował bez zmian do naszego formatu rekordu.
+Źródła się uzupełniały: YouTube obejmuje cały cykl życia, łącznie z okresem przed premierą, a Steam okres od premiery, ale ze znacznie większą liczbą opinii.
+Najważniejsze było jednak pole \code{voted_up}, czyli deklaracja autora, czy poleca grę.
+Daje ono słabą etykietę dla każdej recenzji, której ani YouTube, ani Reddit nie oferowały.
+
+\subsection{Wspólny format rekordu}
+\label{sec:req-record}
+
+Wszystkie kolektory zapisują opinie w jednym formacie, przedstawionym w tabeli~\ref{tab:record-schema}.
+Dzięki temu dalsze etapy przetwarzania nie wiedzą i nie muszą wiedzieć, z którego serwisu pochodzi rekord, a dodanie kolejnego źródła wymaga tylko nowego kolektora.
+
+\begin{table}[hbp]
+  \caption{Wspólny format rekordu opinii zapisywanego przez kolektory}
+  \label{tab:record-schema}
+  \centering
+  \small
+  \begin{tabular}{|l|p{0.62\textwidth}|}
+    \hline
+    Pole                    & Znaczenie                                                                                               \\
+    \hline
+    \texttt{id}             & identyfikator z przedrostkiem źródła, np. \texttt{youtube:Ugx...} lub \texttt{steam:<recommendationid>} \\
+    \hline
+    \texttt{source}         & źródło: \texttt{youtube} albo \texttt{steam}                                                           \\
+    \hline
+    \texttt{parent\_id}     & identyfikator komentarza nadrzędnego dla odpowiedzi; dla recenzji zawsze pusty                         \\
+    \hline
+    \texttt{created\_utc}   & chwila opublikowania opinii przez autora (UTC)                                                          \\
+    \hline
+    \texttt{collected\_at}  & chwila pobrania opinii przez kolektor (UTC)                                                             \\
+    \hline
+    \texttt{author\_hash}   & pseudonim autora: 16 znaków skrótu SHA-256 identyfikatora z tajną solą                                  \\
+    \hline
+    \texttt{text}           & treść opinii                                                                                            \\
+    \hline
+    \texttt{language}       & język wstępnie określony przez kolektor; potok nadpisuje go własnym wynikiem                            \\
+    \hline
+    \texttt{score}          & liczba polubień komentarza albo głosów \enquote{przydatna} dla recenzji                                 \\
+    \hline
+    \texttt{context\_id}    & identyfikator filmu YouTube albo numer aplikacji w sklepie Steam                                        \\
+    \hline
+    \texttt{event\_tag}     & identyfikator wydarzenia albo \texttt{general} dla recenzji spoza okien wydarzeń                        \\
+    \hline
+    \texttt{voted\_up}      & rekomendacja autora (tylko Steam); dla YouTube wartość pusta, nigdy fałsz                               \\
+    \hline
+  \end{tabular}
+\end{table}
+
+\section{Interesariusze i użytkownicy}
+\label{sec:req-users}
+
+Interesariuszami projektu są uczelnia, w imieniu której zakres prac zatwierdza promotor, przyszli odbiorcy wyników, zespół projektowy oraz, jako źródła wymagań nieosobowych, akty prawne i regulaminy serwisów, z których pochodzą dane.
+Z rozmów z promotorem wynikły trzy cele biznesowe.
+Pierwszym jest czytelny obraz zmian nastrojów wokół najważniejszych wydarzeń, bez ręcznego przeglądania dziesiątek tysięcy komentarzy.
+Drugim jest możliwość wielokrotnego użycia systemu przy niskim koszcie: kolejne studium przypadku ma wymagać zmiany konfiguracji, a koszt chmury ma mieścić się w budżecie.
+Trzecim jest wiarygodność wyników: jakość modelu ma być zmierzona, a ponowne przetworzenie tych samych danych ma dawać ten sam wynik.
+
+System ma trzy role użytkowników.
+Analityk jest odbiorcą wyników, na przykład pracownikiem działu marketingu wydawcy albo badaczem; korzysta wyłącznie z panelu i nie musi znać budowy systemu.
+Operator systemu jest członkiem zespołu, który uruchamia pobieranie danych i odtworzenia, zatwierdza zmiany infrastruktury i reaguje na alarmy.
+Specjalista uczenia maszynowego odpowiada za zbiór wzorcowy, trenowanie, ocenę i wdrażanie kolejnych wersji modelu.
+Poza ludźmi system współpracuje z czterema systemami zewnętrznymi: YouTube Data API, serwisem recenzji Steam, narzędziem Looker Studio i serwisem GitHub, w którym przechowujemy kod i który uruchamia automatyczne sprawdzanie zmian.
+
+\section{Wymagania funkcjonalne}
+\label{sec:req-functional}
+
+Dwadzieścia wymagań funkcjonalnych podzieliliśmy na pięć grup, odpowiadających podsystemom.
+Zestawia je tabela~\ref{tab:functional-requirements}; pełne opisy wraz z priorytetami i powiązaniami zawiera specyfikacja wymagań w dokumentacji projektu.
+
+\begin{table}[hbp]
+  \caption{Wymagania funkcjonalne w podziale na podsystemy}
+  \label{tab:functional-requirements}
+  \centering
+  \small
+  \begin{tabular}{|p{0.2\textwidth}|p{0.7\textwidth}|}
+    \hline
+    Podsystem                   & Wymagania                                                                                                                                                                                                                                                                      \\
+    \hline
+    Pozyskiwanie danych         & pobieranie komentarzy z YouTube dla wydarzenia i okna czasowego; pobieranie recenzji ze Steam z przypisaniem do najbliższego wydarzenia w promieniu 3 dni; pseudonimizacja autorów; zapis paczek w niezmiennym archiwum; konfiguracja studium przypadku w plikach              \\
+    \hline
+    Przetwarzanie strumieniowe  & ładowanie archiwum do hurtowni z usunięciem duplikatów; chronologiczne odtwarzanie strumienia z przyspieszeniem czasu; walidacja komunikatów i odkładanie błędnych do osobnej kolejki; deterministyczne wykrywanie języka i klasyfikacja wydźwięku; scalenie wyników z weryfikacją kompletności \\
+    \hline
+    Uczenie maszynowe           & trenowanie modelu z rejestracją przebiegów; ocena jakości na zbiorze wzorcowym i na ocenach autorów recenzji; rejestracja wersji i wdrożenie na czas przetwarzania                                                                                                        \\
+    \hline
+    Prezentacja wyników         & autoryzowane widoki raportowe bez danych osobowych; wykres zmian wydźwięku w czasie z datami wydarzeń; zestawienie dla wydarzeń                                                                                                                                         \\
+    \hline
+    Infrastruktura i utrzymanie & tworzenie zasobów wyłącznie z kodu; automatyczne sprawdzanie i wdrażanie zmian; odtworzenie uruchamiane jednym poleceniem; powiadomienia o awariach i przekroczeniu budżetu                                                                                              \\
+    \hline
+  \end{tabular}
+\end{table}
+
+Dwa wymagania zasługują na komentarz, bo zdecydowały o architekturze.
+Wymaganie odtwarzania strumienia mówi, że rekordy z obu źródeł trafiają do kolejki w jednej, wspólnej kolejności czasu publikacji, z odstępami skróconymi przez współczynnik przyspieszenia, domyślnie tak, by jeden dzień rzeczywisty trwał jedną sekundę.
+Wymaganie scalenia mówi, że wyniki przetwarzania trafiają do docelowej tabeli dopiero wtedy, gdy przetworzono wszystkie rekordy danego odtworzenia.
+To drugie wymaganie dopisaliśmy po tym, jak jedno z wczesnych odtworzeń scaliło niepełny zbiór wyników, o czym piszemy w podrozdziale~\ref{sec:impl-replay-build}.
+
+\section{Wymagania niefunkcjonalne}
+\label{sec:req-nonfunctional}
+
+Wymagania niefunkcjonalne zestawia tabela~\ref{tab:nonfunctional-requirements}.
+Najważniejsze z nich dotyczą prywatności i powtarzalności, bo od nich zależy, czy wyniki w ogóle nadają się do pracy dyplomowej.
+
+\begin{table}[hbp]
+  \caption{Najważniejsze wymagania niefunkcjonalne}
+  \label{tab:nonfunctional-requirements}
+  \centering
+  \small
+  \begin{tabular}{|p{0.22\textwidth}|p{0.68\textwidth}|}
+    \hline
+    Wymaganie                    & Treść                                                                                                                                             \\
+    \hline
+    Ochrona prywatności autorów  & nazwy użytkowników nie trafiają do żadnego zapisu w chmurze; pseudonim autora i treść opinii nie opuszczają zbioru analitycznego; dane pozostają w regionie UE \\
+    \hline
+    Powtarzalność wyników        & dwa odtworzenia tych samych danych z tym samym klasyfikatorem dają identyczny zbiór wierszy, z pominięciem wersji modelu i czasu przetworzenia      \\
+    \hline
+    Kompletność danych           & każdy rekord trafia do tabeli zdarzeń albo do kolejki błędnych komunikatów; plików archiwum nie modyfikuje się ani nie usuwa                         \\
+    \hline
+    Bezpieczeństwo dostępu       & osobne konto usługi z minimalnymi uprawnieniami dla każdego komponentu; sekrety tylko w Secret Manager; maszyny bez publicznych adresów IP            \\
+    \hline
+    Kontrola jakości modelu      & nowa wersja zastępuje dotychczasową tylko przy wyższym F1 makro na części kontrolnej zbioru wzorcowego i nie gorszym F1 dla klasy negatywnej          \\
+    \hline
+    Wydajność                    & zbiór rzędu \num{300000} opinii przetwarzany przy najwyżej 2 maszynach roboczych, pełne odtworzenie w nie więcej niż 6 godzin                       \\
+    \hline
+    Limity serwisów              & pobieranie z YouTube w dziennym limicie \num{10000} jednostek; zapytania do Steam pojedynczo, z przerwą \qty{0.5}{\second}                          \\
+    \hline
+    Niezależność od premiery     & nowe studium przypadku bez zmian w kodzie, przez zmianę przedrostka nazw zasobów i plików konfiguracji                                             \\
+    \hline
+    Wymienność modelu            & model można wymienić bez zmian w potoku dzięki wspólnemu interfejsowi klasyfikatora                                                                 \\
+    \hline
+    Ograniczenie kosztów         & koszt miesięczny w budżecie; zasoby rozliczane w sposób ciągły działają tylko na czas przetwarzania                                                 \\
+    \hline
+  \end{tabular}
+\end{table}
+
+Ze specyfikacji pochodzą też cztery kryteria akceptacji.
+Pierwszym jest pokaz pełnego przebiegu dla obu źródeł, od pobrania do panelu, w którym liczba identyfikatorów w tabeli zdarzeń zgadza się z liczbą w tabeli pośredniej pomniejszoną o błędne komunikaty.
+Drugim jest test powtarzalności: dwa odtworzenia z deterministycznym klasyfikatorem mają dać identyczny odcisk tabeli, a przy prawdziwym modelu etykieta może zmienić się dla nie więcej niż \qty{0.1}{\percent} opinii.
+Trzecim jest raport jakości modelu na części kontrolnej zbioru wzorcowego i na ocenach autorów recenzji Steam.
+Czwartym jest zgodność infrastruktury z kodem: plan zmian Terraform nie wykazuje różnic względem działającego środowiska.
+Do każdego z tych kryteriów wracamy w rozdziale~\ref{chap:evaluation}.
+
+\section{Model przypadków użycia}
+\label{sec:req-use-cases}
+
+Wymagania funkcjonalne sformalizowaliśmy w postaci 33 przypadków użycia w ujednoliconym języku modelowania (\ac{uml}), po jednym diagramie dla każdego podsystemu.
+Aktorami są trzy role użytkowników i cztery systemy zewnętrzne.
+Dodaliśmy też dwóch aktorów uogólnionych: członka zespołu projektowego, który grupuje przypadki wspólne dla operatora i specjalisty uczenia maszynowego, oraz źródło opinii, którego specjalizacjami są YouTube i Steam, a w przyszłości każde kolejne źródło.
+Każde z dwudziestu wymagań funkcjonalnych realizuje co najmniej jeden przypadek użycia.
+
+Najwięcej przypadków ma podsystem przetwarzania strumieniowego, przedstawiony na rysunku~\ref{fig:uc-stream}.
+Jego centralnym przypadkiem jest uruchomienie odtworzenia, które zawiera publikację chronologicznego strumienia, przetworzenie komunikatów w potoku i scalenie wyników z weryfikacją kompletności.
+Odrzucenie błędnego komunikatu rozszerza przetwarzanie, bo zachodzi tylko dla rekordów, których nie da się odczytać.
+
+\begin{figure}[hbp]
+  \centering
+  \includegraphics[width=\textwidth]{uc-stream-processing}
+  \caption{Diagram przypadków użycia podsystemu przetwarzania strumieniowego}
+  \label{fig:uc-stream}
+\end{figure}
+
+Podsystem uczenia maszynowego, przedstawiony na rysunku~\ref{fig:uc-ml}, obejmuje pełny cykl życia modelu: oznaczenie zbioru wzorcowego, trenowanie, ocenę, wdrożenie wersji i przywrócenie poprzedniej, gdy nowa okaże się gorsza.
+Przywrócenie wymaga współpracy dwóch ról, bo specjalista wdraża poprzednią wersję modelu, a operator ponownie odtwarza dane, co nadpisuje etykiety w tabeli zdarzeń.
+
+\begin{figure}[hbp]
+  \centering
+  \includegraphics[width=\textwidth]{uc-machine-learning}
+  \caption{Diagram przypadków użycia podsystemu uczenia maszynowego}
+  \label{fig:uc-ml}
+\end{figure}
+
+Podsystem analityczny, przedstawiony na rysunku~\ref{fig:uc-analytics}, jest jedynym, z którego korzysta analityk.
+Przypadek uogólniony przeglądu wyników ma trzy specjalizacje, odpowiadające trzem stronom panelu: zmianom wydźwięku w czasie, zestawieniu wydarzeń i pokryciu źródeł i języków.
+
+\begin{figure}[hbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{uc-analytics}
+  \caption{Diagram przypadków użycia podsystemu analitycznego}
+  \label{fig:uc-analytics}
+\end{figure}
+
+\todo[inline]{Diagramy przypadków użycia dla podsystemów pozyskiwania danych i infrastruktury oraz trzy diagramy sekwencji są w dokumentacji PAI (model przypadków użycia); zdecydować, czy dodać je tu, czy w dodatku.}
+
+\section{Model klas dziedziny}
+\label{sec:req-class-model}
+
+Model klas opisuje dziedzinę problemu, a nie kod.
+Klasy wynikają z wymagań na dane i odpowiadają pojęciom, którymi posługujemy się w całej pracy.
+Rysunek~\ref{fig:class-opinions} przedstawia opinie i ich kontekst.
+
+\begin{figure}[hbp]
+  \centering
+  \includegraphics[width=0.95\textwidth]{class-opinions}
+  \caption{Diagram klas: opinie i ich kontekst}
+  \label{fig:class-opinions}
+\end{figure}
+
+Centralną klasą jest abstrakcyjna opinia, której specjalizacjami są komentarz YouTube i recenzja Steam.
+Komentarz może być odpowiedzią na inny komentarz i zawsze należy do filmu, a recenzja nie ma struktury wątków, ma za to ocenę autora.
+Opinia jest przypisana do dokładnie jednego wydarzenia, a każde wydarzenie należy do studium przypadku.
+Autor występuje w modelu wyłącznie jako pseudonim; model z założenia nie ma miejsca na nazwę użytkownika.
+Paczka archiwum grupuje opinie pobrane w jednym przebiegu kolektora dla jednego źródła i wydarzenia i nigdy nie jest modyfikowana.
+
+Rysunek~\ref{fig:class-processing} przedstawia klasy związane z przetwarzaniem.
+Wynik klasyfikacji łączy opinię z etykietą wydźwięku, pewnością modelu i wersją modelu, która tę etykietę nadała.
+Wyników dla jednej opinii może być wiele, bo każde odtworzenie tworzy nowy, ale w tabeli docelowej zostaje zawsze ten z najpóźniejszego przetworzenia.
+Odtworzenie przechodzi kolejne stany, od uruchomienia, przez publikację i opróżnianie potoku, po scalenie albo przerwanie; jego cykl życia opisujemy dokładniej w następnym rozdziale.
+
+\begin{figure}[hbp]
+  \centering
+  \includegraphics[width=0.8\textwidth]{class-processing}
+  \caption{Diagram klas: przetwarzanie opinii}
+  \label{fig:class-processing}
+\end{figure}
+
+Trzecia grupa klas, nieprzedstawiona na rysunkach, dotyczy oceny modelu: zbiór wzorcowy składa się z oznaczeń wzorcowych przypisanych do części uczącej, strojenia lub kontrolnej, a raport oceny łączy wersję modelu ze zbiorem wzorcowym i zawiera dokładność, F1 makro oraz wyniki dla klas i języków.
+Tak zdefiniowana dziedzina wyznacza, jakie dane system musi przechowywać i jakie operacje na nich wykonywać.
+Następny rozdział pokazuje, jak przełożyliśmy ją na architekturę w chmurze.

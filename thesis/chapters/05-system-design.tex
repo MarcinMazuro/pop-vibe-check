@@ -1,0 +1,277 @@
+% !TeX root = ../main.tex
+\chapter{Projekt systemu}
+\label{chap:design}
+
+% FIRST DRAFT. Based on docs/architecture.md, the ADRs and the PAI design
+% documents (architecture, logic, data structures, user interface).
+
+Projekt systemu wyrasta z jednej obserwacji: opinia powinna przejść od źródła do wykresu drogą, którą da się powtórzyć.
+Każdy etap tej drogi zostawia trwały ślad, z którego można odtworzyć wszystkie następne.
+W tym rozdziale opisujemy architekturę systemu i uzasadnienie każdego jej elementu, logikę odtworzenia, model danych w hurtowni, projekt panelu oraz sposób, w jaki system chroni prywatność autorów opinii.
+
+\section{Architektura}
+\label{sec:design-architecture}
+
+Drogę pojedynczej opinii przez system przedstawia rysunek~\ref{fig:architecture}.
+Opinię pobiera kolektor i zapisuje ją w archiwum surowych danych.
+Z archiwum opinie trafiają do hurtowni, skąd wydawca odtworzeń publikuje je w kolejce komunikatów w porządku chronologicznym.
+Potok przetwarzania strumieniowego odczytuje komunikaty, wykrywa język, zleca klasyfikację wydźwięku modelowi na punkcie końcowym Vertex AI i dopisuje wynik do tabeli lądowania.
+Po zakończeniu odtworzenia wyniki są scalane z docelową tabelą zdarzeń, na której opierają się widoki raportowe i panel.
+
+\begin{figure}[hbp]
+  \centering
+  \begin{tikzpicture}[
+      font=\footnotesize,
+      box/.style={draw, rounded corners=2pt, align=center, minimum height=10mm, text width=23mm, fill=gray!8},
+      store/.style={box, fill=blue!8},
+      ext/.style={box, dashed, fill=white},
+      arr/.style={-{Latex[length=2mm]}, thick},
+      lab/.style={font=\scriptsize, fill=white, inner sep=1pt}]
+    \node[ext, minimum height=8mm] (yt) at (0,0.65) {YouTube\\Data API};
+    \node[ext, minimum height=8mm] (st) at (0,-0.65) {serwis recenzji\\Steam};
+    \node[box] (col) at (3.8,0) {kolektory\\(Cloud Run Jobs)};
+    \node[store] (gcs) at (7.6,0) {archiwum\\surowych danych\\(Cloud Storage)};
+    \node[store] (stg) at (11.4,0) {BigQuery:\\\texttt{raw\_landing},\\\texttt{raw\_staging}};
+    \node[box] (pub) at (11.4,-2.7) {wydawca\\odtworzeń\\(Cloud Run Job)};
+    \node[box] (ps) at (7.6,-2.7) {temat Pub/Sub\\(klucz \enquote{global})};
+    \node[box] (df) at (3.8,-2.7) {potok\\Apache Beam\\(Dataflow)};
+    \node[box] (vx) at (0,-2.7) {punkt końcowy\\Vertex AI\\(XLM-R)};
+    \node[box] (dlq) at (0,-5.4) {temat błędnych\\komunikatów};
+    \node[store] (ev) at (3.8,-5.4) {BigQuery:\\\texttt{events\_landing},\\\texttt{events}};
+    \node[store] (rep) at (7.6,-5.4) {widoki\\raportowe\\(Dataform)};
+    \node[ext] (ls) at (11.4,-5.4) {panel\\(Looker Studio)};
+    \draw[arr] (yt) -- (col);
+    \draw[arr] (st) -- (col);
+    \draw[arr] (col) -- node[lab, above=1pt] {JSONL.gz} (gcs);
+    \draw[arr] (gcs) -- node[lab, above=1pt] {ładowanie} (stg);
+    \draw[arr] (stg) -- node[lab, right=1pt, align=left] {ORDER BY\\created\_utc} (pub);
+    \draw[arr] (pub) -- node[lab, above=1pt] {publikacja} (ps);
+    \draw[arr] (ps) -- (df);
+    \draw[arr, {Latex[length=2mm]}-{Latex[length=2mm]}] (df) -- node[lab, above=1pt] {REST} (vx);
+    \draw[arr] (df) -- node[lab, right=1pt] {dopisanie} (ev);
+    \draw[arr] (df) -- (dlq);
+    \draw[arr] (ev) -- node[lab, above=1pt] {MERGE} (rep);
+    \draw[arr] (rep) -- (ls);
+  \end{tikzpicture}
+  \caption{Droga opinii przez system: od serwisów źródłowych do panelu analitycznego}
+  \label{fig:architecture}
+\end{figure}
+
+Każdy z tych etapów istnieje z konkretnego powodu.
+Poniżej opisujemy te powody, bo bez nich architektura mogłaby wyglądać na nadmiernie rozbudowaną.
+
+\subsection{Dlaczego archiwum obok hurtowni}
+\label{sec:design-archive}
+
+Hurtownia BigQuery jest analitycznym źródłem prawdy, ale nie jedynym trwałym zapisem danych.
+Archiwum w Cloud Storage przechowuje opinie dokładnie w takiej postaci, w jakiej je pobrano, jako skompresowane pliki z jednym obiektem \ac{json} w każdym wierszu.
+Pliki trafiają pod ścieżkę złożoną ze źródła, wydarzenia, daty i godziny pobrania oraz unikalnego identyfikatora paczki, więc dwa przebiegi kolektora nigdy nie nadpisują swoich wyników.
+Jeśli zmieni się model albo schemat danych, hurtownię odbudowujemy z archiwum, a nie z internetu.
+Interfejsy serwisów mogą do tego czasu zniknąć, zmienić się albo wyczerpać limit, a komentarze mogą zostać usunięte przez autorów.
+
+\subsection{Dlaczego wydawca między hurtownią a kolejką}
+\label{sec:design-publisher}
+
+Globalna kolejność chronologiczna opinii ze wszystkich źródeł jest wymaganiem, a Pub/Sub sam jej nie zapewnia.
+Zapewnia ją natomiast BigQuery: zapytanie z klauzulą \code{ORDER BY created_utc, id} sortuje cały zbiór, a identyfikator rozstrzyga remisy, gdy dwie opinie mają ten sam czas z dokładnością do sekundy.
+Identyfikator zaczyna się od nazwy źródła, więc przy remisie recenzje Steam zawsze poprzedzają komentarze YouTube i kolejność jest za każdym razem taka sama.
+Wydawca odczytuje posortowany wynik i publikuje rekordy pod jednym, stałym kluczem porządkującym \code{global}, więc Pub/Sub dostarcza je w tej samej kolejności.
+Czas opublikowania opinii przekazuje jako atrybut komunikatu, z którego potok odczytuje czas zdarzenia.
+
+Wydawca nie wysyła rekordów tak szybko, jak potrafi.
+Odtwarza rzeczywiste odstępy między opiniami, podzielone przez współczynnik przyspieszenia, a odstępy dłuższe niż zadany próg skraca do tego progu.
+Dzięki temu skupiska opinii wokół wydarzeń zachowują swój kształt, a miesiące ciszy między wydarzeniami znikają.
+Strumień wygląda jak żywy, tylko szybszy, a przebieg w czasie jest wciąż ten sam.
+
+\subsection{Dlaczego tabele lądowania przed tabelami docelowymi}
+\label{sec:design-landing}
+
+Pub/Sub i Dataflow gwarantują dostarczenie komunikatu co najmniej raz, a nie dokładnie raz.
+Zamiast walczyć z duplikatami w potoku, przyjęliśmy, że potok zapisuje wyłącznie do tabeli lądowania, do której tylko dopisuje.
+Dopiero instrukcja \code{MERGE} przenosi wyniki do tabeli docelowej, zostawiając jeden wiersz na identyfikator opinii, ten z najpóźniejszym czasem przetworzenia.
+Tak samo działa ładowanie archiwum: pliki trafiają najpierw do tabeli ładowania, a stamtąd, bez duplikatów, do tabeli pośredniej.
+Dzięki temu odtworzenie można powtarzać dowolnie wiele razy, a tabela docelowa nie rośnie.
+
+\subsection{Dlaczego model na zewnątrz potoku}
+\label{sec:design-remote-model}
+
+Potok nie zawiera wag modelu.
+Wywołuje klasyfikator przez wspólny interfejs, za którym może stać deterministyczna zaślepka albo klient punktu końcowego Vertex AI.
+Taki podział ma dwie przyczyny.
+Maszyny robocze potoku działają bez publicznych adresów IP i łączą się z usługami Google wyłącznie przez prywatny dostęp w sieci \ac{vpc}, więc nie mogą pobrać wag z internetu przy starcie.
+Gdybyśmy z kolei wbudowali wagi w obraz potoku, każda zmiana modelu wymagałaby przebudowania obrazu, a obraz rozrósłby się o kilka gigabajtów.
+Punkt końcowy pozwala zmienić model bez dotykania potoku i bez ponownego budowania czegokolwiek.
+
+\subsection{Dlaczego panel czyta widoki, a nie tabele}
+\label{sec:design-views}
+
+Panel ma jedno źródło danych dla każdego widoku w zbiorze raportowym.
+Widoki zawierają gotowe miary, zdefiniowane w języku \ac{sql} i sprawdzane testami przy każdym wdrożeniu, a panel tylko sumuje liczniki i dzieli je raz.
+Dzięki temu liczba na wykresie zawsze zgadza się z wynikiem zapytania.
+Widoki są też granicą prywatności: nie zawierają pseudonimu autora ani treści opinii, a osoba oglądająca panel nie ma dostępu do tabeli zdarzeń.
+
+\subsection{Wdrożenie i komponenty}
+\label{sec:design-deployment}
+
+Rysunek~\ref{fig:deployment} pokazuje rozmieszczenie komponentów w chmurze.
+Wszystkie działają w projekcie Google Cloud w regionie \code{europe-central2}, a użytkownik potrzebuje tylko przeglądarki.
+Diagram przedstawia stan z października 2026~r., gdy panel działał jeszcze jako tymczasowa aplikacja w Cloud Run.
+\todo{Zaktualizować diagram wdrożenia: usunąć panel tymczasowy, dodać serwer MLflow (Cloud Run i Cloud SQL).}
+
+\begin{figure}[hbp]
+  \centering
+  \includegraphics[width=0.62\textwidth]{deployment}
+  \caption{Diagram wdrożenia systemu}
+  \label{fig:deployment}
+\end{figure}
+
+Z punktu widzenia oprogramowania system ma trzy warstwy.
+Warstwa prezentacji obejmuje panel i interfejs operacyjny zespołu, czyli konsolę Google Cloud, polecenia \code{gcloud} i powiadomienia e-mail.
+Warstwa usług obejmuje kolektory, wydawcę odtworzeń, potok, moduł trenowania i orkiestrację odtworzenia.
+Warstwa danych obejmuje archiwum, oba zbiory BigQuery, tematy Pub/Sub, repozytorium modeli oraz konfigurację i sekrety.
+Usługi nie wywołują się nawzajem bezpośrednio, tylko wymieniają dane przez warstwę danych.
+Jedynym wyjątkiem jest wywołanie klasyfikatora przez potok.
+Podział na podsystemy i przepływ danych między nimi przedstawia rysunek~\ref{fig:components}.
+
+\begin{figure}[hbp]
+  \centering
+  \includegraphics[width=0.9\textwidth]{components-subsystems}
+  \caption{Diagram komponentów w podziale na podsystemy}
+  \label{fig:components}
+\end{figure}
+
+\section{Logika odtworzenia}
+\label{sec:design-replay}
+
+Odtworzenie jest operacją, wokół której zbudowany jest cały system, więc jego logikę zaprojektowaliśmy szczególnie starannie.
+Jedno odtworzenie to jedno uruchomienie wyzwalacza w Cloud Build, które wykonuje sześć kroków: uruchamia potok, publikuje strumień, czeka na komplet wyników, zatrzymuje potok, scala wyniki i wylicza odcisk tabeli.
+Kolejność tych kroków i warunek, od którego zależy scalenie, przedstawia rysunek~\ref{fig:sequence-replay}.
+
+\begin{figure}[hbp]
+  \centering
+  \includegraphics[width=0.82\textwidth]{sequence-replay}
+  \caption{Diagram sekwencji uruchomienia odtworzenia}
+  \label{fig:sequence-replay}
+\end{figure}
+
+Logikę odtworzenia wyznaczają trzy reguły.
+Po pierwsze, zatrzymanie potoku czeka na kompletność, a nie na ciszę.
+Orkiestrator wylicza z tabeli pośredniej oczekiwaną liczbę rekordów i czeka, aż tyle różnych identyfikatorów pojawi się w tabeli lądowania z czasem przetworzenia późniejszym niż początek bieżącego odtworzenia.
+Licznik, który przestał rosnąć, nie jest dowodem zakończenia, bo zatrzymany potok wygląda dokładnie tak samo.
+Po drugie, niekompletne odtworzenie nigdy nie jest scalane: jeśli rekordy nie dotrą w zadanym czasie, orkiestrator zatrzymuje potok i kończy się błędem, a tabela zdarzeń pozostaje bez zmian.
+Po trzecie, potok jest zatrzymywany zawsze, także wtedy, gdy wcześniejszy krok się nie powiódł, bo zadanie strumieniowe, którego nikt nie zatrzymał, nalicza opłaty bez końca.
+
+Stany, przez które przechodzi odtworzenie, przedstawia rysunek~\ref{fig:state-replay}.
+Odtworzenie przechodzi je automatycznie, a błąd na dowolnym etapie przenosi je do stanu przerwania.
+
+\begin{figure}[hbp]
+  \centering
+  \includegraphics[width=0.42\textwidth]{state-replay}
+  \caption{Diagram stanów odtworzenia}
+  \label{fig:state-replay}
+\end{figure}
+
+Ostatnim krokiem odtworzenia jest odcisk tabeli zdarzeń, czyli suma skrótów wszystkich wierszy z pominięciem kolumn, które z definicji różnią się między przebiegami: wersji modelu i czasu przetworzenia.
+Suma nie zależy od kolejności wierszy, więc dwa odtworzenia tych samych danych tym samym klasyfikatorem muszą dać tę samą liczbę.
+Odcisk zapisuje się w dzienniku uruchomienia razem z wersją kodu i parametrami, a dziennik ten jest dowodem pochodzenia wyników.
+Wyzwalacz odtworzenia uruchamia się wyłącznie ręcznie, bo żadne scalenie zmian w repozytorium nie powinno samo uruchamiać najdroższego zasobu w projekcie.
+
+\section{Model danych}
+\label{sec:design-data-model}
+
+Hurtownia ma dwa zbiory danych: analityczny, z tabelami, i raportowy, z widokami.
+Zbiór analityczny przedstawia rysunek~\ref{fig:db-analytics}.
+Zawiera cztery tabele o dwóch schematach.
+Tabele \code{raw_landing} i \code{raw_staging} przechowują rekordy opinii w formacie z tabeli~\ref{tab:record-schema}.
+Tabele \code{events_landing} i \code{events} przechowują rekordy wzbogacone o wykryty język, etykietę wydźwięku, pewność modelu, wersję modelu i czas przetworzenia.
+
+\begin{figure}[hbp]
+  \centering
+  \includegraphics[width=0.6\textwidth]{db-analytics}
+  \caption{Struktura zbioru analitycznego w BigQuery}
+  \label{fig:db-analytics}
+\end{figure}
+
+Świadomie zrezygnowaliśmy z normalizacji.
+Tabela \code{events} jest jedną zdenormalizowaną tabelą, w której każda opinia ma wszystkie potrzebne kolumny, więc żaden widok raportowy nie musi wykonywać złączeń.
+Tabele pośrednia i docelowa są partycjonowane dziennie według czasu publikacji opinii i klastrowane według źródła i wydarzenia.
+Przy obecnej liczbie wierszy to przesada, ale zapytania z filtrem czasowym czytają dzięki temu tylko potrzebne partycje, a ten sam schemat skaluje się do znacznie większych zbiorów.
+
+Zbiór raportowy zawiera osiem widoków, zestawionych w tabeli~\ref{tab:reporting-views}.
+Widoki są autoryzowane na zbiorze analitycznym jako całości, więc mogą czytać tabelę \code{events}, do której oglądający panel nie ma dostępu.
+
+\begin{table}[hbp]
+  \caption{Widoki zbioru raportowego}
+  \label{tab:reporting-views}
+  \centering
+  \small
+  \begin{tabular}{|l|p{0.58\textwidth}|}
+    \hline
+    Widok                                    & Zawartość                                                                                       \\
+    \hline
+    \texttt{v\_events}                       & jeden wiersz na opinię, bez pseudonimu autora i treści; podstawa pozostałych widoków             \\
+    \hline
+    \texttt{v\_sentiment\_daily}             & liczby opinii w klasach wydźwięku dla dnia, źródła i wydarzenia                                  \\
+    \hline
+    \texttt{v\_sentiment\_by\_period}        & to samo w ujęciu dziennym, tygodniowym i miesięcznym, z zerami dla okresów bez danych            \\
+    \hline
+    \texttt{v\_sentiment\_by\_event}         & zestawienie dla wydarzeń: liczba opinii, udziały klas, wskaźnik netto, zakres dat                \\
+    \hline
+    \texttt{v\_sentiment\_by\_event\_source} & to samo w podziale na źródła                                                                     \\
+    \hline
+    \texttt{v\_event\_lift}                  & efekt wydarzenia: zmiana wskaźnika netto i liczby opinii na dzień względem tła z tego samego źródła \\
+    \hline
+    \texttt{v\_source\_divergence}           & różnica wskaźnika netto między najbardziej i najmniej pozytywnym źródłem dla wydarzenia          \\
+    \hline
+    \texttt{v\_source\_coverage}             & liczba opinii i udział pozytywnych w podziale na źródła i języki                                 \\
+    \hline
+  \end{tabular}
+\end{table}
+
+\section{Projekt interfejsu użytkownika}
+\label{sec:design-ui}
+
+Panel składa się z trzech stron, odpowiadających trzem przypadkom użycia analityka.
+Strona przeglądu pokazuje wskaźniki podsumowujące, czyli liczbę opinii, wskaźnik netto oraz udziały opinii pozytywnych i negatywnych, a pod nimi wykres wskaźnika netto w czasie dla każdego źródła i wykres liczby opinii.
+Strona wydarzeń zestawia wskaźnik netto i podział na klasy dla każdego wydarzenia i źródła, różnice między źródłami oraz efekt wydarzenia względem tła.
+Strona źródeł i języków pokazuje liczbę opinii i udział opinii pozytywnych w podziale na języki.
+
+Przy projektowaniu stron kierowaliśmy się trzema zasadami.
+Przy każdym wyniku widać liczbę opinii, z której go policzono, bo wskaźnik netto z dziesięciu komentarzy znaczy co innego niż ten sam wskaźnik z dziesięciu tysięcy.
+Na wykresach w czasie pokazujemy tylko okresy z co najmniej dwudziestoma opiniami, a okna wydarzeń są zaznaczone w tle.
+Kolory źródeł i klas wydźwięku są stałe na wszystkich stronach.
+
+Strony najpierw zaimplementowaliśmy jako aplikację w bibliotece Streamlit, a następnie odtworzyliśmy w Looker Studio, z tymi samymi widokami i tymi samymi liczbami.
+Rysunek~\ref{fig:ui-overview} przedstawia fragment strony przeglądu w pierwszej wersji.
+
+\begin{figure}[hbp]
+  \centering
+  \includegraphics[width=\textwidth, trim={740 900 150 700}, clip]{ui-overview-streamlit}
+  \caption{Fragment strony przeglądu w pierwszej wersji panelu (aplikacja Streamlit)}
+  \label{fig:ui-overview}
+\end{figure}
+
+\todo[inline]{Zastąpić zrzut z aplikacji Streamlit zrzutami stron raportu Looker Studio (Przegląd, Wydarzenia, Źródła i języki) i sprawdzić, czy najmniejszy tekst ma co najmniej 6 pt.}
+
+\section{Prywatność i bezpieczeństwo}
+\label{sec:design-privacy}
+
+Identyfikatory autorów opinii, takie jak nazwa kanału YouTube czy numer konta Steam, są danymi osobowymi w rozumieniu \ac{rodo}~\cite{rodo2016}.
+Dlatego granicę prywatności postawiliśmy możliwie wcześnie, w samym kolektorze, zanim rekord zostanie gdziekolwiek zapisany.
+Kolektor zastępuje identyfikator autora skrótem SHA-256 z identyfikatora i tajnej soli, przyciętym do 16 znaków szesnastkowych.
+Ten sam autor ma zawsze ten sam pseudonim, co pozwala liczyć unikalnych autorów, ale bez soli nie da się z pseudonimu odtworzyć identyfikatora.
+Sól jest przechowywana w Secret Manager i nie może być zmieniana, bo zmiana zerwałaby ciągłość pseudonimów w zbiorze.
+W przypadku Steam kolektor odrzuca też nazwę wyświetlaną autora i adres jego profilu.
+
+Tak przetworzone dane są w rozumieniu \ac{rodo} danymi spseudonimizowanymi, a nie anonimowymi, więc nadal podlegają ochronie.
+Dlatego druga granica przebiega między zbiorem analitycznym a raportowym.
+Widoki raportowe nie zawierają ani pseudonimu, ani treści opinii, a liczba unikalnych autorów jest liczona wewnątrz agregatów.
+Test \code{no_personal_columns}, uruchamiany przy każdym wdrożeniu widoków, przerywa wdrożenie, gdy którykolwiek obiekt w zbiorze raportowym ma kolumnę o nazwie \code{author_hash} albo \code{text}.
+
+Pozostałe zasady bezpieczeństwa są typowe dla systemów w chmurze, ale konsekwentnie stosowane.
+Każdy komponent ma osobne konto usługi z minimalnym zestawem uprawnień, a żadne konto nie jest współdzielone.
+Maszyny robocze potoku i środowisko trenowania nie mają publicznych adresów IP.
+Sekrety, takie jak klucz YouTube Data API i sól, istnieją wyłącznie w Secret Manager, nigdy w kodzie ani w dziennikach.
+Serwer MLflow jest dostępny tylko przez \ac{iap}, dla osób z listy, a raport w Looker Studio wykonuje zapytania z uprawnieniami osoby, która go ogląda, więc samo udostępnienie raportu nie daje dostępu do danych.
+Wszystkie dane przetwarzamy i przechowujemy w regionie warszawskim.
+Jak te założenia przełożyły się na kod, opisuje następny rozdział.
