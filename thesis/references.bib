@@ -3,6 +3,15 @@
 %
 % Starter entries; metadata verified on 2026-11-21 (DOI: Crossref/DataCite,
 % ISBN: Open Library). Import them into Zotero, then switch on the export.
+%
+% Entries added for the first draft (2026-11-23): every DOI was checked
+% against Crossref (arXiv: DataCite), every ISBN against Open Library, and
+% every URL was opened on that day. Keys follow the Better BibTeX formula
+% auth.lower + year + shorttitle(1,0).lower where the author is a person;
+% documentation pages use a "doc" prefix. Zotero may regenerate some keys
+% on import (corporate authors, missing years) — check \cite keys then.
+
+% --- Starter entries ----------------------------------------------------------
 
 @book{akidau2018streaming,
   author    = {Akidau, Tyler and Chernyak, Slava and Lax, Reuven},
@@ -57,4 +66,709 @@
   eprint     = {1910.01108},
   eprinttype = {arxiv},
   doi        = {10.48550/arXiv.1910.01108},
+}
+
+% --- Sentiment analysis --------------------------------------------------------
+
+@article{pang2008opinion,
+  author       = {Pang, Bo and Lee, Lillian},
+  title        = {Opinion Mining and Sentiment Analysis},
+  journaltitle = {Foundations and Trends in Information Retrieval},
+  volume       = {2},
+  number       = {1--2},
+  pages        = {1--135},
+  year         = {2008},
+  doi          = {10.1561/1500000011},
+}
+
+@book{liu2015sentiment,
+  author    = {Liu, Bing},
+  title     = {Sentiment Analysis},
+  subtitle  = {Mining Opinions, Sentiments, and Emotions},
+  publisher = {Cambridge University Press},
+  location  = {Cambridge},
+  year      = {2015},
+  doi       = {10.1017/CBO9781139084789},
+}
+
+@article{taboada2011lexiconbased,
+  author       = {Taboada, Maite and Brooke, Julian and Tofiloski, Milan and Voll, Kimberly and Stede, Manfred},
+  title        = {Lexicon-Based Methods for Sentiment Analysis},
+  journaltitle = {Computational Linguistics},
+  volume       = {37},
+  number       = {2},
+  pages        = {267--307},
+  year         = {2011},
+  doi          = {10.1162/COLI_a_00049},
+}
+
+@inproceedings{hutto2014vader,
+  author    = {Hutto, C. J. and Gilbert, Eric},
+  title     = {{VADER}: A Parsimonious Rule-Based Model for Sentiment Analysis of Social Media Text},
+  booktitle = {Proceedings of the International AAAI Conference on Web and Social Media},
+  volume    = {8},
+  number    = {1},
+  pages     = {216--225},
+  year      = {2014},
+  doi       = {10.1609/icwsm.v8i1.14550},
+}
+
+@inproceedings{pang2002thumbs,
+  author    = {Pang, Bo and Lee, Lillian and Vaithyanathan, Shivakumar},
+  title     = {Thumbs up? {Sentiment} Classification using Machine Learning Techniques},
+  booktitle = {Proceedings of the ACL-02 Conference on Empirical Methods in Natural Language Processing},
+  pages     = {79--86},
+  year      = {2002},
+  doi       = {10.3115/1118693.1118704},
+}
+
+@inproceedings{socher2013recursive,
+  author    = {Socher, Richard and Perelygin, Alex and Wu, Jean and Chuang, Jason and Manning, Christopher D. and Ng, Andrew and Potts, Christopher},
+  title     = {Recursive Deep Models for Semantic Compositionality Over a Sentiment Treebank},
+  booktitle = {Proceedings of the 2013 Conference on Empirical Methods in Natural Language Processing},
+  publisher = {Association for Computational Linguistics},
+  year      = {2013},
+  url       = {https://aclanthology.org/D13-1170/},
+  urldate   = {2026-11-23},
+}
+
+@techreport{go2009twitter,
+  author      = {Go, Alec and Bhayani, Richa and Huang, Lei},
+  title       = {Twitter Sentiment Classification using Distant Supervision},
+  institution = {Stanford University},
+  type        = {CS224N Project Report},
+  year        = {2009},
+  url         = {https://cs.stanford.edu/people/alecmgo/papers/TwitterDistantSupervision09.pdf},
+  urldate     = {2026-11-23},
+}
+
+@inproceedings{rosenthal2017semeval2017,
+  author    = {Rosenthal, Sara and Farra, Noura and Nakov, Preslav},
+  title     = {{SemEval}-2017 Task 4: Sentiment Analysis in {Twitter}},
+  booktitle = {Proceedings of the 11th International Workshop on Semantic Evaluation (SemEval-2017)},
+  pages     = {502--518},
+  year      = {2017},
+  doi       = {10.18653/v1/S17-2088},
+}
+
+@inproceedings{barbieri2020tweeteval,
+  author    = {Barbieri, Francesco and Camacho-Collados, Jose and Espinosa Anke, Luis and Neves, Leonardo},
+  title     = {{TweetEval}: Unified Benchmark and Comparative Evaluation for Tweet Classification},
+  booktitle = {Findings of the Association for Computational Linguistics: EMNLP 2020},
+  pages     = {1644--1650},
+  year      = {2020},
+  doi       = {10.18653/v1/2020.findings-emnlp.148},
+}
+
+@inproceedings{barbieri2022xlmt,
+  author    = {Barbieri, Francesco and Espinosa Anke, Luis and Camacho-Collados, Jose},
+  title     = {{XLM-T}: Multilingual Language Models in {Twitter} for Sentiment Analysis and Beyond},
+  booktitle = {Proceedings of the Thirteenth Language Resources and Evaluation Conference (LREC 2022)},
+  publisher = {European Language Resources Association},
+  year      = {2022},
+  url       = {https://aclanthology.org/2022.lrec-1.27/},
+  urldate   = {2026-11-23},
+}
+
+@inproceedings{demszky2020goemotions,
+  author    = {Demszky, Dorottya and Movshovitz-Attias, Dana and Ko, Jeongwoo and Cowen, Alan and Nemade, Gaurav and Ravi, Sujith},
+  title     = {{GoEmotions}: A Dataset of Fine-Grained Emotions},
+  booktitle = {Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics},
+  pages     = {4040--4054},
+  year      = {2020},
+  doi       = {10.18653/v1/2020.acl-main.372},
+}
+
+@inproceedings{howard2018universal,
+  author    = {Howard, Jeremy and Ruder, Sebastian},
+  title     = {Universal Language Model Fine-tuning for Text Classification},
+  booktitle = {Proceedings of the 56th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)},
+  pages     = {328--339},
+  year      = {2018},
+  doi       = {10.18653/v1/P18-1031},
+}
+
+@online{vaswani2017attention,
+  author     = {Vaswani, Ashish and Shazeer, Noam and Parmar, Niki and Uszkoreit, Jakob and Jones, Llion and Gomez, Aidan N. and Kaiser, {\L}ukasz and Polosukhin, Illia},
+  title      = {Attention Is All You Need},
+  year       = {2017},
+  eprint     = {1706.03762},
+  eprinttype = {arxiv},
+  doi        = {10.48550/arXiv.1706.03762},
+}
+
+@online{liu2019roberta,
+  author     = {Liu, Yinhan and Ott, Myle and Goyal, Naman and Du, Jingfei and Joshi, Mandar and Chen, Danqi and Levy, Omer and Lewis, Mike and Zettlemoyer, Luke and Stoyanov, Veselin},
+  title      = {{RoBERTa}: A Robustly Optimized {BERT} Pretraining Approach},
+  year       = {2019},
+  eprint     = {1907.11692},
+  eprinttype = {arxiv},
+  doi        = {10.48550/arXiv.1907.11692},
+}
+
+@inproceedings{wolf2020transformers,
+  author    = {Wolf, Thomas and Debut, Lysandre and Sanh, Victor and Chaumond, Julien and Delangue, Clement and Moi, Anthony and Cistac, Pierric and Rault, Tim and Louf, Remi and Funtowicz, Morgan and Davison, Joe and Shleifer, Sam and others},
+  title     = {Transformers: State-of-the-Art Natural Language Processing},
+  booktitle = {Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing: System Demonstrations},
+  pages     = {38--45},
+  year      = {2020},
+  doi       = {10.18653/v1/2020.emnlp-demos.6},
+}
+
+% --- Opinion over time, events, games ------------------------------------------
+
+@inproceedings{asur2010predicting,
+  author    = {Asur, Sitaram and Huberman, Bernardo A.},
+  title     = {Predicting the Future with Social Media},
+  booktitle = {2010 IEEE/WIC/ACM International Conference on Web Intelligence and Intelligent Agent Technology},
+  publisher = {IEEE},
+  pages     = {492--499},
+  year      = {2010},
+  doi       = {10.1109/WI-IAT.2010.63},
+}
+
+@inproceedings{oconnor2010tweets,
+  author    = {O'Connor, Brendan and Balasubramanyan, Ramnath and Routledge, Bryan and Smith, Noah},
+  title     = {From Tweets to Polls: Linking Text Sentiment to Public Opinion Time Series},
+  booktitle = {Proceedings of the International AAAI Conference on Web and Social Media},
+  volume    = {4},
+  number    = {1},
+  pages     = {122--129},
+  year      = {2010},
+  doi       = {10.1609/icwsm.v4i1.14031},
+}
+
+@article{bollen2011twitter,
+  author       = {Bollen, Johan and Mao, Huina and Zeng, Xiaojun},
+  title        = {Twitter mood predicts the stock market},
+  journaltitle = {Journal of Computational Science},
+  volume       = {2},
+  number       = {1},
+  pages        = {1--8},
+  year         = {2011},
+  doi          = {10.1016/j.jocs.2010.12.007},
+}
+
+@article{thelwall2011sentiment,
+  author       = {Thelwall, Mike and Buckley, Kevan and Paltoglou, Georgios},
+  title        = {Sentiment in {Twitter} events},
+  journaltitle = {Journal of the American Society for Information Science and Technology},
+  volume       = {62},
+  number       = {2},
+  pages        = {406--418},
+  year         = {2011},
+  doi          = {10.1002/asi.21462},
+}
+
+@article{lin2019empirical,
+  author       = {Lin, Dayi and Bezemer, Cor-Paul and Zou, Ying and Hassan, Ahmed E.},
+  title        = {An empirical study of game reviews on the {Steam} platform},
+  journaltitle = {Empirical Software Engineering},
+  volume       = {24},
+  number       = {1},
+  pages        = {170--207},
+  year         = {2019},
+  doi          = {10.1007/s10664-018-9627-4},
+}
+
+% --- Stream processing, data systems, cloud -------------------------------------
+
+@article{akidau2015dataflow,
+  author       = {Akidau, Tyler and Bradshaw, Robert and Chambers, Craig and Chernyak, Slava and Fern{\'a}ndez-Moctezuma, Rafael J. and Lax, Reuven and McVeety, Sam and Mills, Daniel and Perry, Frances and Schmidt, Eric and Whittle, Sam},
+  title        = {The Dataflow Model: A Practical Approach to Balancing Correctness, Latency, and Cost in Massive-Scale, Unbounded, Out-of-Order Data Processing},
+  journaltitle = {Proceedings of the VLDB Endowment},
+  volume       = {8},
+  number       = {12},
+  pages        = {1792--1803},
+  year         = {2015},
+  doi          = {10.14778/2824032.2824076},
+}
+
+@article{akidau2013millwheel,
+  author       = {Akidau, Tyler and Balikov, Alex and Bekiro{\u{g}}lu, Kaya and Chernyak, Slava and Haberman, Josh and Lax, Reuven and McVeety, Sam and Mills, Daniel and Nordstrom, Paul and Whittle, Sam},
+  title        = {{MillWheel}: Fault-Tolerant Stream Processing at Internet Scale},
+  journaltitle = {Proceedings of the VLDB Endowment},
+  volume       = {6},
+  number       = {11},
+  pages        = {1033--1044},
+  year         = {2013},
+  doi          = {10.14778/2536222.2536229},
+}
+
+@article{carbone2015apache,
+  author       = {Carbone, Paris and Katsifodimos, Asterios and Ewen, Stephan and Markl, Volker and Haridi, Seif and Tzoumas, Kostas},
+  title        = {{Apache Flink}: Stream and Batch Processing in a Single Engine},
+  journaltitle = {Bulletin of the IEEE Computer Society Technical Committee on Data Engineering},
+  volume       = {38},
+  number       = {4},
+  year         = {2015},
+  url          = {http://sites.computer.org/debull/A15dec/p28.pdf},
+  urldate      = {2026-11-23},
+}
+
+@article{zaharia2016apache,
+  author       = {Zaharia, Matei and Xin, Reynold S. and Wendell, Patrick and Das, Tathagata and Armbrust, Michael and Dave, Ankur and Meng, Xiangrui and Rosen, Josh and Venkataraman, Shivaram and Franklin, Michael J. and Ghodsi, Ali and Gonzalez, Joseph and others},
+  title        = {{Apache Spark}: A Unified Engine for Big Data Processing},
+  journaltitle = {Communications of the ACM},
+  volume       = {59},
+  number       = {11},
+  pages        = {56--65},
+  year         = {2016},
+  doi          = {10.1145/2934664},
+}
+
+@inproceedings{zaharia2013discretized,
+  author    = {Zaharia, Matei and Das, Tathagata and Li, Haoyuan and Hunter, Timothy and Shenker, Scott and Stoica, Ion},
+  title     = {Discretized Streams: Fault-Tolerant Streaming Computation at Scale},
+  booktitle = {Proceedings of the Twenty-Fourth ACM Symposium on Operating Systems Principles},
+  publisher = {ACM},
+  pages     = {423--438},
+  year      = {2013},
+  doi       = {10.1145/2517349.2522737},
+}
+
+@article{wang2015building,
+  author       = {Wang, Guozhang and Koshy, Joel and Subramanian, Sriram and Paramasivam, Kartik and Zadeh, Mammad and Narkhede, Neha and Rao, Jun and Kreps, Jay and Stein, Joe},
+  title        = {Building a Replicated Logging System with {Apache Kafka}},
+  journaltitle = {Proceedings of the VLDB Endowment},
+  volume       = {8},
+  number       = {12},
+  pages        = {1654--1655},
+  year         = {2015},
+  doi          = {10.14778/2824032.2824063},
+}
+
+@article{melnik2010dremel,
+  author       = {Melnik, Sergey and Gubarev, Andrey and Long, Jing Jing and Romer, Geoffrey and Shivakumar, Shiva and Tolton, Matt and Vassilakis, Theo},
+  title        = {Dremel: Interactive Analysis of Web-Scale Datasets},
+  journaltitle = {Proceedings of the VLDB Endowment},
+  volume       = {3},
+  number       = {1--2},
+  pages        = {330--339},
+  year         = {2010},
+  doi          = {10.14778/1920841.1920886},
+}
+
+@book{kleppmann2017designing,
+  author    = {Kleppmann, Martin},
+  title     = {Designing Data-Intensive Applications},
+  subtitle  = {The Big Ideas Behind Reliable, Scalable, and Maintainable Systems},
+  publisher = {O'Reilly Media},
+  location  = {Sebastopol, CA},
+  year      = {2017},
+  isbn      = {978-1-4493-7332-0},
+}
+
+@book{lakshmanan2019google,
+  author    = {Lakshmanan, Valliappa and Tigani, Jordan},
+  title     = {Google {BigQuery}},
+  subtitle  = {The Definitive Guide},
+  publisher = {O'Reilly Media},
+  location  = {Sebastopol, CA},
+  year      = {2019},
+  isbn      = {978-1-4920-4446-8},
+}
+
+@article{armbrust2010view,
+  author       = {Armbrust, Michael and Fox, Armando and Griffith, Rean and Joseph, Anthony D. and Katz, Randy and Konwinski, Andy and Lee, Gunho and Patterson, David and Rabkin, Ariel and Stoica, Ion and Zaharia, Matei},
+  title        = {A View of Cloud Computing},
+  journaltitle = {Communications of the ACM},
+  volume       = {53},
+  number       = {4},
+  pages        = {50--58},
+  year         = {2010},
+  doi          = {10.1145/1721654.1721672},
+}
+
+@techreport{mell2011nist,
+  author      = {Mell, Peter and Grance, Timothy},
+  title       = {The {NIST} Definition of Cloud Computing},
+  institution = {National Institute of Standards and Technology},
+  type        = {Special Publication},
+  number      = {800-145},
+  year        = {2011},
+  doi         = {10.6028/NIST.SP.800-145},
+}
+
+% --- MLOps -----------------------------------------------------------------------
+
+@inproceedings{sculley2015hidden,
+  author    = {Sculley, D. and Holt, Gary and Golovin, Daniel and Davydov, Eugene and Phillips, Todd and Ebner, Dietmar and Chaudhary, Vinay and Young, Michael and Crespo, Jean-Fran{\c{c}}ois and Dennison, Dan},
+  title     = {Hidden Technical Debt in Machine Learning Systems},
+  booktitle = {Advances in Neural Information Processing Systems 28},
+  year      = {2015},
+  url       = {https://papers.nips.cc/paper/2015/hash/86df7dcfd896fcaf2674f757a2463eba-Abstract.html},
+  urldate   = {2026-11-23},
+}
+
+@article{kreuzberger2023machine,
+  author       = {Kreuzberger, Dominik and K{\"u}hl, Niklas and Hirschl, Sebastian},
+  title        = {Machine Learning Operations ({MLOps}): Overview, Definition, and Architecture},
+  journaltitle = {IEEE Access},
+  volume       = {11},
+  pages        = {31866--31879},
+  year         = {2023},
+  doi          = {10.1109/ACCESS.2023.3262138},
+}
+
+@inproceedings{amershi2019software,
+  author    = {Amershi, Saleema and Begel, Andrew and Bird, Christian and DeLine, Robert and Gall, Harald and Kamar, Ece and Nagappan, Nachiappan and Nushi, Besmira and Zimmermann, Thomas},
+  title     = {Software Engineering for Machine Learning: A Case Study},
+  booktitle = {2019 IEEE/ACM 41st International Conference on Software Engineering: Software Engineering in Practice (ICSE-SEIP)},
+  publisher = {IEEE},
+  pages     = {291--300},
+  year      = {2019},
+  doi       = {10.1109/ICSE-SEIP.2019.00042},
+}
+
+@inproceedings{breck2017ml,
+  author    = {Breck, Eric and Cai, Shanqing and Nielsen, Eric and Salib, Michael and Sculley, D.},
+  title     = {The {ML} Test Score: A Rubric for {ML} Production Readiness and Technical Debt Reduction},
+  booktitle = {2017 IEEE International Conference on Big Data (Big Data)},
+  publisher = {IEEE},
+  pages     = {1123--1132},
+  year      = {2017},
+  doi       = {10.1109/BigData.2017.8258038},
+}
+
+@article{zaharia2018accelerating,
+  author       = {Zaharia, Matei and Chen, Andrew and Davidson, Aaron and Ghodsi, Ali and Hong, Sue Ann and Konwinski, Andy and Murching, Siddharth and Nykodym, Tomas and Ogilvie, Paul and Parkhe, Mani and Xie, Fen and Zumar, Corey},
+  title        = {Accelerating the Machine Learning Lifecycle with {MLflow}},
+  journaltitle = {Bulletin of the IEEE Computer Society Technical Committee on Data Engineering},
+  volume       = {41},
+  number       = {4},
+  year         = {2018},
+  url          = {http://sites.computer.org/debull/A18dec/p39.pdf},
+  urldate      = {2026-11-23},
+}
+
+@book{huyen2022designing,
+  author    = {Huyen, Chip},
+  title     = {Designing Machine Learning Systems},
+  subtitle  = {An Iterative Process for Production-Ready Applications},
+  publisher = {O'Reilly Media},
+  location  = {Sebastopol, CA},
+  year      = {2022},
+  isbn      = {978-1-0981-0796-3},
+}
+
+% --- Infrastructure as code, visualisation ---------------------------------------
+
+@book{morris2021infrastructure,
+  author    = {Morris, Kief},
+  title     = {Infrastructure as Code},
+  subtitle  = {Dynamic Systems for the Cloud Age},
+  edition   = {2},
+  publisher = {O'Reilly Media},
+  location  = {Sebastopol, CA},
+  year      = {2021},
+  isbn      = {978-1-0981-1467-1},
+}
+
+@book{brikman2022terraform,
+  author    = {Brikman, Yevgeniy},
+  title     = {Terraform: Up and Running},
+  subtitle  = {Writing Infrastructure as Code},
+  edition   = {3},
+  publisher = {O'Reilly Media},
+  location  = {Sebastopol, CA},
+  year      = {2022},
+  isbn      = {978-1-0981-1674-3},
+}
+
+@article{rahman2019systematic,
+  author       = {Rahman, Akond and Mahdavi-Hezaveh, Rezvan and Williams, Laurie},
+  title        = {A systematic mapping study of infrastructure as code research},
+  journaltitle = {Information and Software Technology},
+  volume       = {108},
+  pages        = {65--77},
+  year         = {2019},
+  doi          = {10.1016/j.infsof.2018.12.004},
+}
+
+@book{few2006information,
+  author    = {Few, Stephen},
+  title     = {Information Dashboard Design},
+  subtitle  = {The Effective Visual Communication of Data},
+  publisher = {O'Reilly Media},
+  location  = {Sebastopol, CA},
+  year      = {2006},
+  isbn      = {978-0-596-10016-2},
+}
+
+% --- Law, platforms and data sources ---------------------------------------------
+
+@misc{rodo2016,
+  title   = {Rozporządzenie Parlamentu Europejskiego i Rady ({UE}) 2016/679 z dnia 27 kwietnia 2016~r. w sprawie ochrony osób fizycznych w związku z przetwarzaniem danych osobowych i w sprawie swobodnego przepływu takich danych oraz uchylenia dyrektywy 95/46/{WE} (ogólne rozporządzenie o ochronie danych)},
+  note    = {Dz.\,Urz. UE L 119 z 4.05.2016},
+  year    = {2016},
+  url     = {https://eur-lex.europa.eu/eli/reg/2016/679/oj},
+  urldate = {2026-11-23},
+}
+
+@online{docyoutubecommentthreads,
+  organization = {Google for Developers},
+  title        = {CommentThreads: list. {YouTube} Data {API}},
+  url          = {https://developers.google.com/youtube/v3/docs/commentThreads/list},
+  urldate      = {2026-11-23},
+}
+
+@online{docyoutubequota,
+  organization = {Google for Developers},
+  title        = {Quota Calculator. {YouTube} Data {API}},
+  url          = {https://developers.google.com/youtube/v3/determine_quota_cost},
+  urldate      = {2026-11-23},
+}
+
+@online{docsteamreviews,
+  organization = {Valve Corporation},
+  title        = {User Reviews -- Get List. Steamworks Documentation},
+  url          = {https://partner.steamgames.com/doc/store/getreviews},
+  urldate      = {2026-11-23},
+}
+
+@online{redditdataapi,
+  organization = {Reddit, Inc.},
+  title        = {Data {API} Terms},
+  url          = {https://www.redditinc.com/policies/data-api-terms},
+  urldate      = {2026-11-23},
+}
+
+@online{clapaimultilingualsentiment,
+  organization = {clapAI},
+  title        = {{MultiLingualSentiment}. Datasets at Hugging Face},
+  url          = {https://huggingface.co/datasets/clapAI/MultiLingualSentiment},
+  urldate      = {2026-11-23},
+}
+
+@online{docxlmrbase,
+  organization = {Hugging Face},
+  title        = {{FacebookAI/\allowbreak xlm-roberta-base}},
+  url          = {https://huggingface.co/FacebookAI/xlm-roberta-base},
+  urldate      = {2026-11-23},
+}
+
+@online{langdetect,
+  title   = {langdetect: Port of {Google's} language-detection library to {Python}},
+  url     = {https://github.com/Mimino666/langdetect},
+  urldate = {2026-11-23},
+}
+
+@online{popvibecheck,
+  author  = {Mazuro, Marcin and Lewandowski, Oskar and Kozak, Kacper},
+  title   = {pop-vibe-check: repozytorium projektu},
+  url     = {https://github.com/MarcinMazuro/pop-vibe-check},
+  urldate = {2026-11-23},
+}
+
+@online{conventionalcommits,
+  title   = {Conventional Commits 1.0.0},
+  url     = {https://www.conventionalcommits.org/en/v1.0.0/},
+  urldate = {2026-11-23},
+}
+
+% --- Product documentation: Google Cloud -----------------------------------------
+
+@online{docpubsub,
+  organization = {Google Cloud},
+  title        = {What is {Pub/Sub}?},
+  url          = {https://cloud.google.com/pubsub/docs/overview},
+  urldate      = {2026-11-23},
+}
+
+@online{docpubsubordering,
+  organization = {Google Cloud},
+  title        = {Order messages. {Pub/Sub}},
+  url          = {https://cloud.google.com/pubsub/docs/ordering},
+  urldate      = {2026-11-23},
+}
+
+@online{docdataflow,
+  organization = {Google Cloud},
+  title        = {Dataflow overview},
+  url          = {https://cloud.google.com/dataflow/docs/overview},
+  urldate      = {2026-11-23},
+}
+
+@online{docdataflowstreamingengine,
+  organization = {Google Cloud},
+  title        = {Use Streaming Engine for streaming jobs. Cloud Dataflow},
+  url          = {https://cloud.google.com/dataflow/docs/streaming-engine},
+  urldate      = {2026-11-23},
+}
+
+@online{docflextemplates,
+  organization = {Google Cloud},
+  title        = {Build and run an example Flex Template. Cloud Dataflow},
+  url          = {https://cloud.google.com/dataflow/docs/guides/templates/using-flex-templates},
+  urldate      = {2026-11-23},
+}
+
+@online{docbigquery,
+  organization = {Google Cloud},
+  title        = {{BigQuery} overview},
+  url          = {https://cloud.google.com/bigquery/docs/introduction},
+  urldate      = {2026-11-23},
+}
+
+@online{docauthorizedviews,
+  organization = {Google Cloud},
+  title        = {Authorized views. {BigQuery}},
+  url          = {https://cloud.google.com/bigquery/docs/authorized-views},
+  urldate      = {2026-11-23},
+}
+
+@online{docdataform,
+  organization = {Google Cloud},
+  title        = {Dataform overview},
+  url          = {https://cloud.google.com/dataform/docs/overview},
+  urldate      = {2026-11-23},
+}
+
+@online{doccloudrunjobs,
+  organization = {Google Cloud},
+  title        = {Create jobs. Cloud Run},
+  url          = {https://cloud.google.com/run/docs/create-jobs},
+  urldate      = {2026-11-23},
+}
+
+@online{doccloudstorage,
+  organization = {Google Cloud},
+  title        = {Cloud Storage overview},
+  url          = {https://cloud.google.com/storage/docs/introduction},
+  urldate      = {2026-11-23},
+}
+
+@online{doccloudbuild,
+  organization = {Google Cloud},
+  title        = {Overview of Cloud Build},
+  url          = {https://cloud.google.com/build/docs/overview},
+  urldate      = {2026-11-23},
+}
+
+@online{dociap,
+  organization = {Google Cloud},
+  title        = {Identity-Aware Proxy overview},
+  url          = {https://cloud.google.com/iap/docs/concepts-overview},
+  urldate      = {2026-11-23},
+}
+
+@online{docvertexdeploy,
+  organization = {Google Cloud},
+  title        = {Deploy a model to an endpoint},
+  url          = {https://cloud.google.com/vertex-ai/docs/general/deployment},
+  urldate      = {2026-11-23},
+}
+
+@online{docvertexworkbench,
+  organization = {Google Cloud},
+  title        = {Introduction to Agent Platform Workbench},
+  url          = {https://cloud.google.com/vertex-ai/docs/workbench/introduction},
+  urldate      = {2026-11-23},
+}
+
+@online{docvertexexperiments,
+  organization = {Google Cloud},
+  title        = {Introduction to {Gemini} Enterprise Agent Platform Experiments},
+  url          = {https://cloud.google.com/vertex-ai/docs/experiments/intro-vertex-ai-experiments},
+  urldate      = {2026-11-23},
+}
+
+@online{doclookerstudio,
+  organization = {Google Cloud},
+  title        = {Data Studio documentation},
+  url          = {https://cloud.google.com/looker/docs/studio},
+  urldate      = {2026-11-23},
+}
+
+% --- Product documentation: other vendors and projects ---------------------------
+
+@online{docbeamguide,
+  organization = {The Apache Software Foundation},
+  title        = {Beam Programming Guide},
+  url          = {https://beam.apache.org/documentation/programming-guide/},
+  urldate      = {2026-11-23},
+}
+
+@online{dockafka,
+  organization = {The Apache Software Foundation},
+  title        = {Apache Kafka documentation},
+  url          = {https://kafka.apache.org/documentation/},
+  urldate      = {2026-11-23},
+}
+
+@online{docflink,
+  organization = {The Apache Software Foundation},
+  title        = {Apache Flink Documentation},
+  url          = {https://nightlies.apache.org/flink/flink-docs-stable/},
+  urldate      = {2026-11-23},
+}
+
+@online{docsparkstreaming,
+  organization = {The Apache Software Foundation},
+  title        = {Structured Streaming Programming Guide},
+  url          = {https://spark.apache.org/docs/latest/streaming/index.html},
+  urldate      = {2026-11-23},
+}
+
+@online{docmlflowtracking,
+  organization = {MLflow},
+  title        = {{ML} Experiment Tracking},
+  url          = {https://mlflow.org/docs/latest/ml/tracking/},
+  urldate      = {2026-11-23},
+}
+
+@online{dockubeflow,
+  organization = {Kubeflow},
+  title        = {Introduction},
+  url          = {https://www.kubeflow.org/docs/started/introduction/},
+  urldate      = {2026-11-23},
+}
+
+@online{docterraform,
+  organization = {HashiCorp},
+  title        = {What is {Terraform}},
+  url          = {https://developer.hashicorp.com/terraform/intro},
+  urldate      = {2026-11-23},
+}
+
+@online{docpulumi,
+  organization = {Pulumi},
+  title        = {Pulumi Docs},
+  url          = {https://www.pulumi.com/docs/},
+  urldate      = {2026-11-23},
+}
+
+@online{doccloudformation,
+  organization = {Amazon Web Services},
+  title        = {What is {CloudFormation}?},
+  url          = {https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/Welcome.html},
+  urldate      = {2026-11-23},
+}
+
+@online{docdbt,
+  organization = {dbt Labs},
+  title        = {What is dbt?},
+  url          = {https://docs.getdbt.com/docs/introduction},
+  urldate      = {2026-11-23},
+}
+
+@online{docgrafana,
+  organization = {Grafana Labs},
+  title        = {Grafana {OSS} and Enterprise documentation},
+  url          = {https://grafana.com/docs/grafana/latest/},
+  urldate      = {2026-11-23},
+}
+
+@online{docpowerbi,
+  organization = {Microsoft},
+  title        = {What is {Power BI}?},
+  url          = {https://learn.microsoft.com/en-us/power-bi/fundamentals/power-bi-overview},
+  urldate      = {2026-11-23},
+}
+
+@online{docstreamlit,
+  title        = {Streamlit},
+  url          = {https://streamlit.io/},
+  urldate      = {2026-11-23},
 }
