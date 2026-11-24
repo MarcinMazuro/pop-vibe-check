@@ -1,6 +1,11 @@
 % Shared preamble: packages and typography for the thesis AND the playground,
 % so whatever works in the playground works in the thesis.
-% Page geometry is a placeholder until the PG editorial guidelines are in.
+% Typography follows the official PG template (szablonPG.cls, 2019, after
+% Zarządzenie Rektora PG nr 22/2018): Helvetica-like 10 pt, line spacing 1.5,
+% margins 2.5 cm + 1 cm binding, chapter titles in capitals, "Rys." captions.
+% The class itself is not used: it is pdfLaTeX/cp1250 and clashes with
+% biblatex, acro and todonotes; its settings are copied here instead.
+% The font size (10pt) is a class option in main.tex.
 %
 % A document may switch author notes off BEFORE loading this file:
 %   \newif\ifworkingdraft \workingdraftfalse
@@ -17,9 +22,11 @@
 \usepackage{amsmath}
 \usepackage{fontspec}
 \usepackage{unicode-math}
-\setmainfont{TeX Gyre Termes}
+% PG: Arial; TeX Gyre Heros is the free Helvetica clone the template uses.
+\setmainfont{TeX Gyre Heros}
 \setsansfont{TeX Gyre Heros}
 \setmonofont{DejaVu Sans Mono}[Scale=MatchLowercase]
+% Serif maths with sans text, as in the PG template.
 \setmathfont{TeX Gyre Termes Math}
 \usepackage[autostyle]{csquotes}   % \enquote{...} -> „...”
 \usepackage{microtype}
@@ -29,26 +36,64 @@
 \usepackage{luavlna}
 \singlechars{polish}{AaIiOoUuWwZz}
 
-% --- Page (placeholder until the PG guidelines) -------------------------------
-\usepackage[a4paper, margin=2.5cm, marginparwidth=2.1cm]{geometry}
+% PG names of the lists; babel resets them at \begin{document}, hence \addto.
+\addto\captionspolish{%
+  \renewcommand{\figurename}{Rys.}%
+  \renewcommand{\listfigurename}{Wykaz rysunków}%
+  \renewcommand{\listtablename}{Wykaz tabel}%
+}
+
+% --- Page (PG) ----------------------------------------------------------------
+\usepackage[a4paper, margin=2.5cm, bindingoffset=1cm, marginparwidth=2.1cm]{geometry}
 \usepackage[onehalfspacing]{setspace}
 \usepackage{xcolor}
+\setlength{\parindent}{0.9cm}
+
+% No single lines of a paragraph at the top or bottom of a page.
+\widowpenalty=10000
+\clubpenalty=10000
 
 \usepackage{fancyhdr}
 \fancypagestyle{plain}{%
   \fancyhf{}%
-  \fancyfoot[C]{\thepage}%
+  \fancyfoot[C]{\fontsize{9pt}{9pt}\selectfont\thepage}%
   \ifworkingdraft\fancyfoot[R]{\scriptsize\color{gray}wersja robocza, \today}\fi
   \renewcommand{\headrulewidth}{0pt}%
 }
 \pagestyle{plain}
 
-% --- Headings (Polish convention: a full stop after the number) --------------
+% --- Headings (PG: chapter 12 pt bold capitals, section 11 pt bold italic,
+% subsection italic; a full stop after the number) ---------------------------
 \usepackage{titlesec}
-\titleformat{\chapter}[hang]{\normalfont\huge\bfseries}{\thechapter.}{0.6em}{}
-\titlespacing*{\chapter}{0pt}{0pt}{1.5em}
-\titleformat{\section}{\normalfont\Large\bfseries}{\thesection.}{0.6em}{}
-\titleformat{\subsection}{\normalfont\large\bfseries}{\thesubsection.}{0.6em}{}
+\titleformat{\chapter}[hang]
+  {\normalfont\fontsize{12pt}{24pt}\selectfont\bfseries}
+  {\thechapter.}{1em}{\MakeUppercase}
+\titlespacing{\chapter}{0pt}{0pt}{6pt}
+\titleformat{\section}
+  {\normalfont\fontsize{11pt}{22pt}\selectfont\bfseries\itshape}
+  {\thesection.}{1em}{}
+\titlespacing{\section}{0pt}{6pt}{6pt}
+\titleformat{\subsection}
+  {\normalfont\itshape}
+  {\thesubsection.}{1em}{}
+\titlespacing{\subsection}{0pt}{6pt}{6pt}
+
+% Table of contents: numbers with a full stop, dotted leaders, chapters in
+% capitals. The title is passed to \MakeUppercase, so the TOC links only the
+% page numbers (linktoc=page in hyperref below).
+\usepackage{titletoc}
+\titlecontents{chapter}[1.5em]{}
+  {\contentslabel[\thecontentslabel.]{1.5em}\MakeUppercase}
+  {\hspace*{-1.5em}\MakeUppercase}
+  {\dotfill\contentspage}
+\titlecontents{section}[4em]{}
+  {\contentslabel[\thecontentslabel.]{2.5em}}
+  {\hspace*{-2.5em}}
+  {\dotfill\contentspage}
+\titlecontents{subsection}[7.5em]{}
+  {\contentslabel[\thecontentslabel.]{3.5em}}
+  {\hspace*{-3.5em}}
+  {\dotfill\contentspage}
 
 % --- Floats, tables, numbers ---------------------------------------------------
 \usepackage{graphicx}
@@ -56,13 +101,30 @@
 \usepackage{booktabs}
 \usepackage{tabularx}
 \usepackage{caption}
-\captionsetup{font=small, labelfont=bf, labelsep=period}
-\captionsetup[table]{position=above, skip=6pt}  % table caption ABOVE
-\captionsetup[figure]{position=below}           % figure caption BELOW
+% PG: "Rys. 1.1. Opis", label not bold, small type, single line spacing.
+\captionsetup{font={small, stretch=1.0}, labelsep=period, skip=2pt}
+\captionsetup[table]{position=above}                        % caption ABOVE
+\captionsetup[figure]{position=below, justification=centering} % caption BELOW
+\setlength{\intextsep}{3mm}       % space between floats and text
+\setlength{\textfloatsep}{3mm}
 \usepackage{siunitx}
-\sisetup{output-decimal-marker={,}, group-separator={\,}, group-minimum-digits=4}
+\sisetup{output-decimal-marker={,}, group-separator={\,}, group-minimum-digits=4,
+  mode=text}   % numbers in the text font (Heros), not the serif maths font
 \usepackage{enumitem}
+\setlist{nosep}                               % PG: compact lists
+\setlist[enumerate, 1]{label=\arabic*.}
+\setlist[enumerate, 2]{label=\alph*)}
 \usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, fit, calc}
+% Charts drawn from the project's data (bars, lines); text in them stays at
+% \footnotesize or larger so it is never under the PG minimum of 6 pt.
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18,
+  % Polish numbers on axes: decimal comma, thin space for thousands, digits
+  % in the text font like \num.
+  /pgf/number format/use comma,
+  /pgf/number format/1000 sep={\,},
+  /pgf/number format/assume math mode=true}
 \usepackage{pdfpages}
 
 % --- Code ----------------------------------------------------------------------
@@ -76,12 +138,24 @@
   frame=tb, breaklines=true, showstringspaces=false,
   columns=fullflexible, keepspaces=true, captionpos=t,
 }
+% Characters above U+00FF in code files leak out of skipped lines under
+% LuaLaTeX; while a listing is read they are replaced with ASCII
+% (config/listings-ascii.lua).
+\directlua{dofile(kpse.find_file("listings-ascii.lua"))}
+\makeatletter
+\lst@AddToHook{PreInit}{\directlua{pvc_listings_on()}}
+\lst@AddToHook{DeInit}{\directlua{pvc_listings_off()}}
+\makeatother
 \renewcommand{\lstlistingname}{Listing}
-\renewcommand{\lstlistlistingname}{Spis listingów}
+\renewcommand{\lstlistlistingname}{Wykaz listingów}
 \newcommand{\code}{\lstinline[basicstyle=\ttfamily\small]}
 
 % --- Bibliography (style is a placeholder until the supervisor decides) -------
 \usepackage[backend=biber, style=numeric-comp, sorting=none]{biblatex}
+% Let long URLs break anywhere instead of running into the margin.
+\setcounter{biburlnumpenalty}{100}
+\setcounter{biburlucpenalty}{100}
+\setcounter{biburllcpenalty}{100}
 
 % --- Acronyms: variant B ------------------------------------------------------
 % \ac{x} always prints the short form. Write the first use out by hand in the
@@ -101,6 +175,8 @@
 \newcommand{\supervisor}[1]{\todo[color=red!25, author=Promotor]{#1}}
 
 % --- Links (last) -------------------------------------------------------------
-% hypertexnames=false: the title page and the table of contents are both
-% "page 1", which would otherwise give duplicate link targets.
-\usepackage[unicode, hidelinks, hypertexnames=false]{hyperref}
+% hypertexnames=false: the MojaPG pages and the first pages of the thesis
+% could otherwise give duplicate link targets.
+% linktoc=page: the TOC titles are uppercased (see titletoc above), which must
+% not touch a link around them.
+\usepackage[unicode, hidelinks, hypertexnames=false, linktoc=page]{hyperref}

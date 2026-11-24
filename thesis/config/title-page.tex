@@ -1,5 +1,6 @@
-% Title page. WETI requires the one generated in MojaPG: save it as
-% thesis/front/title-page-mojapg.pdf and it replaces this placeholder.
+% Title page and statement. WETI requires the ones generated in MojaPG: save
+% the title page as thesis/front/title-page-mojapg.pdf and it replaces this
+% placeholder.
 
 \IfFileExists{front/title-page-mojapg.pdf}{%
   \includepdf[pages=1]{front/title-page-mojapg.pdf}%
@@ -34,4 +35,23 @@
       {\small\color{gray} Zastępcza strona tytułowa — wersja robocza\par}
     \fi
   \end{titlepage}
+}
+
+% Statement (oświadczenie), also from MojaPG, right after the title page:
+% save it as thesis/front/statement-mojapg.pdf. Until then the working draft
+% shows a placeholder page so the page count stays honest.
+\IfFileExists{front/statement-mojapg.pdf}{%
+  \includepdf[pages=-]{front/statement-mojapg.pdf}%
+}{%
+  \ifworkingdraft
+    \begin{titlepage}
+      \centering
+      \vspace*{\fill}
+      {\large Oświadczenie\par}
+      \vspace{0.5em}
+      {\small\color{gray} Miejsce na oświadczenie z MojaPG\\
+        (front/statement-mojapg.pdf) — wersja robocza\par}
+      \vspace*{\fill}
+    \end{titlepage}
+  \fi
 }

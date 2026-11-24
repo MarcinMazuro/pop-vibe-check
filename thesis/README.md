@@ -24,6 +24,7 @@ thesis/            ← open THIS folder in VS Code
     title-page.tex     placeholder title page
     latexindent.yaml   formatting rules
   docs/              how the thesis is assessed (review-criteria.md)
+                     and editorial rules (editorial-rules.md)
 ```
 
 The rest of the repository (`dataflow/`, `nlp/`, `docs/`, …) is the project
@@ -53,8 +54,11 @@ Check: open `playground/main.tex`; the PDF appears in a tab next to it.
 
 ## Conventions
 
-- **Font:** one font for everything — TeX Gyre Termes (Times-like), 12 pt,
-  set in `config/preamble.tex`. Do not change fonts in the text; use
+- **Layout per the PG template** (`szablonPG.cls`, Zarządzenie Rektora PG
+  22/2018), ported into `config/preamble.tex`: TeX Gyre Heros
+  (Helvetica/Arial-like) 10 pt, line spacing 1.5, margins 2.5 cm + 1 cm
+  binding, chapter titles in capitals, figure captions „Rys. 1.1.”.
+- **Font:** one font for everything, set in `config/preamble.tex`. Do not change fonts in the text; use
   `\emph{…}` for emphasis and `\textbf{…}` sparingly.
 - **Polish typography:** quotes `\enquote{tekst}` → „tekst”; a dash in a
   sentence ` -- `; ranges `10--20`; decimals `\num{0.87}` → 0,87; units
@@ -102,6 +106,7 @@ pull request into `inzynierka` (not `main` — `main` is the project code).
 
 ## Still to settle
 
-- Page layout, font size and title page per the PG guidelines (MojaPG).
+- Confirm the PG template (2019) is still what WETI expects; add the MojaPG
+  title page and statement PDFs to `front/`.
 - Citation style (now numeric `[1]`) — ask the supervisor.
 - The chapter outline and who writes what.
