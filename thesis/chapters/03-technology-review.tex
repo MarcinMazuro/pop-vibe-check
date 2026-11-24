@@ -70,11 +70,11 @@ Narzędziem, które najczęściej pojawia się w tym kontekście, jest MLflow.
 Jego twórcy z firmy Databricks opisali je jako otwartą platformę, która rejestruje parametry, metryki i artefakty przebiegów trenowania, pakuje modele w jednolitym formacie i prowadzi ich rejestr~\cite{zaharia2018accelerating}.
 Przebiegi można zapisywać w lokalnym katalogu albo na serwerze śledzenia z bazą danych i magazynem artefaktów~\cite{docmlflowtracking}.
 Alternatywą jest Kubeflow, platforma potoków uczenia maszynowego działająca na Kubernetesie~\cite{dockubeflow}, która daje więcej możliwości, ale wymaga klastra.
-W ekosystemie Google rolę śledzenia eksperymentów pełni też usługa zarządzana Vertex AI Experiments~\cite{docvertexexperiments}.
+W ekosystemie Google rolę śledzenia eksperymentów pełni też usługa zarządzana Agent Platform Experiments~\cite{docvertexexperiments}.
 
 Wybraliśmy MLflow, bo jest niezależny od dostawcy chmury, wymaga najmniej infrastruktury i jest wprost wymieniony w temacie pracy jako platforma do zarządzania cyklem życia modelu.
-Do trenowania i serwowania użyliśmy natomiast usług Vertex AI: środowiska notatników Workbench~\cite{docvertexworkbench}, rejestru modeli i punktu końcowego, który udostępnia model przez sieć~\cite{docvertexdeploy}.
-W dokumentacji Google usługi te występują w 2026~r. także pod nazwą Agent Platform; w pracy używamy nazwy Vertex AI, pod którą występują w konsoli i w interfejsie programistycznym projektu.
+Do trenowania i serwowania użyliśmy natomiast usług Agent Platform: środowiska notatników Workbench~\cite{docvertexworkbench}, rejestru modeli i punktu końcowego, który udostępnia model przez sieć~\cite{docvertexdeploy}.
+Usługi te nosiły wcześniej nazwę Vertex AI i od niej pochodzi identyfikator \code{vertex}, którego używamy w kodzie projektu.
 
 \section{Usługi chmurowe do analityki danych}
 \label{sec:tech-cloud}
@@ -122,10 +122,10 @@ Few zaleca, aby panel mieścił się na jednym ekranie, pokazywał liczby w kont
 Z tych zasad wynikają nasze wymagania wobec panelu: przy każdym wyniku liczność danych, wspólne kolory klas wydźwięku i zaznaczone daty wydarzeń.
 
 Do budowy panelu rozważaliśmy cztery narzędzia.
-Looker Studio jest bezpłatnym narzędziem Google z wbudowanym połączeniem z BigQuery, które potrafi wykonywać zapytania z uprawnieniami osoby oglądającej raport~\cite{doclookerstudio}.
+Data Studio jest bezpłatnym narzędziem Google z wbudowanym połączeniem z BigQuery, które potrafi wykonywać zapytania z uprawnieniami osoby oglądającej raport~\cite{doclookerstudio}.
 Grafana jest nastawiona na szeregi czasowe i monitorowanie systemów~\cite{docgrafana}, a Power BI to rozbudowane narzędzie biznesowe firmy Microsoft~\cite{docpowerbi}.
 Streamlit pozwala zbudować panel jako aplikację w języku Python~\cite{docstreamlit}.
-Z tej ostatniej możliwości skorzystaliśmy przejściowo, zanim powstał raport w Looker Studio; aplikacja działała w Cloud Run za usługą Identity-Aware Proxy (\ac{iap})~\cite{dociap}, a 2 listopada 2026~r. zastąpił ją raport w Looker Studio.
+Z tej ostatniej możliwości skorzystaliśmy przejściowo, zanim powstał raport w Data Studio; aplikacja działała w Cloud Run za usługą Identity-Aware Proxy (\ac{iap})~\cite{dociap}, a 2 listopada 2026~r. zastąpił ją raport w Data Studio.
 
 \section{Zestawienie wybranych technologii}
 \label{sec:tech-summary}
@@ -155,13 +155,13 @@ Jedynym zasobem, który działa i kosztuje stale, jest baza danych serwera MLflo
     \hline
     Model językowy           & XLM-RoBERTa (dostrojony)                & DistilBERT, metody słownikowe, LLM & wielojęzyczność, koszt, powtarzalność                                            \\
     \hline
-    Śledzenie eksperymentów  & MLflow                                  & Kubeflow, Vertex AI Experiments & niezależność od dostawcy, mała infrastruktura, wymóg tematu                       \\
+    Śledzenie eksperymentów  & MLflow                                  & Kubeflow, Agent Platform Experiments & niezależność od dostawcy, mała infrastruktura, wymóg tematu                       \\
     \hline
-    Trenowanie i serwowanie  & Vertex AI (Workbench, rejestr, punkt końcowy) & własne maszyny wirtualne & usługa zarządzana, model poza obrazem potoku                                       \\
+    Trenowanie i serwowanie  & Agent Platform (Workbench, rejestr, punkt końcowy) & własne maszyny wirtualne & usługa zarządzana, model poza obrazem potoku                                       \\
     \hline
     Warstwa raportowa        & Dataform                                & dbt, SQL w Terraform         & działa w BigQuery, testy danych przy każdym wdrożeniu                                \\
     \hline
-    Panel                    & Looker Studio                           & Grafana, Power BI, Streamlit & bezpłatny, połączenie z BigQuery, uprawnienia oglądającego                           \\
+    Panel                    & Data Studio                             & Grafana, Power BI, Streamlit & bezpłatny, połączenie z BigQuery, uprawnienia oglądającego                           \\
     \hline
     Infrastruktura           & Terraform                               & Pulumi, CloudFormation       & dojrzały dostawca GCP, przegląd planu zmian, parametryzacja                          \\
     \hline

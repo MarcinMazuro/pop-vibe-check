@@ -21,9 +21,9 @@ Pełny zbiór przechodzi przez system w nieco ponad dwie godziny, a jedno odtwor
 
 Czwarte zadanie, model z cyklem życia zarządzanym zgodnie z praktykami \ac{mlops}, zrealizowaliśmy, choć droga była dłuższa, niż planowaliśmy.
 Angielski DistilBERT okazał się bezużyteczny dla danych wielojęzycznych, więc zastąpiliśmy go modelem XLM-R, dostrojonym w dwóch etapach, w całości na procesorach.
-Przebiegi trenowania są zarejestrowane na serwerze MLflow, wersje modeli w rejestrze Vertex AI, a o zastąpieniu wersji decydują spisane przed treningiem warunki.
+Przebiegi trenowania są zarejestrowane na serwerze MLflow, wersje modeli w rejestrze Agent Platform, a o zastąpieniu wersji decydują spisane przed treningiem warunki.
 
-Piąte zadanie, warstwę raportową i panel, zrealizowaliśmy w postaci widoków Dataform testowanych przy każdym wdrożeniu i raportu Looker Studio z trzema stronami.
+Piąte zadanie, warstwę raportową i panel, zrealizowaliśmy w postaci widoków Dataform testowanych przy każdym wdrożeniu i raportu Data Studio z trzema stronami.
 Szóste, ocenę jakości, powtarzalności, wydajności i kosztów, zrealizowaliśmy w większości: brakuje pomiaru przepustowości z prawdziwym modelem i modelu kosztów dla większych premier.
 Siódme, studium przypadku, pokazało, że system wychwytuje zmiany nastrojów, które potwierdzają niezależne od modelu deklaracje autorów recenzji: wzrost w okresie uznania krytyków i spadek wokół grudniowych gal.
 
@@ -47,7 +47,7 @@ Model wciąż słabo rozpoznaje negatywne opinie wyrażone pośrednio, ironią a
 Trzecią grupą są ograniczenia architektury.
 Wydawca odtworzeń, publikując pod jednym kluczem porządkującym, przesyła około 50 komunikatów na sekundę; to celowa cena za globalną kolejność, ale ogranicza tempo każdego odtworzenia.
 System analizuje dane historyczne odtwarzane jako strumień, a nie dane napływające na bieżąco.
-Raport Looker Studio istnieje poza repozytorium, a środowisko produkcyjne nie ma jeszcze ani widoków Dataform, ani raportu.
+Raport Data Studio istnieje poza repozytorium, a środowisko produkcyjne nie ma jeszcze ani widoków Dataform, ani raportu.
 Konfiguracja wydarzeń i filmów jest częścią obrazów kolektorów, więc nowe studium przypadku wymaga ich przebudowania.
 
 \section{Kierunki dalszych prac}

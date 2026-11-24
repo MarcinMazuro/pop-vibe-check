@@ -58,7 +58,7 @@ Każda faza projektu kończyła się dokumentem opisującym, co zbudowano, co zw
 \label{sec:impl-infrastructure}
 
 Infrastrukturę opisuje 15 modułów Terraform, złożonych w kompozycji środowiska \code{terraform/envs/dev}.
-Moduły odpowiadają rodzajom zasobów: sieci, kontom usług, magazynom, zbiorom BigQuery, tematom Pub/Sub, zadaniom Cloud Run, potokowi Dataflow, środowisku Vertex AI, serwerowi MLflow, projektowi Dataform, wyzwalaczom Cloud Build, alarmom i budżetowi.
+Moduły odpowiadają rodzajom zasobów: sieci, kontom usług, magazynom, zbiorom BigQuery, tematom Pub/Sub, zadaniom Cloud Run, potokowi Dataflow, środowisku Agent Platform, serwerowi MLflow, projektowi Dataform, wyzwalaczom Cloud Build, alarmom i budżetowi.
 Nazwę każdego zasobu poprzedza przedrostek, w studium przypadku \code{co}, od tytułu gry, a kończy nazwa środowiska, na przykład \code{co-raw-archive-dev}.
 Dla kolejnej premiery wystarczy inny przedrostek, a Terraform utworzy obok drugi, niezależny komplet zasobów.
 
@@ -336,7 +336,7 @@ Interfejs wymaga dwóch rzeczy: determinizmu, czyli tej samej odpowiedzi dla teg
   label={lst:classifier},
 ]{../nlp/base.py}
 
-Rejestr udostępnia dwie implementacje: deterministyczną zaślepkę, na której zbudowaliśmy i przetestowaliśmy cały potok, zanim istniał jakikolwiek model, oraz klienta punktu końcowego Vertex AI.
+Rejestr udostępnia dwie implementacje: deterministyczną zaślepkę, na której zbudowaliśmy i przetestowaliśmy cały potok, zanim istniał jakikolwiek model, oraz klienta punktu końcowego Agent Platform.
 Nieznana nazwa modelu w parametrze uruchomienia zatrzymuje potok przy starcie maszyny, zamiast po cichu oznaczyć całe odtworzenie niewłaściwym modelem.
 
 \subsection{Pierwszy model: angielski DistilBERT}
@@ -410,7 +410,7 @@ Zwiększenie paczek niewiele dawało, bo czas zajmowało samo wnioskowanie, a ni
 Jedynym rozwiązaniem była równoległość, a tu czekała kolejna niespodzianka.
 Wdrożenie repliki dla pełnego odtworzenia kończyło się błędem przekroczenia limitu procesorów do serwowania modeli, na każdym rozmiarze maszyny, nawet z dwoma rdzeniami.
 Limit dla rodziny maszyn N1 był od 10 października zajęty w całości, choć nic nie było wdrożone, a zwolnić mógł go tylko wniosek do Google.
-Okazało się jednak, że Vertex AI liczy ten limit osobno dla każdej rodziny maszyn, a limity dla rodzin N2 i N2D były wolne.
+Okazało się jednak, że Agent Platform liczy ten limit osobno dla każdej rodziny maszyn, a limity dla rodzin N2 i N2D były wolne.
 Wdrożyliśmy więc ten sam model jednocześnie na maszynach \code{n2-standard-8} i \code{n2d-standard-8}, z podziałem ruchu po połowie, co dało 16 rdzeni zamiast ośmiu.
 Pełne odtworzenie \num{263893} opinii trwało w ten sposób 2 godziny i 12 minut.
 
@@ -430,7 +430,7 @@ Wersja v2.1 spełniła wszystkie trzy, choć poprawa dla klasy negatywnej była 
 \subsection{Serwowanie modelu}
 \label{sec:impl-serving}
 
-Wybrany model rejestrujemy w rejestrze modeli Vertex AI i wdrażamy na punkt końcowy wyłącznie na czas odtworzenia.
+Wybrany model rejestrujemy w rejestrze modeli Agent Platform i wdrażamy na punkt końcowy wyłącznie na czas odtworzenia.
 Używamy gotowego kontenera Hugging Face do wnioskowania na procesorach; kontener TorchServe, który wypróbowaliśmy wcześniej, nie akceptował katalogu modelu w formacie Hugging Face.
 Po odtworzeniu model jest wycofywany z punktu końcowego, a punkt końcowy usuwany, więc między odtworzeniami serwowanie nic nie kosztuje.
 Całe przejście modelu od trenowania do potoku przedstawia rysunek~\ref{fig:model-lifecycle}.
@@ -443,11 +443,11 @@ Całe przejście modelu od trenowania do potoku przedstawia rysunek~\ref{fig:mod
       store/.style={box, fill=blue!8},
       arr/.style={-{Latex[length=2mm]}, thick},
       lab/.style={font=\scriptsize, fill=white, inner sep=1pt}]
-    \node[box] (wb) at (0,0) {Vertex AI Workbench\\(trenowanie, CPU)};
+    \node[box] (wb) at (0,0) {Agent Platform\\Workbench\\(trenowanie, CPU)};
     \node[box] (ml) at (4.2,1.2) {serwer MLflow\\(Cloud Run, Cloud SQL)};
     \node[store] (gcs) at (4.2,-1.2) {wagi modeli\\(Cloud Storage)};
-    \node[box] (reg) at (8.4,0) {rejestr modeli\\Vertex AI};
-    \node[box] (ep) at (8.4,-2.6) {punkt końcowy\\Vertex AI};
+    \node[box] (reg) at (8.4,0) {rejestr modeli\\Agent Platform};
+    \node[box] (ep) at (8.4,-2.6) {punkt końcowy\\Agent Platform};
     \node[box] (df) at (4.2,-3.8) {potok Apache Beam\\(Dataflow)};
     \draw[arr] (wb) -- node[lab, above left=0pt] {parametry, metryki} (ml);
     \draw[arr] (wb) -- node[lab, below left=0pt] {wagi} (gcs);
@@ -505,7 +505,7 @@ Pierwsze widoki raportowe zdefiniowaliśmy w kodzie Terraform, a część miar, 
 Takie rozwiązanie miało trzy wady.
 Zmiana klauzuli \code{GROUP BY} wymagała planu, zatwierdzenia i zastosowania zmian infrastruktury, tak samo jak zmiana konta usługi.
 Nic nie testowało danych, więc widok mógł liczyć coś dwukrotnie i i tak się wdrożyć.
-Miar liczonych w Pythonie nie mógł z kolei użyć Looker Studio.
+Miar liczonych w Pythonie nie mógł z kolei użyć Data Studio.
 
 Wszystkie widoki przenieśliśmy więc do projektu Dataform w katalogu głównym repozytorium.
 Każdy widok jest osobnym plikiem z opisem kolumn i testami danych: unikalnością klucza, warunkami na wartości i zgodnością sum z tabelą zdarzeń.
@@ -523,10 +523,10 @@ Tłem dla recenzji Steam są głównie recenzje spoza okien wydarzeń, a dla kom
   label={lst:event-lift},
 ]{../definitions/reporting/v_event_lift.sqlx}
 
-Panel jest raportem Looker Studio o nazwie \enquote{Pop vibe check}, złożonym z trzech stron opisanych w podrozdziale~\ref{sec:design-ui}.
+Panel jest raportem Data Studio o nazwie \enquote{Pop vibe check}, złożonym z trzech stron opisanych w podrozdziale~\ref{sec:design-ui}.
 Każdy z sześciu używanych widoków ma w raporcie własne źródło danych, a zapytania wykonują się z uprawnieniami osoby oglądającej.
 Wskaźnik netto i udziały klas są polami obliczanymi z sum liczników, więc są poprawne dla dowolnego wyboru źródeł i okresów.
 Raport przechowuje wyniki zapytań przez 12 godzin, co przy danych zmieniających się tylko po odtworzeniu w zupełności wystarcza.
-Słabością tego rozwiązania jest to, że układ raportu, pola obliczane i źródła danych istnieją tylko w Looker Studio, na koncie jednego z nas, a nie w repozytorium.
+Słabością tego rozwiązania jest to, że układ raportu, pola obliczane i źródła danych istnieją tylko w Data Studio, na koncie jednego z nas, a nie w repozytorium.
 W repozytorium są wyłącznie widoki, dlatego wszystkie miary celowo liczymy w nich, a raport tylko je wyświetla.
 Jak z panelu i z całego systemu korzystać w praktyce, opisuje kolejny rozdział.
