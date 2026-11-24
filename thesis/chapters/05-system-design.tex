@@ -15,7 +15,7 @@ W tym rozdziale opisujemy architekturę systemu i uzasadnienie każdego jej elem
 Drogę pojedynczej opinii przez system przedstawia rysunek~\ref{fig:architecture}.
 Opinię pobiera kolektor i zapisuje ją w archiwum surowych danych.
 Z archiwum opinie trafiają do hurtowni, skąd wydawca odtworzeń publikuje je w kolejce komunikatów w porządku chronologicznym.
-Potok przetwarzania strumieniowego odczytuje komunikaty, wykrywa język, zleca klasyfikację wydźwięku modelowi na punkcie końcowym Vertex AI i dopisuje wynik do tabeli lądowania.
+Potok przetwarzania strumieniowego odczytuje komunikaty, wykrywa język, zleca klasyfikację wydźwięku modelowi na punkcie końcowym Agent Platform i dopisuje wynik do tabeli lądowania.
 Po zakończeniu odtworzenia wyniki są scalane z docelową tabelą zdarzeń, na której opierają się widoki raportowe i panel.
 
 \begin{figure}[hbp]
@@ -35,11 +35,11 @@ Po zakończeniu odtworzenia wyniki są scalane z docelową tabelą zdarzeń, na 
     \node[box] (pub) at (11.4,-2.7) {wydawca\\odtworzeń\\(Cloud Run Job)};
     \node[box] (ps) at (7.6,-2.7) {temat Pub/Sub\\(klucz \enquote{global})};
     \node[box] (df) at (3.8,-2.7) {potok\\Apache Beam\\(Dataflow)};
-    \node[box] (vx) at (0,-2.7) {punkt końcowy\\Vertex AI\\(XLM-R)};
+    \node[box] (vx) at (0,-2.7) {punkt końcowy\\Agent Platform\\(XLM-R)};
     \node[box] (dlq) at (0,-5.4) {temat błędnych\\komunikatów};
     \node[store] (ev) at (3.8,-5.4) {BigQuery:\\\texttt{events\_landing},\\\texttt{events}};
     \node[store] (rep) at (7.6,-5.4) {widoki\\raportowe\\(Dataform)};
-    \node[ext] (ls) at (11.4,-5.4) {panel\\(Looker Studio)};
+    \node[ext] (ls) at (11.4,-5.4) {panel\\(Data Studio)};
     \draw[arr] (yt) -- (col);
     \draw[arr] (st) -- (col);
     \draw[arr] (col) -- node[lab, above=1pt] {JSONL.gz} (gcs);
@@ -96,7 +96,7 @@ Dzięki temu odtworzenie można powtarzać dowolnie wiele razy, a tabela docelow
 \label{sec:design-remote-model}
 
 Potok nie zawiera wag modelu.
-Wywołuje klasyfikator przez wspólny interfejs, za którym może stać deterministyczna zaślepka albo klient punktu końcowego Vertex AI.
+Wywołuje klasyfikator przez wspólny interfejs, za którym może stać deterministyczna zaślepka albo klient punktu końcowego Agent Platform.
 Taki podział ma dwie przyczyny.
 Maszyny robocze potoku działają bez publicznych adresów IP i łączą się z usługami Google wyłącznie przez prywatny dostęp w sieci \ac{vpc}, więc nie mogą pobrać wag z internetu przy starcie.
 Gdybyśmy z kolei wbudowali wagi w obraz potoku, każda zmiana modelu wymagałaby przebudowania obrazu, a obraz rozrósłby się o kilka gigabajtów.
@@ -232,26 +232,25 @@ Widoki są autoryzowane na zbiorze analitycznym jako całości, więc mogą czyt
 \label{sec:design-ui}
 
 Panel składa się z trzech stron, odpowiadających trzem przypadkom użycia analityka.
-Strona przeglądu pokazuje wskaźniki podsumowujące, czyli liczbę opinii, wskaźnik netto oraz udziały opinii pozytywnych i negatywnych, a pod nimi wykres wskaźnika netto w czasie dla każdego źródła i wykres liczby opinii.
+Strona przeglądu pokazuje wskaźniki podsumowujące, czyli liczbę opinii, wskaźnik netto oraz udziały opinii pozytywnych i negatywnych, a pod nimi wykres wskaźnika netto w czasie dla źródeł wybranych w filtrze i wykres liczby opinii.
 Strona wydarzeń zestawia wskaźnik netto i podział na klasy dla każdego wydarzenia i źródła, różnice między źródłami oraz efekt wydarzenia względem tła.
 Strona źródeł i języków pokazuje liczbę opinii i udział opinii pozytywnych w podziale na języki.
 
 Przy projektowaniu stron kierowaliśmy się trzema zasadami.
 Przy każdym wyniku widać liczbę opinii, z której go policzono, bo wskaźnik netto z dziesięciu komentarzy znaczy co innego niż ten sam wskaźnik z dziesięciu tysięcy.
-Na wykresach w czasie pokazujemy tylko okresy z co najmniej dwudziestoma opiniami, a okna wydarzeń są zaznaczone w tle.
+Na wykresach w czasie pokazujemy tylko okresy z co najmniej dwudziestoma opiniami, a daty okien wydarzeń podaje tabela pod wykresami.
 Kolory źródeł i klas wydźwięku są stałe na wszystkich stronach.
 
-Strony najpierw zaimplementowaliśmy jako aplikację w bibliotece Streamlit, a następnie odtworzyliśmy w Looker Studio, z tymi samymi widokami i tymi samymi liczbami.
-Rysunek~\ref{fig:ui-overview} przedstawia fragment strony przeglądu w pierwszej wersji.
+Strony najpierw zaimplementowaliśmy jako aplikację w bibliotece Streamlit, a następnie odtworzyliśmy w Data Studio, z tymi samymi widokami i tymi samymi liczbami.
+Rysunek~\ref{fig:ui-overview} przedstawia górną część strony przeglądu w raporcie Data Studio: filtry, cztery wskaźniki podsumowujące i wykres wskaźnika netto w czasie.
+Pozostałe części raportu pokazujemy w podrozdziale~\ref{sec:guide-dashboard}.
 
 \begin{figure}[hbp]
   \centering
-  \includegraphics[width=\textwidth, trim={740 900 150 700}, clip]{ui-overview-streamlit}
-  \caption{Fragment strony przeglądu w pierwszej wersji panelu (aplikacja Streamlit)}
+  \includegraphics[width=\textwidth]{ui-overview-top}
+  \caption{Górna część strony \enquote{Przegląd} w raporcie Data Studio}
   \label{fig:ui-overview}
 \end{figure}
-
-\todo[inline]{Zastąpić zrzut z aplikacji Streamlit zrzutami stron raportu Looker Studio (Przegląd, Wydarzenia, Źródła i języki) i sprawdzić, czy najmniejszy tekst ma co najmniej 6 pt.}
 
 \section{Prywatność i bezpieczeństwo}
 \label{sec:design-privacy}
@@ -272,6 +271,6 @@ Pozostałe zasady bezpieczeństwa są typowe dla systemów w chmurze, ale konsek
 Każdy komponent ma osobne konto usługi z minimalnym zestawem uprawnień, a żadne konto nie jest współdzielone.
 Maszyny robocze potoku i środowisko trenowania nie mają publicznych adresów IP.
 Sekrety, takie jak klucz YouTube Data API i sól, istnieją wyłącznie w Secret Manager, nigdy w kodzie ani w dziennikach.
-Serwer MLflow jest dostępny tylko przez \ac{iap}, dla osób z listy, a raport w Looker Studio wykonuje zapytania z uprawnieniami osoby, która go ogląda, więc samo udostępnienie raportu nie daje dostępu do danych.
+Serwer MLflow jest dostępny tylko przez \ac{iap}, dla osób z listy, a raport w Data Studio wykonuje zapytania z uprawnieniami osoby, która go ogląda, więc samo udostępnienie raportu nie daje dostępu do danych.
 Wszystkie dane przetwarzamy i przechowujemy w regionie warszawskim.
 Jak te założenia przełożyły się na kod, opisuje następny rozdział.

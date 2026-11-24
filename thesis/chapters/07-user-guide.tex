@@ -4,8 +4,8 @@
 
 % FIRST DRAFT. Commands come from the READMEs in the repository
 % (dataflow/, publisher/, collectors/steam/, nlp/, terraform/envs/dev/) and
-% from docs/phase-1-looker-studio.md. Screenshots of the Looker Studio report
-% are still missing.
+% from docs/phase-1-looker-studio.md. Screenshots of the Data Studio report
+% were taken on 2026-11-24 (game filter: Clair Obscur, both sources).
 
 System ma dwie grupy użytkowników o zupełnie różnych potrzebach.
 Analityk ogląda wyniki w przeglądarce i nie musi wiedzieć, jak powstały.
@@ -15,31 +15,65 @@ Rozdział zaczyna się od instrukcji dla analityka, a następnie opisuje przygot
 \section{Korzystanie z panelu}
 \label{sec:guide-dashboard}
 
-Panel jest raportem Looker Studio o nazwie \enquote{Pop vibe check}.
+Panel jest raportem Data Studio o nazwie \enquote{Pop vibe check}.
 Dostęp do niego wymaga wpisu na dwóch listach.
 Pierwszą jest lista osób uprawnionych do odczytu widoków raportowych, zapisana w konfiguracji Terraform; daje ona prawo odczytu danych w BigQuery.
-Drugą jest lista udostępnienia samego raportu w Looker Studio.
+Drugą jest lista udostępnienia samego raportu w Data Studio.
 Osoba, która jest tylko na jednej z nich, albo nie otworzy raportu, albo zobaczy go bez danych.
 
 Raport ma trzy strony, przełączane w menu po lewej stronie.
-Strona \emph{Przegląd} pokazuje u góry cztery wskaźniki dla wybranego zakresu: liczbę opinii, wskaźnik wydźwięku netto oraz udziały opinii pozytywnych i negatywnych.
-Pod nimi są dwa wykresy: wskaźnik netto w czasie, osobno dla każdego źródła, i liczba opinii w kolejnych okresach.
+U góry każdej strony są filtry gry i źródła, a na stronie przeglądu także okresu agregacji i zakresu dat.
+Zrzuty ekranu w tym podrozdziale wykonaliśmy 24 listopada 2026~r. dla wszystkich opinii o grze \enquote{Clair Obscur: Expedition 33} z obu źródeł.
+
+Górną część strony \emph{Przegląd} pokazuje rysunek~\ref{fig:ui-overview} w podrozdziale~\ref{sec:design-ui}.
+Są na niej cztery wskaźniki dla wybranego zakresu: liczba opinii, wskaźnik wydźwięku netto, w raporcie nazwany bilansem nastrojów, oraz udziały opinii pozytywnych i negatywnych.
+Pod nimi jest wykres wskaźnika netto w czasie dla źródeł wybranych w filtrze.
 Okres agregacji wybiera się przełącznikiem: dzień, tydzień, który jest ustawieniem domyślnym, albo miesiąc.
 Wykres wskaźnika netto pomija okresy, w których źródło miało mniej niż 20 opinii, bo wskaźnik policzony z kilku komentarzy łatwo pomylić z trendem.
-Tabela pod wykresami podaje dla każdego wydarzenia datę pierwszej i ostatniej opinii oraz ich liczbę.
+Dolna część strony, widoczna na rysunku~\ref{fig:guide-overview-bottom}, zawiera wykres liczby opinii w kolejnych okresach i tabelę, która dla każdego wydarzenia podaje datę pierwszej i ostatniej opinii oraz ich liczbę.
+Na wykresie od razu widać dwa szczyty: tygodnie po premierze i grudniowe gale.
+
+\begin{figure}[hbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{ui-overview-bottom}
+  \caption{Dolna część strony \enquote{Przegląd}: liczba opinii w kolejnych tygodniach i okna wydarzeń}
+  \label{fig:guide-overview-bottom}
+\end{figure}
 
 Strona \emph{Wydarzenia} odpowiada na pytanie, jak odbiorcy zareagowali na konkretne wydarzenie.
-Pokazuje wskaźnik netto dla każdego wydarzenia i źródła, podział na klasy wydźwięku, osobno dla Steam i YouTube, oraz różnicę między najbardziej i najmniej pozytywnym źródłem.
-Najważniejsza jest część zatytułowana \enquote{Efekt wydarzenia}.
+Jej górna część, pokazana na rysunku~\ref{fig:guide-events-top}, zawiera wskaźnik netto dla każdego wydarzenia, tabelę rozbieżności między najbardziej i najmniej pozytywnym źródłem oraz podział opinii na klasy wydźwięku dla źródeł wybranych w filtrze.
+
+\begin{figure}[hbp]
+  \centering
+  \includegraphics[width=\textwidth]{ui-events-top}
+  \caption{Górna część strony \enquote{Wydarzenia}: wskaźnik netto, rozbieżność źródeł i podział na klasy wydźwięku}
+  \label{fig:guide-events-top}
+\end{figure}
+
+Najważniejsza jest dolna część strony, zatytułowana \enquote{Efekt wydarzenia} i pokazana na rysunku~\ref{fig:guide-events-bottom}.
 Pokazuje ona, o ile wskaźnik netto w oknie wydarzenia różni się od tła z tego samego źródła i ile razy więcej opinii na dzień pojawiło się w tym oknie.
 Ujemna zmiana oznacza, że w czasie wydarzenia nastroje były gorsze niż zwykle, a mnożnik większy od jedności, że o wydarzeniu mówiono więcej niż zwykle.
 Tabela pod wykresami jest posortowana od największego spadku.
+Na jej szczycie są komentarze YouTube z okna decyzji Indie Game Awards, w którym wskaźnik netto był o \num{0.57} niższy niż w tle, a opinii na dzień było prawie czterokrotnie więcej.
 
-Strona \emph{Źródła i języki} pokazuje, z jakich serwisów i w jakich językach pochodzą opinie.
-Wykres słupkowy przedstawia piętnaście najczęstszych języków, a tabela pod nim dla każdej pary źródła i języka podaje zakres dat, liczbę opinii, udział pozytywnych i liczbę wydarzeń.
+\begin{figure}[hbp]
+  \centering
+  \includegraphics[width=\textwidth]{ui-events-bottom}
+  \caption{Dolna część strony \enquote{Wydarzenia}: efekt wydarzenia względem tła z tego samego źródła}
+  \label{fig:guide-events-bottom}
+\end{figure}
+
+Strona \emph{Źródła i języki}, przedstawiona na rysunku~\ref{fig:guide-sources}, pokazuje, z jakich serwisów i w jakich językach pochodzą opinie.
+Dwa wykresy słupkowe przedstawiają liczbę opinii i udział opinii pozytywnych dla piętnastu najczęstszych języków, a tabela pod nimi dla każdej pary źródła i języka podaje zakres dat, liczbę opinii, udział pozytywnych i liczbę wydarzeń.
 Ta strona pozwala na przykład szybko zauważyć, że wydarzenia sprzed premiery mają dane wyłącznie z YouTube.
 
-Wszystkie strony mają filtr źródła, a strona przeglądu także filtr zakresu dat.
+\begin{figure}[hbp]
+  \centering
+  \includegraphics[width=0.75\textwidth]{ui-sources}
+  \caption{Strona \enquote{Źródła i języki}}
+  \label{fig:guide-sources}
+\end{figure}
+
 Raport przechowuje wyniki zapytań przez 12 godzin, więc po nowym odtworzeniu albo zmianie widoków trzeba wybrać z menu raportu polecenie odświeżenia danych.
 Tabela~\ref{tab:guide-troubleshooting} zbiera najczęstsze problemy z dostępem i ich rozwiązania.
 
@@ -52,7 +86,7 @@ Tabela~\ref{tab:guide-troubleshooting} zbiera najczęstsze problemy z dostępem 
     \hline
     Objaw                                                 & Przyczyna                                                  & Rozwiązanie                                                             \\
     \hline
-    link wyświetla prośbę o dostęp                        & raport nie jest udostępniony temu kontu                    & udostępnić raport w Looker Studio                                       \\
+    link wyświetla prośbę o dostęp                        & raport nie jest udostępniony temu kontu                    & udostępnić raport w Data Studio                                         \\
     \hline
     raport się otwiera, ale wykresy pokazują błąd dostępu do danych & konta nie ma na liście czytelników widoków albo zmiana jeszcze się nie rozpropagowała & dopisać adres do listy w konfiguracji Terraform i zastosować zmiany; odczekać kilka minut \\
     \hline
@@ -63,7 +97,7 @@ Tabela~\ref{tab:guide-troubleshooting} zbiera najczęstsze problemy z dostępem 
   \end{tabular}
 \end{table}
 
-\todo[inline]{Dodać zrzuty ekranu trzech stron raportu Looker Studio, z opisem elementów (filtry, wskaźniki, wykresy), na jasnym tle i z tekstem nie mniejszym niż 6 pt po przeskalowaniu.}
+\todo[inline]{Najmniejszy tekst na zrzutach raportu (podpisy osi) ma po przeskalowaniu ok. 4-5 pt. Jeśli promotor wymaga 6 pt, trzeba ciąć zrzuty na pojedyncze wykresy.}
 
 \section{Przygotowanie środowiska pracy}
 \label{sec:guide-setup}
