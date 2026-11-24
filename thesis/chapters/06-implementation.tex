@@ -1,0 +1,532 @@
+% !TeX root = ../main.tex
+\chapter{Implementacja}
+\label{chap:implementation}
+
+% FIRST DRAFT. The course of the work follows the phase write-ups in docs/
+% (phase-0-*, phase-1-*), the ADRs and the performance results. Listings are
+% read straight from the repository: after merging main into inzynierka,
+% check that the line ranges still point at the same code.
+
+Ten rozdział opisuje, jak zbudowaliśmy system, i nie pomija tego, co po drodze nie działało.
+Wiele decyzji z poprzedniego rozdziału wygląda na oczywiste dopiero z perspektywy problemów, które je wymusiły.
+Zaczynamy od struktury repozytorium i konwencji, następnie opisujemy infrastrukturę, pozyskiwanie danych, odtwarzanie strumienia, potok przetwarzania, model językowy ze środowiskiem \ac{mlops} i warstwę raportową.
+
+\section{Struktura repozytorium i konwencje}
+\label{sec:impl-repository}
+
+Cały system mieszka w jednym publicznym repozytorium~\cite{popvibecheck}.
+Kod usług napisaliśmy w języku Python 3.12, infrastrukturę w języku HCL narzędzia Terraform, a widoki raportowe w dialekcie SQL narzędzia Dataform.
+Najważniejsze katalogi zestawia tabela~\ref{tab:repo-layout}.
+
+\begin{table}[hbp]
+  \caption{Najważniejsze katalogi repozytorium}
+  \label{tab:repo-layout}
+  \centering
+  \small
+  \begin{tabular}{|l|p{0.62\textwidth}|}
+    \hline
+    Katalog                        & Zawartość                                                                                         \\
+    \hline
+    \texttt{collectors/}           & wspólna biblioteka kolektorów oraz kolektory YouTube, Steam i Reddit wraz z plikami konfiguracji \\
+    \hline
+    \texttt{publisher/}            & wydawca odtworzeń: ładowanie archiwum do hurtowni i chronologiczna publikacja strumienia          \\
+    \hline
+    \texttt{dataflow/}             & potok Apache Beam, obraz szablonu Flex Template, skrypty uruchomienia, scalania i weryfikacji     \\
+    \hline
+    \texttt{nlp/}                  & interfejs klasyfikatora, zaślepka, klient punktu końcowego, trenowanie, ocena, integracja z MLflow \\
+    \hline
+    \texttt{definitions/}, \texttt{includes/} & projekt Dataform: widoki raportowe, testy danych i wspólne fragmenty SQL              \\
+    \hline
+    \texttt{terraform/}            & przygotowanie projektu, kompozycje środowisk \texttt{dev} i \texttt{prod} oraz 15 modułów        \\
+    \hline
+    \texttt{mlflow\_server/}       & obraz serwera śledzenia MLflow                                                                    \\
+    \hline
+    \texttt{perf/}                 & narzędzia do badań wydajności i kosztów oraz ich wyniki                                           \\
+    \hline
+    \texttt{docs/}                 & opisy kolejnych faz projektu i zapisy decyzji architektonicznych                                  \\
+    \hline
+  \end{tabular}
+\end{table}
+
+Od początku przyjęliśmy kilka zasad, których pilnują narzędzia, a nie dobra wola.
+Kod formatuje \code{black}, sprawdza \code{ruff} razem z regułami dokumentowania, a typy weryfikuje \code{mypy} w trybie ścisłym.
+Każda zmiana trafia do gałęzi głównej przez zgłoszenie zmian z przeglądem, z opisem w konwencji Conventional Commits~\cite{conventionalcommits}.
+Decyzje, które zmieniają ustalenia projektowe, zapisujemy jako \ac{adr}; w repozytorium są cztery: zastąpienie serwisu Reddit recenzjami Steam, odtworzenie jako jedno uruchomienie w Cloud Build, przeniesienie widoków raportowych do Dataform i serwer MLflow w Cloud Run.
+Każda faza projektu kończyła się dokumentem opisującym, co zbudowano, co zweryfikowano i co nie zadziałało; z tych dokumentów pochodzi większość opisanych niżej faktów.
+
+\section{Infrastruktura i ciągłe wdrażanie}
+\label{sec:impl-infrastructure}
+
+Infrastrukturę opisuje 15 modułów Terraform, złożonych w kompozycji środowiska \code{terraform/envs/dev}.
+Moduły odpowiadają rodzajom zasobów: sieci, kontom usług, magazynom, zbiorom BigQuery, tematom Pub/Sub, zadaniom Cloud Run, potokowi Dataflow, środowisku Vertex AI, serwerowi MLflow, projektowi Dataform, wyzwalaczom Cloud Build, alarmom i budżetowi.
+Nazwę każdego zasobu poprzedza przedrostek, w studium przypadku \code{co}, od tytułu gry, a kończy nazwa środowiska, na przykład \code{co-raw-archive-dev}.
+Dla kolejnej premiery wystarczy inny przedrostek, a Terraform utworzy obok drugi, niezależny komplet zasobów.
+
+Stan Terraform przechowujemy w zasobniku Cloud Storage, a zmiany stosuje wyłącznie potok w Cloud Build, działający jako dedykowane konto usługi.
+Laptopy członków zespołu wykonują tylko plan zmian.
+Wartości zmiennych środowiska, w tym adresy osób z dostępem do raportu, przechowujemy w Secret Manager, a nie w plikach na czyimkolwiek dysku.
+
+Potok \ac{cicd} ma dwie ścieżki.
+Dla zgłoszenia zmian Cloud Build uruchamia testy jednostkowe, \code{ruff} i \code{black}, sprawdzenie plików Terraform narzędziami \code{tflint} i \code{tfsec}, budowę obrazów i plan zmian infrastruktury.
+Po scaleniu buduje obrazy, oznacza je pełnym skrótem wersji kodu, publikuje w Artifact Registry i wdraża do zadań Cloud Run według skrótu obrazu, a nie etykiety, więc zadanie zawsze uruchamia dokładnie ten obraz, który powstał z danej wersji.
+Zmiany infrastruktury czekają na zatwierdzenie przez człowieka w konsoli Cloud Build.
+Te same narzędzia, w tych samych wersjach, uruchamiają się lokalnie jako zaczepy przed zatwierdzeniem zmian.
+
+Do tej postaci doszliśmy etapami.
+Przez pierwsze miesiące Cloud Build w ogóle nie działał: ręcznie zlecane budowanie uruchamiało się jako domyślne konto usługi Compute Engine, które w naszym projekcie nie miało żadnych ról i nie mogło odczytać nawet własnego zasobnika ze źródłami.
+Obrazy kolektora, wydawcy i potoku budowaliśmy więc lokalnie w Dockerze i publikowaliśmy ręcznie, aż powstał osobny moduł z kontem usługi i wyzwalaczami.
+Podobne lekcje dawało konto, którym działa Terraform.
+Dodanie reguły zapory sieciowej dla potoku wymagało roli administratora bezpieczeństwa sieci, a zdefiniowanie własnej roli dla Pub/Sub, o której piszemy w podrozdziale~\ref{sec:impl-pipeline}, roli administratora ról.
+
+Koszty pilnują alarmy i budżet.
+Moduł monitorowania wysyła powiadomienia e-mail o błędzie zadania potoku, o zadaniu działającym dłużej niż 6 godzin, o komunikatach czekających w kolejce dłużej niż 30 minut i o każdym komunikacie w kolejce błędów.
+Budżet miesięczny środowiska wynosił 50~zł, z powiadomieniami po przekroczeniu 50, 90, 100 i \qty{120}{\percent} tej kwoty.
+Budżet okazał się mniej szczelny, niż sądziliśmy.
+Przez pewien czas był przypięty do innego konta rozliczeniowego niż projekt i raportował zerowe wydatki.
+Z kolei maszyna środowiska Workbench naliczała opłaty za dyski także wtedy, gdy była zatrzymana: od 10 września do 3 listopada 2026~r. kosztowało to około 140~zł miesięcznie.
+Pierwszy problem naprawiliśmy w Terraform, drugi usuwając maszynę po skopiowaniu jej zawartości do Cloud Storage.
+\todo{Uzupełnić łączny koszt projektu w chmurze (z rozliczeń konta).}
+
+\section{Pozyskiwanie danych}
+\label{sec:impl-collection}
+
+Kolektory są zadaniami Cloud Run Jobs, uruchamianymi przez operatora z parametrami: identyfikatorem wydarzenia i oknem czasowym.
+Wspólna biblioteka \code{collectors/common} zawiera budowę rekordu we wspólnym formacie, pseudonimizację autora, zapis paczek do archiwum, odczyt konfiguracji wydarzeń i ponawianie zapytań z wykładniczo rosnącym odstępem dla błędów przeciążenia i błędów serwera.
+Konfiguracja wydarzeń jest częścią obrazu, więc uruchomienie z nieznanym identyfikatorem wydarzenia kończy się błędem, zanim kolektor wyśle choćby jedno zapytanie.
+
+Pseudonimizację przedstawia listing~\ref{lst:author-hash}.
+Funkcja odmawia działania, gdy brakuje soli, bo skrót bez soli dałoby się odwrócić, sprawdzając popularne nazwy użytkowników.
+
+\lstinputlisting[
+  language=Python, firstline=18, lastline=50, firstnumber=18, float=hbp,
+  caption={Pseudonimizacja autora opinii (plik \texttt{collectors/common/author\_hash.py})},
+  label={lst:author-hash},
+]{../collectors/common/author_hash.py}
+
+\subsection{Kolektor YouTube}
+\label{sec:impl-youtube}
+
+Kolektor YouTube przegląda filmy przypisane do wydarzenia, pobiera dla każdego wątki komentarzy wraz z odpowiedziami i zostawia tylko te opublikowane w oknie czasowym.
+Interfejs zwraca komentarze bez względu na datę, więc filtrowanie po czasie odbywa się po stronie kolektora.
+Pierwsze uruchomienie w chmurze, 5 lipca 2026~r., poprzedziły dwa problemy.
+Klucz \ac{api} zapisany w Secret Manager był nieprawidłowy, miał 28 znaków zamiast 39, i serwis odrzucał go komunikatem \code{API_KEY_INVALID}; utworzyliśmy nowy klucz, ograniczony wyłącznie do YouTube Data API, a stary wyłączyliśmy.
+Drugim problemem był wspomniany już brak działającego Cloud Build.
+
+Pierwsze cztery przebiegi zebrały \num{4228} komentarzy z czterech wydarzeń.
+Próbka rekordów potwierdziła zgodność ze schematem i poprawność pseudonimów, ale ujawniła też problem, który wróci w kilku miejscach pracy.
+Biblioteka \code{langdetect}~\cite{langdetect}, której używamy do wykrywania języka, oznaczyła krótki angielski komentarz pisany wielkimi literami jako niemiecki.
+Na krótkich tekstach wykrywanie języka jest zawodne, więc język zapisany przez kolektor traktujemy wyłącznie jako wstępny, a ostateczny ustala potok.
+Po rozszerzeniu listy filmów na pełny cykl życia gry zbiór YouTube urósł do \num{12254} komentarzy z dziewięciu wydarzeń, od 9 czerwca 2024~r. do 30 kwietnia 2026~r.
+
+\subsection{Kolektor Steam}
+\label{sec:impl-steam}
+
+Kolektor Steam jest prostszy, bo nie potrzebuje klucza ani biblioteki klienckiej.
+Pobiera recenzje stronami po sto, z przerwą \qty{0.5}{\second} między zapytaniami, przedstawia się w nagłówku żądania nazwą projektu i ogranicza liczbę stron w jednym przebiegu.
+Każdą recenzję przypisuje do najbliższego wydarzenia, jeśli powstała w promieniu trzech dni od niego, a pozostałe oznacza jako ogólne.
+Zapisuje też rekomendację autora w polu \code{voted_up}, które dodaliśmy do schematu specjalnie dla tego źródła.
+
+Okazało się, że jedno przejście nie wystarczy, i to z powodu, który leży po stronie serwisu, a nie kolektora.
+Steam kończy stronicowanie strumienia wyników długo przed jego końcem.
+Przejście przez wszystkie recenzje we wszystkich językach zatrzymało się samo na stronie \num{1243}, po \num{124187} recenzjach, docierając tylko do września 2025~r., podczas gdy gra ukazała się w kwietniu.
+Serwis zwrócił po prostu pustą stronę; nic nie zgłosiło błędu, a podniesienie limitu stron niczego nie zmieniało.
+Węższy strumień, na przykład recenzje tylko w jednym języku, mieści się w tym limicie i sięga do premiery.
+Zbiór zebraliśmy więc w czternastu przejściach, zestawionych w tabeli~\ref{tab:steam-passes}, a nakładanie się przejść nie stanowi problemu, bo scalanie w hurtowni zostawia jeden wiersz na identyfikator recenzji.
+
+\begin{table}[hbp]
+  \caption{Przejścia, z których złożono zbiór recenzji Steam}
+  \label{tab:steam-passes}
+  \centering
+  \small
+  \begin{tabular}{|p{0.62\textwidth}|r|}
+    \hline
+    Przejście                                                                              & Recenzji dostępnych \\
+    \hline
+    recenzje negatywne, wszystkie języki                                                   & \num{13409}         \\
+    \hline
+    angielskie, zakup w sklepie Steam                                                      & \num{103218}        \\
+    \hline
+    angielskie, zakup poza sklepem Steam                                                   & \num{37411}         \\
+    \hline
+    chiński uproszczony                                                                    & \num{39575}         \\
+    \hline
+    francuski                                                                              & \num{23607}         \\
+    \hline
+    rosyjski                                                                               & \num{17160}         \\
+    \hline
+    hiszpański, niemiecki, koreański, polski, chiński tradycyjny, turecki, japoński, portugalski & od \num{522} do \num{9971} każde \\
+    \hline
+  \end{tabular}
+\end{table}
+
+Recenzji angielskich jest \num{140654}, czyli więcej, niż mieści się w jednym strumieniu, dlatego podzieliliśmy je według sposobu zakupu, ostatniego kryterium, jakie oferuje serwis.
+Dwie inne drogi sprawdziliśmy i odrzuciliśmy: parametr zakresu dni jest ograniczony do około roku, a filtr ostatnio edytowanych recenzji zwraca zaledwie 400 rekordów.
+Skrypt \code{collect_history.sh} z listą przejść i uzasadnieniem każdego z nich jest w praktyce definicją zbioru danych: skoro serwis nie wydaje historii w jednym kawałku, zebrany zbiór to dokładnie suma tych strumieni.
+
+Ostatecznie zebraliśmy \num{251639} z \num{280699} recenzji, czyli \qty{89.6}{\percent}.
+Brakuje części angielskich recenzji z ograniczonych końcówek obu angielskich strumieni.
+Nic nie wskazuje, by brakujące recenzje różniły się wydźwiękiem, bo recenzje negatywne zebraliśmy w całości w osobnym przejściu, ale nie jest to też próba losowa i tak ją opisujemy.
+
+Przed odtworzeniem sprawdziliśmy jakość danych.
+Nie było zduplikowanych identyfikatorów, niepoprawnych pseudonimów ani dat z przyszłości.
+Wykryliśmy natomiast trzy grupy rekordów, które mogły zatrzymać przetwarzanie: 816 recenzji składających się z samych białych znaków, \num{14350} recenzji dłuższych niż \num{1000} znaków, czyli \qty{5.4}{\percent}, oraz \num{11277} recenzji o długości od jednego do trzech znaków, na przykład \enquote{gg} albo pojedyncze emoji.
+Pierwsze dwie grupy wymagały zmian w kliencie modelu, opisanych w podrozdziale~\ref{sec:impl-nlp}; trzecią przetwarzamy normalnie, bo niska pewność modelu na takim tekście jest informacją, a nie szumem.
+
+\section{Odtwarzanie strumienia}
+\label{sec:impl-replay}
+
+Wydawca odtworzeń jest zadaniem Cloud Run Job z dwoma trybami.
+W trybie ładowania wczytuje wszystkie pliki archiwum do tabeli \code{raw_landing}, zastępując jej zawartość, i scala je z tabelą \code{raw_staging}, zostawiając dla każdego identyfikatora najświeżej pobraną wersję.
+Ponowne ładowanie niczego nie zmienia, co sprawdziliśmy przy pierwszym uruchomieniu: po dwóch ładowaniach tabela pośrednia miała dokładnie \num{4228} wierszy.
+
+W trybie odtworzenia wydawca czyta tabelę pośrednią posortowaną według czasu publikacji i identyfikatora i publikuje każdy rekord w temacie Pub/Sub pod kluczem porządkującym \code{global}.
+Przed publikacją odczekuje czas wyliczony przez funkcję z listingu~\ref{lst:sleep}: rzeczywisty odstęp od poprzedniej opinii podzielony przez współczynnik przyspieszenia i obcięty do zadanego maksimum.
+Przy domyślnym współczynniku \num{86400} jeden dzień historii trwa jedną sekundę, a obcięcie sprawia, że czas całego odtworzenia jest ograniczony przez liczbę rekordów, a nie przez długość okresu, który obejmują.
+
+\lstinputlisting[
+  language=Python, firstline=64, lastline=90, firstnumber=64, float=hbp,
+  caption={Wyliczanie przerwy przed publikacją kolejnej opinii (plik \texttt{publisher/replay.py})},
+  label={lst:sleep},
+]{../publisher/replay.py}
+
+Komunikat zawiera rekord dokładnie w takiej postaci, w jakiej zapisał go kolektor, a dane o odtworzeniu niesie w atrybutach: źródło, wydarzenie, oryginalny czas publikacji i czas wysłania.
+Zadanie ma wyłączone ponawianie, bo ponowione częściowo wykonane odtworzenie opublikowałoby część rekordów dwukrotnie.
+Klient Pub/Sub łączy się z regionalnym punktem dostępowym usługi, czego wymaga porządkowanie komunikatów.
+
+Pierwsza wersja obrazu wydawcy nie uruchomiła się wcale.
+Import dowolnego modułu wspólnej biblioteki kolektorów wykonywał kod inicjalizujący pakiet, który od razu importował moduł zapisu do Cloud Storage, a biblioteki Cloud Storage w obrazie wydawcy nie było.
+Rozwiązaniem był leniwy import tego modułu.
+Pierwsze odtworzenie, 16 lipca 2026~r., opublikowało \num{4228} rekordów w \qty{96.4}{\second}, a sprawdzenie wszystkich komunikatów w subskrypcji kontrolnej nie wykazało ani jednego naruszenia kolejności.
+
+\section{Potok przetwarzania strumieniowego}
+\label{sec:impl-pipeline}
+
+Potok podzieliliśmy na dwie warstwy.
+Moduł \code{dataflow/transforms.py} zawiera całą logikę na poziomie rekordu jako zwykłe funkcje, bez zależności od Apache Beam: odczyt komunikatu, walidację, wykrywanie języka i budowę wiersza wynikowego.
+Moduł \code{dataflow/pipeline.py} tylko składa z nich graf przetwarzania, przedstawiony na listingu~\ref{lst:pipeline}.
+Dzięki temu logikę testujemy bez uruchamiania potoku, a warstwę Beam da się przeczytać w kilka minut.
+
+\lstinputlisting[
+  language=Python, firstline=230, lastline=262, firstnumber=230, float=hbp,
+  caption={Graf przetwarzania potoku (plik \texttt{dataflow/pipeline.py})},
+  label={lst:pipeline},
+]{../dataflow/pipeline.py}
+
+Potok odczytuje komunikaty z subskrypcji, biorąc czas zdarzenia z atrybutu \code{created_utc}.
+Rekordy, których nie da się odczytać albo którym brakuje identyfikatora lub czasu publikacji, trafiają do tematu błędnych komunikatów wraz z opisem przyczyny.
+Rekord, który model uzna za trudny, nie jest błędny i trafia do hurtowni jak każdy inny, bo gubienie opinii z powodu niepewności modelu po cichu zniekształcałoby analizę.
+Poprawne rekordy są grupowane w paczki po najwyżej 200 i klasyfikowane razem, a klasyfikator powstaje raz na proces roboczy, w metodzie \code{setup}, a nie dla każdego rekordu.
+Wyniki trafiają do tabeli \code{events_landing} trybem dopisywania, a wiersze odrzucone przez BigQuery również kierujemy do tematu błędnych komunikatów.
+
+\subsection{Cztery nieudane uruchomienia}
+\label{sec:impl-launch-failures}
+
+Potok nie uruchomił się za pierwszym, drugim ani trzecim razem.
+Każda porażka wskazała rzeczywistą lukę, a każda poprawka jest dziś pokryta testem albo zapisana w Terraform.
+
+Pierwsze uruchomienie przerwał błąd zapisu do BigQuery przez interfejs Storage Write API, który wymaga jawnie podanego schematu tabeli i nie odczytuje go sam.
+Zamiast powielać schemat w kodzie Python, gdzie mógłby rozjechać się z tabelą zarządzaną przez Terraform, potok odczytuje go z tabeli docelowej w chwili budowania grafu.
+Błąd wyszedł późno, bo testy jednostkowe sprawdzały pojedyncze transformacje, a nic nie składało całego grafu; od tego czasu mamy testy budowy grafu.
+
+Drugie uruchomienie zakończyło się komunikatem, że do użycia tej transformacji potrzebna jest Java.
+W bibliotece Beam dla języka Python zapis przez Storage Write API jest transformacją międzyjęzykową, która uruchamia usługę w Javie przy budowie grafu i wymaga środowiska Java na maszynach roboczych.
+W obrazie, który z założenia ma być samowystarczalny, bo maszyny nie mają dostępu do internetu, nie chcieliśmy tego środowiska.
+Domyślną metodą zapisu został więc zapis strumieniowy, w całości napisany w Pythonie.
+Oszczędność, jaką daje Storage Write API, przy naszej skali nie ma znaczenia, bo całe odtworzenie to kilka megabajtów danych.
+
+Trzecie uruchomienie było najbardziej podstępne.
+Zadanie osiągnęło stan działania, raportowało, że wszystko jest w porządku, i nie przetwarzało niczego.
+Zaległość w subskrypcji stała na \num{4228} komunikatach przez ponad godzinę.
+Jedyną wskazówką było ostrzeżenie, które brzmiało jak uwaga o wydajności: odczyt konfiguracji subskrypcji nie powiódł się z powodu braku uprawnień.
+Rola subskrybenta Pub/Sub pozwala pobierać komunikaty, ale nie odczytywać konfiguracji subskrypcji, a Dataflow robi to przed rozpoczęciem pracy.
+Dodaliśmy rolę przeglądającego.
+
+Czwarte uruchomienie ujawniło prawdziwą blokadę.
+Ponieważ potok bierze czas zdarzenia z atrybutu komunikatu, Dataflow tworzy na temacie źródłowym własną, pomocniczą subskrypcję do śledzenia znacznika wodnego i usuwa ją po zatrzymaniu zadania.
+Wymaga to uprawnień do tworzenia subskrypcji i dołączania ich do tematu.
+Dokumentacja zaleca rolę edytora Pub/Sub dla całego projektu, która pozwala też publikować i usuwać dowolne tematy.
+Zdefiniowaliśmy zamiast niej własną rolę z dokładnie pięcioma potrzebnymi uprawnieniami.
+Oba ostatnie problemy łączy to, że zawodzą po cichu: zadanie działa, skaluje się, raportuje dobry stan i nie robi nic.
+Od tamtej pory pierwszą rzeczą, którą sprawdzamy, jest zaległość w subskrypcji, a nie stan zadania.
+
+\subsection{Błąd powtarzalności w wykrywaniu języka}
+\label{sec:impl-langdetect}
+
+Gdy potok wreszcie działał, dwa pierwsze odtworzenia tych samych danych dały różne wyniki.
+Liczba wierszy, identyfikatory, wydźwięk i wszystkie inne kolumny były identyczne, ale 68 rekordów różniło się językiem.
+Ponieważ język jest w tabeli zdarzeń wartością ostateczną, już samo to łamało obietnicę powtarzalności, dla której zbudowaliśmy całą architekturę.
+
+Przyczyny były dwie i obie tkwiły w bibliotece \code{langdetect}.
+Biblioteka losuje fragmenty tekstu i dla każdego wykrycia tworzy nowy generator liczb losowych z ziarnem zapisanym w atrybucie klasy, domyślnie pustym, co oznacza ziarno z entropii systemu.
+Ustawialiśmy ziarno przy imporcie modułu, co wyglądało na równoważne ustawianiu go przy każdym wywołaniu, a nie było: na maszynach roboczych moduł docierał do detektora bez tego przypisania.
+Krótki tekst \enquote{Hell yeah!} bez ziarna bywał rozpoznawany jako angielski, indonezyjski albo turecki.
+Ustawienie ziarna w samej funkcji wykrywania, widoczne na listingu~\ref{lst:langdetect}, usunęło część różnic, ale nie wszystkie: po poprawce różniło się wciąż 87 rekordów.
+
+\lstinputlisting[
+  language=Python, firstline=232, lastline=257, firstnumber=232, float=hbp,
+  caption={Deterministyczne wykrywanie języka (plik \texttt{dataflow/transforms.py})},
+  label={lst:langdetect},
+]{../dataflow/transforms.py}
+
+Wzorzec różnic zdradził drugą przyczynę.
+Na świeżo uruchomionych maszynach zwykły angielski tekst dostawał oznaczenia \code{af}, \code{it} albo \code{no}, a na rozgrzanych \code{en}.
+Biblioteka przy pierwszym użyciu tworzy globalny obiekt detektora i dopiero potem wczytuje do niego profile języków.
+Wątek, który trafi w tę lukę, widzi obiekt, uznaje go za gotowy i wykrywa język na podstawie profili wczytanych do tej pory, czyli alfabetycznie pierwszych, stąd afrikaans.
+Dataflow uruchamia kilka wątków przetwarzania na każdej maszynie, więc na zimnej maszynie dzieje się to niemal przy każdym starcie.
+Odtworzyliśmy to lokalnie: zimny start i dwanaście równoległych wątków dawały błędne języki w trzech próbach na trzy.
+Pierwsze wczytanie profili zabezpieczyliśmy blokadą i przenieśliśmy do metody \code{setup}, zanim jakikolwiek wątek dotrze do detektora, a testy odtwarzają zimny stan biblioteki i obciążają ją dwunastoma wątkami.
+
+Z tego błędu wynika ogólniejsza lekcja.
+Błąd nie tkwił w naszym kodzie, tylko w zachowaniu cudzej biblioteki przy współbieżności, którą narzuca Dataflow.
+Każdy komponent wczytujący pliki przy starcie zasługuje na taką samą podejrzliwość, a odcisk tabeli jest narzędziem, które takie problemy wychwytuje.
+
+\subsection{Scalanie i odcisk tabeli}
+\label{sec:impl-merge}
+
+Scalanie wyników z tabelą zdarzeń wykonuje instrukcja z listingu~\ref{lst:merge}.
+Z tabeli lądowania wybiera dla każdego identyfikatora wiersz z najpóźniejszym czasem przetworzenia i albo aktualizuje nim istniejący wiersz, jeśli jest świeższy, albo go wstawia.
+Czasu pobrania nie można użyć do rozstrzygania, bo dwa odtworzenia tych samych danych mają go identyczny.
+
+\lstinputlisting[
+  language=SQL, firstline=14, lastline=43, firstnumber=14, float=hbp,
+  caption={Scalanie tabeli lądowania z tabelą zdarzeń (plik \texttt{dataflow/promote.sql})},
+  label={lst:merge},
+]{../dataflow/promote.sql}
+
+Odcisk tabeli, przedstawiony na listingu~\ref{lst:fingerprint}, sumuje skróty wszystkich wierszy z pominięciem wersji modelu i czasu przetworzenia.
+Suma nie zależy od kolejności wierszy.
+Przy pierwszym uruchomieniu zapytanie się nie powiodło, bo funkcja skrótu zwraca liczby z pełnego zakresu typu 64-bitowego i ich suma dla kilku tysięcy wierszy przekracza ten zakres; rzutowanie na typ \code{NUMERIC} rozwiązało problem.
+
+\lstinputlisting[
+  language=SQL, firstline=19, lastline=32, firstnumber=19, float=hbp,
+  caption={Odcisk tabeli zdarzeń (plik \texttt{dataflow/verify.sql})},
+  label={lst:fingerprint},
+]{../dataflow/verify.sql}
+
+\subsection{Odtworzenie jako jedno uruchomienie}
+\label{sec:impl-replay-build}
+
+Na początku odtworzenie było ciągiem ręcznie wpisywanych poleceń: uruchom szablon, uruchom wydawcę, obserwuj zadanie, zatrzymaj je, scal wyniki.
+Dwa z tych kroków kosztowały nas prawdziwe przebiegi.
+Zakończenie pracy wydawcy oznacza, że wszystko zostało opublikowane, a nie przetworzone, więc scalanie w tym momencie obcina koniec odtworzenia.
+Gorzej, że przedwczesne zatrzymanie potoku porzuca wszystko, co zostało w kolejce.
+
+Dokładnie to zdarzyło się przy pierwszym odtworzeniu z modelem XLM-R.
+Pętla oczekująca uznawała, że przetwarzanie się skończyło, gdy liczba wierszy w tabeli lądowania nie zmieniła się przez trzy minuty, a zablokowany potok wygląda dokładnie tak samo.
+Przetworzono \num{10002} z \num{12254} rekordów, w subskrypcji zostało \num{3190} komunikatów, a przebieg zgłosił sukces.
+Tabela zdarzeń wyszła mieszana: \num{10002} wiersze z etykietami nowego modelu i \num{2252} z etykietami zaślepki z wcześniejszego odtworzenia.
+Sprawdzenie kompletności tego nie wychwyciło, bo porównywało identyfikatory z tabeli pośredniej ze wszystkimi kiedykolwiek wylądowanymi, a te identyfikatory wylądowały wcześniej.
+
+Odpowiedzią była decyzja, że jedno odtworzenie to jedno uruchomienie wyzwalacza w Cloud Build, z regułami opisanymi w podrozdziale~\ref{sec:design-replay}: czekanie na kompletność bieżącego przebiegu, brak scalania przy niekompletności i zatrzymanie potoku zawsze.
+Przy wdrażaniu tej zmiany wyszły trzy kolejne błędy.
+Dwa wynikały z tego samego nieporozumienia: zmienne Cloud Build nie są zmiennymi powłoki, więc zapis z podwójnym znakiem dolara rozwijał się do pustego napisu, co dawało niepoprawną nazwę zadania i zapytanie bez projektu.
+Trzeci był groźniejszy: świeżo uruchomione zadanie przez kilka minut nie pojawia się na liście zadań, więc krok zatrzymujący, który szukał go po nazwie, zgłosiłby brak czegokolwiek do zatrzymania, a zadanie naliczałoby opłaty dalej.
+Orkiestrator zapisuje więc identyfikator zadania z wyniku uruchomienia i posługuje się nim we wszystkich dalszych krokach.
+
+\section{Model językowy i środowisko MLOps}
+\label{sec:impl-nlp}
+
+Część dotycząca modelu przeszła najwięcej zmian, bo pierwotny plan zderzył się z danymi i z ograniczeniami sprzętowymi.
+Jej punktem wyjścia był kontrakt z listingu~\ref{lst:classifier}: potok zna wyłącznie interfejs klasyfikatora i klasę wyniku, więc zamiana modelu jest zmianą w rejestrze, a nie w potoku.
+Interfejs wymaga dwóch rzeczy: determinizmu, czyli tej samej odpowiedzi dla tego samego tekstu przy każdym wywołaniu, oraz odpowiedzi dla każdego wejścia, także pustego.
+
+\lstinputlisting[
+  language=Python, firstline=136, lastline=179, firstnumber=136, float=hbp,
+  caption={Interfejs klasyfikatora wydźwięku (plik \texttt{nlp/base.py})},
+  label={lst:classifier},
+]{../nlp/base.py}
+
+Rejestr udostępnia dwie implementacje: deterministyczną zaślepkę, na której zbudowaliśmy i przetestowaliśmy cały potok, zanim istniał jakikolwiek model, oraz klienta punktu końcowego Vertex AI.
+Nieznana nazwa modelu w parametrze uruchomienia zatrzymuje potok przy starcie maszyny, zamiast po cichu oznaczyć całe odtworzenie niewłaściwym modelem.
+
+\subsection{Pierwszy model: angielski DistilBERT}
+\label{sec:impl-distilbert}
+
+Pierwszym modelem był angielski DistilBERT w wersji bez rozróżniania wielkości liter, dostrojony do trzech klas.
+Dane treningowe, około \num{222000} przykładów, pochodziły ze zbiorów publicznych: SST-2, TweetEval, Sentiment140 i GoEmotions, uzupełnionych o 220 oznaczonych komentarzy z naszego zbioru~\cite{socher2013recursive,barbieri2020tweeteval,go2009twitter,demszky2020goemotions}.
+Model trenowaliśmy na maszynie \code{e2-standard-4} w środowisku Workbench, bez akceleratora graficznego.
+Trzy epoki, czyli \num{75090} kroków przy paczce ośmiu przykładów, zajęły około 44,5 godziny.
+
+Zanim to się udało, maszyna zatrzymała się w trakcie pierwszego treningu.
+Nasz moduł Terraform ustawiał wtedy wyłączanie maszyny po trzech godzinach bezczynności notatnika, a proces uczenia uruchomiony przez SSH nie liczy się jako aktywność.
+Usunięcie ustawienia z metadanych maszyny nie pomogło, bo usługa wyłączająca odczytała je przy starcie systemu i odliczała dalej.
+Skuteczne okazało się dopiero zablokowanie samej usługi systemowej, a w Terraform wartość zero, która miała wyłączać tę funkcję, interfejs odrzucał, więc moduł po prostu pomija ten parametr.
+
+Na publicznym zbiorze kontrolnym model osiągnął dokładność \num{0.802} i F1 makro \num{0.786}.
+Na naszym zbiorze wzorcowym z 300 komentarzy YouTube wyniki były znacznie gorsze: dokładność \num{0.533} i F1 makro \num{0.472}, a dla komentarzy angielskich dokładność około \num{0.635}.
+Dokładność \num{0.533} jest praktycznie równa wynikowi reguły, która każdej opinii przypisuje klasę pozytywną, bo taką klasę ma 161 z 300 komentarzy zbioru wzorcowego.
+Z analizy błędów wynikły trzy przyczyny.
+Pierwszą był język: angielski model dostawał komentarze, z których wiele nie było po angielsku, a recenzje Steam, które mieliśmy dopiero zebrać, były po angielsku tylko w niespełna połowie.
+Drugą była różnica dziedzin: recenzje filmów i wpisy z Twittera słabo przypominają komentarze o grach, a 220 komentarzy z naszej dziedziny ginęło wśród ponad \num{220000} przykładów publicznych.
+Trzecią była nierównowaga klas: w zbiorze wzorcowym było tylko 20 komentarzy negatywnych, a model często mylił neutralne z pozytywnymi.
+
+\subsection{Zmiana na wielojęzyczny XLM-RoBERTa}
+\label{sec:impl-xlmr}
+
+Odpowiedzią na pierwszą przyczynę był model wielojęzyczny XLM-R w wersji bazowej, z około 278 milionami parametrów, wstępnie wytrenowany na stu językach~\cite{conneau2020unsupervised}.
+Na dwie pozostałe odpowiedzieliśmy zmianą danych i sposobu uczenia.
+Nowy zestaw danych, zestawiony w tabeli~\ref{tab:xlmr-corpus}, liczył od \num{150000} do \num{180000} przykładów i był zdominowany przez wielojęzyczne opinie w językach, które przeważają w recenzjach Steam.
+Zbiory SST-2 i Sentiment140, które najbardziej odpowiadały za różnicę dziedzin, wyłączyliśmy.
+Komentarze z części treningowej naszego zbioru wzorcowego powieliliśmy dziesięciokrotnie, a funkcja straty ważyła klasy odwrotnie do ich liczebności.
+Najlepszy punkt kontrolny wybieraliśmy według F1 makro, a nie dokładności, co przy nierównych klasach ma znaczenie.
+
+\begin{table}[hbp]
+  \caption{Skład danych treningowych modelu XLM-R v2}
+  \label{tab:xlmr-corpus}
+  \centering
+  \small
+  \begin{tabular}{|p{0.27\textwidth}|p{0.2\textwidth}|p{0.1\textwidth}|p{0.28\textwidth}|}
+    \hline
+    Zbiór                                         & Przykładów           & Udział            & Uwagi                                              \\
+    \hline
+    clapAI MultiLingualSentiment~\cite{clapaimultilingualsentiment} & po \num{18000} dla 5 języków i po \num{6000} dla 3 & ok. \qty{62}{\percent} & en, zh, ru, fr, ko oraz de, es, ja; teksty do 512 znaków \\
+    \hline
+    TweetEval, wydźwięk~\cite{barbieri2020tweeteval} & \num{25000}       & ok. \qty{15}{\percent} & angielskie wpisy z mediów społecznościowych   \\
+    \hline
+    XLM-T, wydźwięk wielojęzyczny~\cite{barbieri2022xlmt} & ok. \num{24000} & ok. \qty{14}{\percent} & osiem języków                            \\
+    \hline
+    GoEmotions~\cite{demszky2020goemotions}       & \num{15000}          & ok. \qty{9}{\percent}  & komentarze z serwisu Reddit                  \\
+    \hline
+    zbiór wzorcowy, część treningowa              & 220 × 10             & ok. \qty{1}{\percent}  & część kontrolna nigdy nie trafia do uczenia  \\
+    \hline
+  \end{tabular}
+\end{table}
+
+\subsection{Trenowanie wyłącznie na procesorach}
+\label{sec:impl-cpu}
+
+Wszystkie modele trenowaliśmy i serwowaliśmy wyłącznie na procesorach (\ac{cpu}), bez procesorów graficznych (\ac{gpu}).
+Na koncie rozliczeniowym projektu nie korzystaliśmy z akceleratorów, a cały projekt musiał zmieścić się w budżecie rzędu kilkudziesięciu złotych miesięcznie.
+\todo{Potwierdzić i opisać dokładną przyczynę braku GPU (limit akceleratorów na koncie, koszt, zasady konta rozliczeniowego).}
+Ograniczenie to ukształtowało cały proces.
+Model XLM-R jest kilkukrotnie większy od DistilBERT, więc do jego trenowania użyliśmy na czas jednego przebiegu maszyny \code{n2-standard-16} z 64~GB pamięci, przy paczce ośmiu przykładów i szacowanym czasie od 25 do 45 godzin.
+Po pierwszym pobraniu modelu i danych z serwisu Hugging Face kopiowaliśmy pamięć podręczną do Cloud Storage, aby kolejne sesje działały bez dostępu do internetu.
+Przebieg trwający półtorej doby oznaczał też, że każdy błąd w konfiguracji kosztował dzień pracy, a maszynę trzeba było po treningu zatrzymać ręcznie, bo automatyczne wyłączanie zostało wyłączone.
+\todo{Uzupełnić faktyczny czas trenowania XLM-R v2 i v2.1 (z MLflow).}
+
+Brak akceleratora odczuliśmy jeszcze mocniej przy serwowaniu.
+Jedna replika \code{n1-standard-8} klasyfikowała recenzję w około 170~ms, co dla \num{12254} komentarzy YouTube oznaczało około 35 minut, a dla całego zbioru z recenzjami Steam około 12 godzin.
+Zwiększenie paczek niewiele dawało, bo czas zajmowało samo wnioskowanie, a nie narzut wywołań.
+Jedynym rozwiązaniem była równoległość, a tu czekała kolejna niespodzianka.
+Wdrożenie repliki dla pełnego odtworzenia kończyło się błędem przekroczenia limitu procesorów do serwowania modeli, na każdym rozmiarze maszyny, nawet z dwoma rdzeniami.
+Limit dla rodziny maszyn N1 był od 10 października zajęty w całości, choć nic nie było wdrożone, a zwolnić mógł go tylko wniosek do Google.
+Okazało się jednak, że Vertex AI liczy ten limit osobno dla każdej rodziny maszyn, a limity dla rodzin N2 i N2D były wolne.
+Wdrożyliśmy więc ten sam model jednocześnie na maszynach \code{n2-standard-8} i \code{n2d-standard-8}, z podziałem ruchu po połowie, co dało 16 rdzeni zamiast ośmiu.
+Pełne odtworzenie \num{263893} opinii trwało w ten sposób 2 godziny i 12 minut.
+
+\subsection{Dostrajanie kontynuowane: wersja 2.1}
+\label{sec:impl-xlmr-21}
+
+Wersja v2 wyraźnie poprawiła wyniki, ale zbiór wzorcowy z 300 komentarzy, z zaledwie 80 w części kontrolnej, nie pozwalał rzetelnie porównywać kolejnych modeli.
+Rozszerzyliśmy go do 950 komentarzy: 670 w części uczącej, 80 w części strojenia i 200 w części kontrolnej, w której znalazło się wszystkich 80 komentarzy z pierwotnej części kontrolnej.
+Kandydatów do oznaczenia wstępnie oznaczył asystent programistyczny oparty na dużym modelu językowym, pracujący na plikach według naszych wytycznych oznaczania.
+Człowiek przeglądał i zatwierdzał wszystkie wstępnie negatywne komentarze, wszystkie o niskiej pewności i wszystkie przydzielone do części strojenia i kontrolnej.
+Konsekwencje tej procedury dla wiarygodności oceny omawiamy w rozdziale~\ref{chap:evaluation}.
+
+Wersję v2.1 uzyskaliśmy, kontynuując dostrajanie wersji v2 przez trzy epoki z niską stałą uczenia, \num{1e-5}, na danych z naszej dziedziny uzupełnionych o \num{5000} przykładów publicznych, które chroniły model przed zapomnieniem.
+Przed treningiem spisaliśmy warunki, które nowa wersja musi spełnić, aby zastąpić poprzednią: wyższe F1 makro na części kontrolnej, wyższe F1 dla klasy negatywnej i brak pogorszenia na komentarzach angielskich.
+Wersja v2.1 spełniła wszystkie trzy, choć poprawa dla klasy negatywnej była minimalna; szczegółowe wyniki przedstawiamy w podrozdziale~\ref{sec:eval-quality}.
+
+\subsection{Serwowanie modelu}
+\label{sec:impl-serving}
+
+Wybrany model rejestrujemy w rejestrze modeli Vertex AI i wdrażamy na punkt końcowy wyłącznie na czas odtworzenia.
+Używamy gotowego kontenera Hugging Face do wnioskowania na procesorach; kontener TorchServe, który wypróbowaliśmy wcześniej, nie akceptował katalogu modelu w formacie Hugging Face.
+Po odtworzeniu model jest wycofywany z punktu końcowego, a punkt końcowy usuwany, więc między odtworzeniami serwowanie nic nie kosztuje.
+Całe przejście modelu od trenowania do potoku przedstawia rysunek~\ref{fig:model-lifecycle}.
+
+\begin{figure}[hbp]
+  \centering
+  \begin{tikzpicture}[
+      font=\footnotesize,
+      box/.style={draw, rounded corners=2pt, align=center, minimum height=9mm, text width=27mm, fill=gray!8},
+      store/.style={box, fill=blue!8},
+      arr/.style={-{Latex[length=2mm]}, thick},
+      lab/.style={font=\scriptsize, fill=white, inner sep=1pt}]
+    \node[box] (wb) at (0,0) {Vertex AI Workbench\\(trenowanie, CPU)};
+    \node[box] (ml) at (4.2,1.2) {serwer MLflow\\(Cloud Run, Cloud SQL)};
+    \node[store] (gcs) at (4.2,-1.2) {wagi modeli\\(Cloud Storage)};
+    \node[box] (reg) at (8.4,0) {rejestr modeli\\Vertex AI};
+    \node[box] (ep) at (8.4,-2.6) {punkt końcowy\\Vertex AI};
+    \node[box] (df) at (4.2,-3.8) {potok Apache Beam\\(Dataflow)};
+    \draw[arr] (wb) -- node[lab, above left=0pt] {parametry, metryki} (ml);
+    \draw[arr] (wb) -- node[lab, below left=0pt] {wagi} (gcs);
+    \draw[arr] (gcs) -- node[lab, below right=0pt] {rejestracja} (reg);
+    \draw[arr] (reg) -- node[lab, right=1pt] {wdrożenie na czas odtworzenia} (ep);
+    \draw[arr, {Latex[length=2mm]}-{Latex[length=2mm]}] (df) -- node[lab, below right=0pt] {REST} (ep);
+  \end{tikzpicture}
+  \caption{Cykl życia modelu: od trenowania do klasyfikacji w potoku}
+  \label{fig:model-lifecycle}
+\end{figure}
+
+Dwa problemy z serwowaniem ujawniły dopiero recenzje Steam.
+Pierwszym była długość: XLM-R przyjmuje najwyżej 512 tokenów, a kontener serwujący nie przycina dłuższych tekstów, tylko zwraca błąd o niezgodnym rozmiarze tensora.
+Takiego błędu nie naprawi żadne ponowienie, a potok ponawia paczkę w nieskończoność, więc jedna długa recenzja wystarczała, by zatrzymać całe odtworzenie.
+Klient nie ma tokenizatora, bo właśnie po to model działa zdalnie, więc długość szacuje funkcja z listingu~\ref{lst:tokens}: jeden token na znak chiński, japoński lub koreański, jeden na dwa znaki cyrylicy lub greki i jeden na cztery pozostałe znaki.
+Budżet 240 tokenów wyznaczyliśmy doświadczalnie, bo przy 480 punkt końcowy wciąż odrzucał część zapytań, a gdy szacunek okaże się zbyt optymistyczny, klient skraca tekst i ponawia zapytanie.
+
+\lstinputlisting[
+  language=Python, firstline=182, lastline=198, firstnumber=182, float=hbp,
+  caption={Szacowanie liczby tokenów bez tokenizatora (plik \texttt{nlp/endpoint/classifier.py})},
+  label={lst:tokens},
+]{../nlp/endpoint/classifier.py}
+
+Drugim problemem były recenzje złożone z samych białych znaków.
+Wysyłanie ich do modelu groziło tym samym rodzajem błędu, więc klient odpowiada na nie sam: etykietą neutralną z pewnością równą dokładnie zero.
+Funkcja softmax nigdy nie zwraca zera, więc taka wartość jednoznacznie oznacza, że modelu nie pytano.
+Przy błędzie, którego nie da się naprawić ponowieniem, klient zgłasza wyjątek, a nie zwraca udawanej etykiety neutralnej, bo taka etykieta po cichu zatrułaby tabelę zdarzeń.
+
+Ostatnia zmiana dotyczyła wersji modelu zapisywanej w każdym wierszu.
+Początkowo był to identyfikator wdrożenia na punkcie końcowym, który zmienia się przy każdym wdrożeniu, nawet tych samych wag.
+Przy jednoczesnym wdrożeniu na dwóch rodzinach maszyn jeden model miałby więc dwie wersje.
+Wiersz zawiera teraz wersję z rejestru modeli, \code{xlmr-sent-v2.1}, czyli to, co faktycznie decyduje o etykietach.
+
+\subsection{Serwer MLflow}
+\label{sec:impl-mlflow}
+
+MLflow towarzyszył trenowaniu od początku, ale przez pierwsze miesiące nie był wdrożony.
+Parametry i metryki przebiegów trafiały do katalogu na dysku maszyny Workbench, a tylko artefakty do Cloud Storage.
+Miało to trzy wady: historię przebiegów widział tylko ten, kto uruchomił maszynę i interfejs MLflow, historia mogła zniknąć razem z dyskiem, a sam MLflow był umową na jednej maszynie, a nie infrastrukturą jak reszta systemu.
+
+Dlatego 28 października 2026~r. uruchomiliśmy serwer śledzenia MLflow w Cloud Run, z bazą PostgreSQL w Cloud SQL na metadane i rejestr modeli, opisany w Terraform.
+Artefakty pozostały w Cloud Storage, a serwer ich nie pośredniczy, bo wagi ważą gigabajty, a Cloud Run ogranicza rozmiar żądania do 32 MiB.
+Dostęp do interfejsu daje \ac{iap} osobom z tej samej listy, która uprawnia do odczytu widoków raportowych.
+Dotychczasowe przebiegi przenieśliśmy na serwer skryptem, który zachowuje stary identyfikator przebiegu jako znacznik.
+
+Ta decyzja ma swoją cenę: baza działa stale i kosztuje od 40 do 55~zł miesięcznie, czyli mniej więcej tyle, ile wynosił cały wcześniejszy budżet środowiska.
+Rozważaliśmy bazę wyłączaną między użyciami i bazę SQLite na wolumenie Cloud Storage, ale pierwsza oznaczałaby platformę zwykle niedostępną, a druga ryzyko uszkodzenia danych, bo Cloud Storage nie obsługuje blokowania plików.
+Uznaliśmy, że platforma, która przez większość czasu jest wyłączona, nie jest wdrożoną platformą.
+Po przeniesieniu przebiegów usunęliśmy maszynę Workbench, a dane potrzebne do ponownego trenowania zostały w Cloud Storage.
+
+\section{Warstwa raportowa i panel}
+\label{sec:impl-reporting}
+
+Pierwsze widoki raportowe zdefiniowaliśmy w kodzie Terraform, a część miar, na przykład zestawienia tygodniowe i porównanie wydarzenia z tłem, liczył kod w Pythonie w tymczasowym panelu.
+Takie rozwiązanie miało trzy wady.
+Zmiana klauzuli \code{GROUP BY} wymagała planu, zatwierdzenia i zastosowania zmian infrastruktury, tak samo jak zmiana konta usługi.
+Nic nie testowało danych, więc widok mógł liczyć coś dwukrotnie i i tak się wdrożyć.
+Miar liczonych w Pythonie nie mógł z kolei użyć Looker Studio.
+
+Wszystkie widoki przenieśliśmy więc do projektu Dataform w katalogu głównym repozytorium.
+Każdy widok jest osobnym plikiem z opisem kolumn i testami danych: unikalnością klucza, warunkami na wartości i zgodnością sum z tabelą zdarzeń.
+Dla zgłoszenia zmian Cloud Build kompiluje projekt, a po scaleniu zleca Dataform wykonanie wszystkich akcji i czeka na wynik; nieudany test przerywa wdrożenie.
+Zmiana miary nie wymaga już zatwierdzania infrastruktury, bo przeglądem jest zgłoszenie zmian.
+Nowe widoki dały na danych produkcyjnych wyniki zgodne z wcześniejszymi obliczeniami w Pythonie z tolerancją względną $10^{-9}$.
+
+Najciekawszym widokiem jest \code{v_event_lift}, przedstawiony na listingu~\ref{lst:event-lift}, który porównuje okno wydarzenia z tłem z tego samego źródła.
+Dla każdej pary wydarzenia i źródła dzieli dzienne liczniki na te z okna wydarzenia i wszystkie pozostałe, a następnie liczy różnicę wskaźnika netto i stosunek liczby opinii na dzień.
+Tłem dla recenzji Steam są głównie recenzje spoza okien wydarzeń, a dla komentarzy YouTube, które zbieramy tylko wokół wydarzeń, pozostałe wydarzenia.
+
+\lstinputlisting[
+  language=SQL, firstline=37, lastline=80, firstnumber=37, float=hbp,
+  caption={Efekt wydarzenia względem tła z tego samego źródła (plik \texttt{v\_event\_lift.sqlx})},
+  label={lst:event-lift},
+]{../definitions/reporting/v_event_lift.sqlx}
+
+Panel jest raportem Looker Studio o nazwie \enquote{Pop vibe check}, złożonym z trzech stron opisanych w podrozdziale~\ref{sec:design-ui}.
+Każdy z sześciu używanych widoków ma w raporcie własne źródło danych, a zapytania wykonują się z uprawnieniami osoby oglądającej.
+Wskaźnik netto i udziały klas są polami obliczanymi z sum liczników, więc są poprawne dla dowolnego wyboru źródeł i okresów.
+Raport przechowuje wyniki zapytań przez 12 godzin, co przy danych zmieniających się tylko po odtworzeniu w zupełności wystarcza.
+Słabością tego rozwiązania jest to, że układ raportu, pola obliczane i źródła danych istnieją tylko w Looker Studio, na koncie jednego z nas, a nie w repozytorium.
+W repozytorium są wyłącznie widoki, dlatego wszystkie miary celowo liczymy w nich, a raport tylko je wyświetla.
+Jak z panelu i z całego systemu korzystać w praktyce, opisuje kolejny rozdział.

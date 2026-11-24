@@ -1,0 +1,53 @@
+% !TeX root = ../main.tex
+\chapter*{Dodatek A. Zapytania użyte w ewaluacji}
+\addcontentsline{toc}{chapter}{Dodatek A. Zapytania użyte w ewaluacji}
+\label{chap:appendix-queries}
+
+% FIRST DRAFT. The exact queries run on 2026-11-23 (read-only, reporting
+% views only: no author hash, no text).
+
+Zapytania z tego dodatku dają wyniki z podrozdziałów~\ref{sec:eval-weak-labels} i~\ref{sec:eval-case-study}.
+Wszystkie czytają wyłącznie widoki zbioru raportowego, które nie zawierają pseudonimu autora ani treści opinii, a wykonaliśmy je 23 listopada 2026~r. na danych z odtworzenia z 18 października 2026~r.
+Zapytanie z listingu~\ref{lst:q-weak} daje macierz z tabeli~\ref{tab:weak-confusion}.
+
+\begin{lstlisting}[float=hbp, language=SQL, caption={Etykiety modelu a rekomendacje autorów recenzji Steam}, label={lst:q-weak}]
+SELECT voted_up, sentiment_label, COUNT(*) AS n
+FROM `pop-vibe-check.co_reporting_dev.v_events`
+WHERE source = 'steam'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+\end{lstlisting}
+
+Zapytanie z listingu~\ref{lst:q-weak-events} daje zestawienie z tabeli~\ref{tab:weak-events}; po zamianie kolumny grupującej na \code{language} daje też porównanie dla języków.
+
+\begin{lstlisting}[float=hbp, language=SQL, caption={Udział rekomendacji i wskaźnik netto modelu w oknach wydarzeń}, label={lst:q-weak-events}]
+SELECT
+  IFNULL(event_tag, 'general') AS event_tag,
+  COUNT(*) AS n,
+  ROUND(AVG(IF(voted_up, 1, 0)), 3) AS thumbs_up_share,
+  ROUND(SAFE_DIVIDE(COUNTIF(sentiment_label = 'pos')
+                    - COUNTIF(sentiment_label = 'neg'), COUNT(*)), 3) AS net_model
+FROM `pop-vibe-check.co_reporting_dev.v_events`
+WHERE source = 'steam'
+GROUP BY 1
+ORDER BY 1;
+\end{lstlisting}
+
+Zapytanie z listingu~\ref{lst:q-weekly} daje dane do rysunku~\ref{fig:weekly-net}, a zapytanie z listingu~\ref{lst:q-lift} dane do rysunku~\ref{fig:event-lift}.
+
+\begin{lstlisting}[float=hbp, language=SQL, caption={Tygodniowy wskaźnik netto według źródeł}, label={lst:q-weekly}]
+SELECT source, period, records, ROUND(net_sentiment, 3) AS net
+FROM `pop-vibe-check.co_reporting_dev.v_sentiment_by_period`
+WHERE grain = 'week' AND records >= 20
+ORDER BY source, period;
+\end{lstlisting}
+
+\begin{lstlisting}[float=hbp, language=SQL, caption={Efekt wydarzeń względem tła z tego samego źródła}, label={lst:q-lift}]
+SELECT event_tag, source, records, days,
+       ROUND(net_sentiment, 3) AS net,
+       ROUND(baseline_net_sentiment, 3) AS base_net,
+       ROUND(net_lift, 3) AS lift,
+       ROUND(volume_multiplier, 2) AS vol_mult
+FROM `pop-vibe-check.co_reporting_dev.v_event_lift`
+ORDER BY source, event_tag;
+\end{lstlisting}

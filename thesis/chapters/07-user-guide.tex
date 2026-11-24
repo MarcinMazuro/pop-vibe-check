@@ -1,0 +1,169 @@
+% !TeX root = ../main.tex
+\chapter{Instrukcja użytkowania}
+\label{chap:user-guide}
+
+% FIRST DRAFT. Commands come from the READMEs in the repository
+% (dataflow/, publisher/, collectors/steam/, nlp/, terraform/envs/dev/) and
+% from docs/phase-1-looker-studio.md. Screenshots of the Looker Studio report
+% are still missing.
+
+System ma dwie grupy użytkowników o zupełnie różnych potrzebach.
+Analityk ogląda wyniki w przeglądarce i nie musi wiedzieć, jak powstały.
+Członek zespołu uruchamia pobieranie danych, odtworzenia i trenowanie, a do tego potrzebuje dostępu do projektu w chmurze i narzędzi wiersza poleceń.
+Rozdział zaczyna się od instrukcji dla analityka, a następnie opisuje przygotowanie środowiska pracy, konfigurację nowego studium przypadku i codzienną obsługę systemu.
+
+\section{Korzystanie z panelu}
+\label{sec:guide-dashboard}
+
+Panel jest raportem Looker Studio o nazwie \enquote{Pop vibe check}.
+Dostęp do niego wymaga wpisu na dwóch listach.
+Pierwszą jest lista osób uprawnionych do odczytu widoków raportowych, zapisana w konfiguracji Terraform; daje ona prawo odczytu danych w BigQuery.
+Drugą jest lista udostępnienia samego raportu w Looker Studio.
+Osoba, która jest tylko na jednej z nich, albo nie otworzy raportu, albo zobaczy go bez danych.
+
+Raport ma trzy strony, przełączane w menu po lewej stronie.
+Strona \emph{Przegląd} pokazuje u góry cztery wskaźniki dla wybranego zakresu: liczbę opinii, wskaźnik wydźwięku netto oraz udziały opinii pozytywnych i negatywnych.
+Pod nimi są dwa wykresy: wskaźnik netto w czasie, osobno dla każdego źródła, i liczba opinii w kolejnych okresach.
+Okres agregacji wybiera się przełącznikiem: dzień, tydzień, który jest ustawieniem domyślnym, albo miesiąc.
+Wykres wskaźnika netto pomija okresy, w których źródło miało mniej niż 20 opinii, bo wskaźnik policzony z kilku komentarzy łatwo pomylić z trendem.
+Tabela pod wykresami podaje dla każdego wydarzenia datę pierwszej i ostatniej opinii oraz ich liczbę.
+
+Strona \emph{Wydarzenia} odpowiada na pytanie, jak odbiorcy zareagowali na konkretne wydarzenie.
+Pokazuje wskaźnik netto dla każdego wydarzenia i źródła, podział na klasy wydźwięku, osobno dla Steam i YouTube, oraz różnicę między najbardziej i najmniej pozytywnym źródłem.
+Najważniejsza jest część zatytułowana \enquote{Efekt wydarzenia}.
+Pokazuje ona, o ile wskaźnik netto w oknie wydarzenia różni się od tła z tego samego źródła i ile razy więcej opinii na dzień pojawiło się w tym oknie.
+Ujemna zmiana oznacza, że w czasie wydarzenia nastroje były gorsze niż zwykle, a mnożnik większy od jedności, że o wydarzeniu mówiono więcej niż zwykle.
+Tabela pod wykresami jest posortowana od największego spadku.
+
+Strona \emph{Źródła i języki} pokazuje, z jakich serwisów i w jakich językach pochodzą opinie.
+Wykres słupkowy przedstawia piętnaście najczęstszych języków, a tabela pod nim dla każdej pary źródła i języka podaje zakres dat, liczbę opinii, udział pozytywnych i liczbę wydarzeń.
+Ta strona pozwala na przykład szybko zauważyć, że wydarzenia sprzed premiery mają dane wyłącznie z YouTube.
+
+Wszystkie strony mają filtr źródła, a strona przeglądu także filtr zakresu dat.
+Raport przechowuje wyniki zapytań przez 12 godzin, więc po nowym odtworzeniu albo zmianie widoków trzeba wybrać z menu raportu polecenie odświeżenia danych.
+Tabela~\ref{tab:guide-troubleshooting} zbiera najczęstsze problemy z dostępem i ich rozwiązania.
+
+\begin{table}[hbp]
+  \caption{Najczęstsze problemy z panelem i ich rozwiązania}
+  \label{tab:guide-troubleshooting}
+  \centering
+  \small
+  \begin{tabular}{|p{0.3\textwidth}|p{0.27\textwidth}|p{0.3\textwidth}|}
+    \hline
+    Objaw                                                 & Przyczyna                                                  & Rozwiązanie                                                             \\
+    \hline
+    link wyświetla prośbę o dostęp                        & raport nie jest udostępniony temu kontu                    & udostępnić raport w Looker Studio                                       \\
+    \hline
+    raport się otwiera, ale wykresy pokazują błąd dostępu do danych & konta nie ma na liście czytelników widoków albo zmiana jeszcze się nie rozpropagowała & dopisać adres do listy w konfiguracji Terraform i zastosować zmiany; odczekać kilka minut \\
+    \hline
+    liczby starsze niż ostatnie odtworzenie               & 12-godzinna pamięć podręczna raportu                       & odświeżyć dane z menu raportu                                            \\
+    \hline
+    wykres pokazuje błąd pola po zmianie widoku           & kolumnę widoku przemianowano lub usunięto                  & odświeżyć pola źródła danych i poprawić wykresy, które z niej korzystały \\
+    \hline
+  \end{tabular}
+\end{table}
+
+\todo[inline]{Dodać zrzuty ekranu trzech stron raportu Looker Studio, z opisem elementów (filtry, wskaźniki, wykresy), na jasnym tle i z tekstem nie mniejszym niż 6 pt po przeskalowaniu.}
+
+\section{Przygotowanie środowiska pracy}
+\label{sec:guide-setup}
+
+Do pracy z systemem potrzebne są: narzędzie \code{gcloud}, Terraform w wersji co najmniej 1.6, Python 3.12 i Docker.
+Po instalacji należy zalogować się do Google Cloud dwukrotnie, raz dla narzędzia wiersza poleceń i raz dla bibliotek, które z niego korzystają.
+Terraform nie działa z uprawnieniami osoby, która go uruchamia, tylko podszywa się pod konto usługi przeznaczone do zarządzania infrastrukturą.
+Każdy członek zespołu potrzebuje więc roli, która na to pozwala, i nadaje mu ją osoba zarządzająca projektem.
+Rola właściciela projektu nie wystarcza, bo Google wyłącza z niej prawo tworzenia tokenów dla kont usług.
+
+Zmienne środowiska pobiera się z Secret Manager do pliku, którego nie zatwierdza się w repozytorium, a następnie inicjuje Terraform i wylicza plan, jak na listingu~\ref{lst:guide-setup}.
+W poprawnie skonfigurowanym środowisku plan nie powinien wykazać żadnych zmian.
+
+\begin{lstlisting}[float=hbp, language=bash, caption={Przygotowanie lokalnej kopii konfiguracji i sprawdzenie planu zmian}, label={lst:guide-setup}]
+gcloud auth login
+gcloud auth application-default login
+cd terraform/envs/dev
+gcloud secrets versions access latest --secret=co-tfvars-dev \
+  --project=pop-vibe-check > terraform.tfvars
+terraform init
+terraform plan   # oczekiwany wynik: brak zmian
+\end{lstlisting}
+
+Do pracy z kodem wystarczy lokalne środowisko Python z zależnościami deweloperskimi z pliku \code{requirements-dev.txt}.
+Przed zatwierdzeniem zmian te same sprawdzenia, które wykonuje potok \ac{cicd}, uruchamiają się jako zaczepy narzędzia \code{pre-commit}: formatowanie, analiza statyczna kodu i plików Terraform oraz testy.
+Nowy projekt w chmurze wymaga jednorazowego przygotowania, czyli utworzenia zasobnika na stan Terraform, konta usługi dla Terraform i włączenia interfejsów usług; robi to osobna konfiguracja w katalogu \code{terraform/bootstrap}.
+
+\section{Konfiguracja nowego studium przypadku}
+\label{sec:guide-new-release}
+
+System od początku projektowaliśmy z myślą o kolejnych premierach, ale nie wszystko jest jeszcze w pełni sparametryzowane.
+Nowe studium przypadku wymaga czterech kroków.
+Pierwszym jest wybór nowego przedrostka nazw zasobów, dzięki któremu Terraform utworzy obok istniejących drugi, niezależny komplet zasobów z własnym stanem.
+Drugim jest przygotowanie listy wydarzeń w pliku \code{events.yaml}, z identyfikatorem, nazwą, typem i datą każdego wydarzenia, oraz listy filmów YouTube w pliku \code{youtube_videos.yaml}.
+Trzecim jest ustawienie numeru aplikacji w sklepie Steam, który jest zmienną środowiskową zadania, a nie stałą w kodzie.
+Czwartym jest przygotowanie zbioru wzorcowego dla nowego tytułu, bo model jest niezależny od premiery, ale ocena jego jakości już nie.
+
+Pliki konfiguracji wydarzeń i filmów są obecnie częścią obrazów kolektorów, więc ich zmiana wymaga przebudowania obrazu.
+Przeniesienie ich do Cloud Storage, z odczytem przy starcie zadania, opisujemy jako kierunek dalszych prac.
+Sól pseudonimizacji jest wspólna dla projektu i nie może być zmieniana; klucz YouTube Data API jest osobisty dla każdego operatora.
+
+\section{Obsługa operacyjna}
+\label{sec:guide-operations}
+
+Codzienna obsługa sprowadza się do pięciu czynności: pobrania danych, załadowania ich do hurtowni, odtworzenia, przeglądu błędnych komunikatów i reakcji na alarmy.
+Okazjonalnie dochodzi do tego trenowanie i wdrożenie nowej wersji modelu.
+
+\subsection{Pobieranie i ładowanie danych}
+\label{sec:guide-collect}
+
+Kolektory uruchamia się poleceniem \code{gcloud run jobs execute} z parametrami przekazanymi jako zmienne środowiskowe, jak na listingu~\ref{lst:guide-collect}.
+Kolektor YouTube potrzebuje identyfikatora wydarzenia i okna czasowego.
+Kolektor Steam z identyfikatorem wydarzenia \code{auto} przechodzi całą historię i sam przypisuje recenzje do wydarzeń; pełny zbiór historyczny buduje skrypt \code{collect_history.sh}, który uruchamia wszystkie czternaście przejść opisanych w podrozdziale~\ref{sec:impl-steam}.
+Ponowne uruchomienie z tym samym oknem tylko dopisuje nowe paczki do archiwum, a duplikaty usuwa ładowanie do hurtowni, wykonywane przez wydawcę w trybie ładowania.
+
+\begin{lstlisting}[float=hbp, language=bash, caption={Pobranie komentarzy dla jednego wydarzenia i załadowanie archiwum do hurtowni}, label={lst:guide-collect}]
+gcloud run jobs execute co-youtube-collector-dev \
+  --region=europe-central2 --wait \
+  --update-env-vars="EVENT_ID=launch,WINDOW_FROM=2025-04-24T00:00:00Z,WINDOW_TO=2025-04-26T00:00:00Z"
+
+gcloud run jobs execute co-publisher-dev \
+  --region=europe-central2 --wait \
+  --update-env-vars="RUN_LOAD=only"
+\end{lstlisting}
+
+\subsection{Odtworzenie}
+\label{sec:guide-replay}
+
+Odtworzenie uruchamia się jednym poleceniem, przedstawionym na listingu~\ref{lst:guide-replay}.
+Parametr \code{_MODEL} wybiera klasyfikator: \code{stub} dla deterministycznej zaślepki, przydatnej do sprawdzania potoku bez kosztów modelu, albo \code{vertex} dla modelu na punkcie końcowym.
+Dodatkowe parametry pozwalają ograniczyć odtworzenie do jednego wydarzenia lub okna czasowego, zmienić przyspieszenie, liczbę i typ maszyn albo wyłączyć scalanie wyników.
+Postęp i wynik, łącznie z odciskiem tabeli, widać w dzienniku uruchomienia w konsoli Cloud Build.
+
+\begin{lstlisting}[float=hbp, language=bash, caption={Uruchomienie odtworzenia z modelem na punkcie końcowym}, label={lst:guide-replay}]
+gcloud builds triggers run co-replay-dev --region=europe-central2 \
+  --branch=main --substitutions=_MODEL=vertex
+\end{lstlisting}
+
+Przed odtworzeniem z prawdziwym modelem trzeba utworzyć punkt końcowy i wdrożyć na nim model, a po odtworzeniu model wycofać.
+Punkt końcowy tworzy Terraform po włączeniu odpowiedniej zmiennej, a wdrożenie i wycofanie wykonuje skrypt \code{nlp/endpoint/register.py}.
+Pusty punkt końcowy nie kosztuje nic, a punkt z wdrożonym modelem nalicza opłatę za każdą godzinę pracy repliki, więc wycofanie modelu jest równie ważne jak zatrzymanie potoku.
+
+\subsection{Błędne komunikaty i alarmy}
+\label{sec:guide-alarms}
+
+Komunikaty odrzucone przez potok trafiają do tematu błędnych komunikatów, z którego można je odczytać przez subskrypcję kontrolną.
+Każdy taki komunikat ma w atrybutach przyczynę odrzucenia i czas, a jego treść pozostaje niezmieniona, żeby dało się go poprawić i opublikować ponownie.
+Pojawienie się choćby jednego błędnego komunikatu wywołuje alarm.
+
+Alarmy przychodzą pocztą elektroniczną.
+Alarm o błędzie zadania potoku wymaga sprawdzenia dziennika zadania w konsoli Dataflow.
+Alarm o zadaniu działającym dłużej niż 6 godzin oznacza najczęściej, że odtworzenie zostało przerwane, a potok nie został zatrzymany; wtedy trzeba zatrzymać go ręcznie, z opróżnieniem kolejki.
+Alarm o zaległości w kolejce oznacza, że potok nie nadąża albo, jak przy opisanych wcześniej problemach z uprawnieniami, w ogóle nie pobiera komunikatów, choć raportuje poprawny stan.
+Powiadomienie o przekroczeniu progu budżetu jest sygnałem, żeby sprawdzić, czy w projekcie nie działa coś, co powinno być wyłączone, na przykład punkt końcowy z wdrożonym modelem albo maszyna Workbench.
+
+\subsection{Trenowanie nowej wersji modelu}
+\label{sec:guide-training}
+
+Maszyna do trenowania nie istnieje na stałe.
+Aby trenować, należy włączyć ją zmienną w konfiguracji środowiska i zastosować zmiany przez potok Terraform, który utworzy nową, pustą maszynę Workbench.
+Dane, modele bazowe i pamięć podręczną bibliotek kopiuje się na nią z Cloud Storage, a przebieg rejestruje się na serwerze MLflow.
+Po treningu wyniki należy skopiować z powrotem do Cloud Storage, ocenić model na zbiorze wzorcowym skryptami z katalogu \code{nlp/eval} i wyłączyć maszynę, przywracając wartość zmiennej.
+Nową wersję wdraża się tylko wtedy, gdy spełnia warunki opisane w podrozdziale~\ref{sec:impl-xlmr-21}; w przeciwnym razie wynik oceny zapisuje się w dokumentacji, a dotychczasowa wersja pozostaje w użyciu.

@@ -1,0 +1,74 @@
+% !TeX root = ../main.tex
+\chapter{Podsumowanie}
+\label{chap:summary}
+
+% FIRST DRAFT. Future work follows docs/phase-3-plan.md and the open items
+% in the phase write-ups.
+
+Zbudowaliśmy system, który pobrał ponad ćwierć miliona opinii o jednej grze z dwóch serwisów, odtworzył je jako strumień w ich rzeczywistej kolejności, sklasyfikował wydźwięk każdej z nich wielojęzycznym modelem i pokazał, jak nastroje zmieniały się wokół dwunastu wydarzeń z życia gry.
+Ten rozdział zestawia to, co udało się zrobić, z celem postawionym we wstępie, opisuje ograniczenia, o których czytelnik wyników powinien wiedzieć, i wskazuje, dokąd system warto rozwijać.
+
+\section{Realizacja celów}
+\label{sec:summary-goals}
+
+Pierwsze zadanie, pozyskanie opinii z dwóch źródeł z pseudonimizacją autorów, zrealizowaliśmy w zmienionej formie.
+Drugim źródłem miał być Reddit, ale po odmowie dostępu zastąpiły go recenzje Steam, które okazały się źródłem lepszym, bo dały rekomendacje autorów jako słabe etykiety.
+Zbiór liczy \num{12254} komentarze YouTube z dziewięciu wydarzeń i \num{251639} recenzji Steam, a żaden identyfikator autora nie trafił do zapisu w chmurze.
+
+Drugie i trzecie zadanie, odtwarzanie archiwum w globalnej kolejności chronologicznej i potok przetwarzania strumieniowego, zrealizowaliśmy w całości.
+Kolejność sprawdziliśmy bezpośrednio, a powtarzalność odciskiem tabeli, który był identyczny dla dwóch odtworzeń i przetrwał zmianę sposobu uruchamiania.
+Pełny zbiór przechodzi przez system w nieco ponad dwie godziny, a jedno odtworzenie to jedno polecenie, po którym system sam sprząta po sobie najdroższe zasoby.
+
+Czwarte zadanie, model z cyklem życia zarządzanym zgodnie z praktykami \ac{mlops}, zrealizowaliśmy, choć droga była dłuższa, niż planowaliśmy.
+Angielski DistilBERT okazał się bezużyteczny dla danych wielojęzycznych, więc zastąpiliśmy go modelem XLM-R, dostrojonym w dwóch etapach, w całości na procesorach.
+Przebiegi trenowania są zarejestrowane na serwerze MLflow, wersje modeli w rejestrze Vertex AI, a o zastąpieniu wersji decydują spisane przed treningiem warunki.
+
+Piąte zadanie, warstwę raportową i panel, zrealizowaliśmy w postaci widoków Dataform testowanych przy każdym wdrożeniu i raportu Looker Studio z trzema stronami.
+Szóste, ocenę jakości, powtarzalności, wydajności i kosztów, zrealizowaliśmy w większości: brakuje pomiaru przepustowości z prawdziwym modelem i modelu kosztów dla większych premier.
+Siódme, studium przypadku, pokazało, że system wychwytuje zmiany nastrojów, które potwierdzają niezależne od modelu deklaracje autorów recenzji: wzrost w okresie uznania krytyków i spadek wokół grudniowych gal.
+
+Celem, którego nie zrealizowaliśmy, jest klasyfikacja emocji, wymieniona w karcie tematu obok klasyfikacji wydźwięku.
+\todo{Uzgodnić z promotorem: albo zmiana celu w MojaPG, albo dodanie klasyfikacji emocji (np. na podstawie GoEmotions) przed złożeniem pracy.}
+
+\section{Ograniczenia rozwiązania}
+\label{sec:summary-limitations}
+
+Najważniejsze ograniczenia dotyczą danych.
+Zbiór recenzji Steam obejmuje \qty{89.6}{\percent} wszystkich recenzji, a brakujące nie są próbą losową, bo pochodzą z ograniczonych końcówek strumieni angielskich.
+Komentarze YouTube pochodzą z ręcznie dobranej listy filmów, więc wynik dla wydarzenia zależy także od tego, które filmy wybraliśmy.
+Recenzje Steam zaczynają się w dniu premiery, więc nastroje przed premierą znamy tylko z YouTube.
+Wykrywanie języka jest deterministyczne, ale na krótkich tekstach często błędne, więc zestawienia dla rzadkich języków trzeba czytać ostrożnie.
+
+Drugą grupą są ograniczenia oceny modelu, opisane szczegółowo w podrozdziale~\ref{sec:eval-quality-limits}.
+Zbiór wzorcowy jest mały, zawiera tylko komentarze YouTube, a jego etykiety zaproponował model językowy i zatwierdził człowiek.
+Każdą wersję modelu trenowaliśmy raz.
+Model wciąż słabo rozpoznaje negatywne opinie wyrażone pośrednio, ironią albo slangiem, i różnie radzi sobie z różnymi językami.
+
+Trzecią grupą są ograniczenia architektury.
+Wydawca odtworzeń, publikując pod jednym kluczem porządkującym, przesyła około 50 komunikatów na sekundę; to celowa cena za globalną kolejność, ale ogranicza tempo każdego odtworzenia.
+System analizuje dane historyczne odtwarzane jako strumień, a nie dane napływające na bieżąco.
+Raport Looker Studio istnieje poza repozytorium, a środowisko produkcyjne nie ma jeszcze ani widoków Dataform, ani raportu.
+Konfiguracja wydarzeń i filmów jest częścią obrazów kolektorów, więc nowe studium przypadku wymaga ich przebudowania.
+
+\section{Kierunki dalszych prac}
+\label{sec:summary-future}
+
+Najbliższym krokiem jest drugie studium przypadku.
+System projektowaliśmy z myślą o nim: przedrostek nazw zasobów pozwala utworzyć drugi komplet zasobów obok pierwszego, numer aplikacji Steam jest parametrem, a schemat danych nie zależy od premiery.
+Do zrobienia pozostaje przeniesienie konfiguracji wydarzeń z obrazów do Cloud Storage, decyzja, czy premiery mają mieć osobne zbiory danych, czy wspólny z kolumną identyfikującą premierę, oraz osobny zbiór wzorcowy dla nowego tytułu.
+Decyzję o zbiorach trzeba podjąć przed zbieraniem danych, bo później oznacza ona zmianę schematu.
+\todo{Na osobnej gałęzi powstaje kolektor serwisu Bluesky dla kolejnego studium przypadku; opisać, jeśli zostanie włączony do systemu przed złożeniem pracy.}
+
+Drugim kierunkiem jest analiza w czasie rzeczywistym.
+Wymaga ona przyrostowego pobierania danych według harmonogramu i stale działającego potoku, czyli dokładnie tego, przed czym chronią dziś wszystkie zabezpieczenia kosztowe.
+Kolektor Steam jest do tego gotowy, bo krótkie okno czasowe oznacza krótkie przejście od najnowszych recenzji, a YouTube przy pobieraniu co 15 minut zmieści się w dziennym limicie, jeśli nie będzie wyszukiwać nowych filmów.
+Najtańszą demonstracją byłoby uruchomienie harmonogramu i potoku na godzinę, na przykład na czas obrony.
+Odtwarzanie pozostałoby przy tym na swoim miejscu, bo panel na żywo i powtarzalny wynik pracy dyplomowej to dwa różne wymagania.
+
+Trzecim kierunkiem jest jakość modelu.
+Najwięcej dałoby więcej oznaczonych przykładów negatywnych z ukrytą negacją i slangiem, niezależne oznaczenie części zbioru wzorcowego przez dwie osoby i trenowanie z kilkoma ziarnami losowymi.
+Z rozszerzeń funkcjonalnych naturalne są klasyfikacja emocji i analiza aspektowa, która powiedziałaby nie tylko, że grudniowe recenzje były gorsze, ale też, co w nich krytykowano.
+
+Na koniec wracamy do przykładu ze wstępu.
+Spadek nastrojów w grudniu 2025~r. widać w komentarzach, w recenzjach i w deklaracjach autorów, ale każde z tych źródeł pokazuje go inaczej, a jedno z nich w tygodniu gali pokazuje wręcz poprawę.
+Odpowiedź na pytanie, który obraz jest prawdziwy, zależy od tego, czyje nastroje chcemy mierzyć, i być może to jest najważniejsza lekcja z tego projektu: zanim zapytamy, co ludzie myślą o premierze, trzeba ustalić, kogo słuchamy.
