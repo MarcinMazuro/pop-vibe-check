@@ -7,7 +7,8 @@ because they explain why the final method looks the way it does. Tooling:
 `co_analytics_dev.perf_runs` / `perf_timeseries` and
 [`perf/results/`](../perf/results/).
 
-Dates: 2026-11-21/22. Times are UTC unless stated otherwise. Owner: Oskar.
+Dates: 2026-11-21/22 (E1), 2026-11-28 (E3). Times are UTC unless stated
+otherwise. Owner: Oskar.
 
 ---
 
@@ -34,11 +35,19 @@ Dates: 2026-11-21/22. Times are UTC unless stated otherwise. Owner: Oskar.
   **identical labels, scores and languages for every record**.
 - **Correctness under load.** Every run landed exactly the expected
   number of distinct ids, with no duplicates.
-- The experiments themselves cost about **1.35 USD** in total.
+- **With the real model the model is the limit (E3).** XLM-RoBERTa on
+  one CPU-only `n2-standard-8` Vertex replica classifies about
+  **20 records/s** (replica CPU ~82 %, ~5 s per predict call), about 24×
+  slower than the same two workers with the stub. That is still about
+  **24× the real peak**. Cost about **0.021 USD per 1,000 records**, three
+  quarters of it the replica.
+- **Same labels as production.** The E3 run reproduced the stored label
+  for 8,804 of 8,805 records (mean score difference 0.00003).
+- The experiments themselves cost about **1.35 USD** (E1) plus
+  **~0.5 USD** (E3).
 
-All capacity numbers are for the **stub** classifier: they measure the
-pipeline, not the model. The model (Vertex Endpoint) is experiment E3,
-still to run.
+The E1 capacity numbers are for the **stub** classifier: they measure the
+pipeline, not the model. The model is measured in E3.
 
 ---
 
@@ -76,7 +85,8 @@ effective 2026-11-21), Warsaw list prices in USD: streaming vCPU 0.0828 /h,
 RAM 0.004268 /GiB·h, standard PD 0.000065 /GiB·h, Streaming Engine data
 0.02178 /GiB; Vertex n1-standard-8 replica **0.636 /h** including the
 management fee (the ~0.38 /h quoted in `phase-1-steam-collection.md`
-leaves the fee out).
+leaves the fee out). E3 served on `n2-standard-8` (8 vCPU, 32 GiB): same
+per-unit prices as N1 (catalog read 2026-11-28), **0.651 /h** per replica.
 
 ---
 
@@ -187,6 +197,36 @@ module, empty by default so prod grants nothing). The first prefill
 imports `collectors.common`, which needs PyYAML; the build now installs
 `publisher/requirements.txt`.
 
+### 7. The real model (E3) — one replica, a smaller data set
+
+**Serving machine.** The project's quota for N1 custom-model-serving CPUs
+is used up (8/8, see [phase-1-nlp-vertex-dev.md](phase-1-nlp-vertex-dev.md)),
+so the model was served on `n2-standard-8` (quota free). Model
+`xlmr-sent-v2.1` (registry version 2, the one behind `events`), one
+replica, no accelerator, deployed with `gcloud ai endpoints deploy-model`
+(the local environment lacked the Vertex SDK that
+`nlp/endpoint/register.py` uses; the parameters are the same). The deploy
+took about 15 minutes.
+
+**Data.** Earlier notes put the model at roughly 6 records/s on one
+`n1-standard-8` replica ([phase-1-steam-collection.md](phase-1-steam-collection.md)),
+which would make the whole launch week (25,657 records) a 70-minute
+drain. A steady state needs only a few minutes, so the run used the first
+two launch days, 2025-04-24 and 25: **8,805 records**, no amplification.
+
+**First attempt failed before starting a job** (`e3-r1-pf`, build
+`d1411028`): `dataflow/launch.sh: line 34: $'\r': command not found`. The
+repository stores the script with LF line endings, but a Windows checkout
+with `core.autocrlf=true` writes CRLF, and `gcloud builds submit` uploads
+the working tree as it is. The E1 runs had used a checkout with LF. The
+subscription was purged by `run.py`; the replica was the only cost. With
+the working copy converted back to LF the second attempt ran. A
+`.gitattributes` rule (`*.sh text eol=lf`) would prevent this for
+everyone building from Windows.
+
+**Undeploy.** The model was undeployed right after the job drained and
+the endpoint checked empty; the replica was up for about 40 minutes.
+
 ---
 
 ## Results — pipeline capacity (E1)
@@ -224,6 +264,50 @@ ran at the requested worker count throughout (Monitoring
   has more than 300× headroom; even the ordered publisher's 50 rec/s is
   50× the real peak.
 
+## Results — the real model (E3)
+
+First two launch days (8,805 records), prefilled backlog, 2 fixed
+`e2-standard-2` workers, `xlmr-sent-v2.1` on one `n2-standard-8` Vertex
+replica (CPU only), default `max_batch_size` 200.
+
+| Run | Steady state | Peak | Mean incl. ramp | Active | Job | Cost | Cost / 1,000 rec |
+|---|---|---|---|---|---|---|---|
+| `e3-r2-pf` | **~19.8 rec/s** | 20.5 | 18.3 | 8 min | 15 min | 0.183 USD | 0.021 USD |
+
+Records per minute (first minute partial):
+
+```
+430 1189 1232 1189 1190 1195 1199 1181
+```
+
+8,805 / 8,805 distinct ids landed, no duplicates.
+
+**Where the time goes.** The replica's CPU utilisation stayed at ~82 %
+and a predict call took a median of ~5 s (max ~9.5 s) — the model is the
+bottleneck, not the pipeline. Two workers that move ~480 rec/s with the
+stub (E1) move ~20 rec/s with the model: a factor of about 24. One
+replica of 8 vCPU handles one record per ~50 ms. Adding Dataflow workers
+would not help; adding replicas (or splitting traffic across machine
+families, as `phase-1-nlp-vertex-dev.md` suggests) should scale roughly
+linearly, which is consistent with the ~33 rec/s of the earlier full
+replay (E0) — not measured here.
+
+**Cost.** Of the 0.183 USD, 0.141 is the replica for the 13 minutes of
+the job (0.217 replica-hours) and 0.042 the Dataflow job. The replica
+dominates, and it bills for as long as it is deployed, not per request:
+the deploy and the minutes around the run cost more than the run itself.
+At steady state the replica alone is about **0.009 USD per 1,000
+records** (0.651 USD/h ÷ ~71,000 records/h).
+
+**Headroom.** ~20 rec/s against a real peak of 0.82 rec/s: about 24×
+with one replica, so one replica would keep up with live traffic for this
+release; a full replay of 263,893 records would take about 3.7 hours.
+
+**Correctness.** Labels from this run against the stored labels in
+`events` (same records, same model version from the earlier production
+replay): **8,804 / 8,805 identical**, mean absolute score difference
+0.00003 — numerical noise of CPU inference on a different machine type.
+
 ## Order independence
 
 Does unordered delivery (prefill, load generator) change what the
@@ -253,15 +337,20 @@ data.
 
 | Item | USD |
 |---|---|
-| Recorded runs (table below) | 1.18 |
+| E1 recorded runs | 1.18 |
 | Aborted laptop load-generator run (~40 min, 1 worker, estimate) | ~0.15 |
 | Failed builds, prefill builds, BigQuery queries | < 0.05 |
-| **Total** | **~1.35** |
+| **E1 total** | **~1.35** |
+| E3 Dataflow job (`e3-r2-pf`) | 0.04 |
+| E3 Vertex replica, deployed ~40 min (estimate, 0.651 USD/h) | ~0.4–0.45 |
+| **E3 total** | **~0.5** |
 
 ## Limitations
 
-- **Stub classifier only.** Capacity of the pipeline, not of the system
-  with the model; E3 measures the latter.
+- **E1 used the stub classifier** — the capacity of the pipeline. The
+  system with the model (E3) was measured once, on one replica, one
+  machine type and the default batch size; scaling with replicas is
+  expected, not measured.
 - **One run per configuration.** Enough to show the scaling trend, not to
   give confidence intervals or explain the 1→2 worker step.
 - **One machine type** (`e2-standard-2`), one region, fixed workers; the
@@ -275,9 +364,6 @@ data.
 
 ## Still to do
 
-- **E3** — the real model: one Vertex replica, default batch size, one or
-  two runs. Needs the endpoint deployed (Terraform `enable_nlp_endpoint`
-  plus the model deployment) and undeployed afterwards (~0.64 USD/h).
 - **E6** — cost model: per 1,000 records, a whole replay, always-on
   versus on-demand, and a 10× / 100× larger release.
 

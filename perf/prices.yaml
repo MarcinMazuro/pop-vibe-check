@@ -43,18 +43,22 @@ dataflow:
   # per GiB; the 7% difference is below the estimate's precision.
 
 # Vertex AI online prediction, price per replica-hour of the endpoint's
-# machine type. n1-standard-8 = 8 vCPU + 30 GiB RAM:
+# machine type. E3 serves on n2-standard-8 (the project's N1 serving-CPU
+# quota is used up, see docs/phase-1-nlp-vertex-dev.md); N2 has the same
+# per-unit prices as N1 in Warsaw (catalog read 2026-11-28).
+# n2-standard-8 = 8 vCPU + 32 GiB RAM:
 #   8 x (0.046839 core + 0.006110 management fee)   = 0.423592
-#   30 x (0.006277 RAM + 0.000819 management fee)   = 0.212880
+#   32 x (0.006277 RAM + 0.000819 management fee)   = 0.227072
 #                                                     --------
-#                                                     0.636472 USD/h
-# SKUs "Vertex AI: Online/Batch Prediction N1 Predefined Instance Core/Ram
-# running in Warsaw" and "... Management fee on N1 Instance Core/RAM in
-# Warsaw". (docs/phase-1-steam-collection.md quotes ~0.38 USD/h, which
-# leaves out the management fee and predates these SKUs.)
+#                                                     0.650664 USD/h
+# (n1-standard-8 = 8 vCPU + 30 GiB RAM = 0.636472 USD/h.)
+# SKUs "Vertex AI: Online/Batch Prediction N2 Predefined Instance Core/Ram
+# running in Warsaw" and "... Management fee on N2 Predefined Instance
+# Core/RAM in Warsaw". (docs/phase-1-steam-collection.md quotes ~0.38 USD/h,
+# which leaves out the management fee and predates these SKUs.)
 vertex:
-  machine_type: n1-standard-8
-  replica_hour_price: 0.636472
+  machine_type: n2-standard-8
+  replica_hour_price: 0.650664
 
 # Not priced: Pub/Sub (global SKUs; at these volumes the delivered bytes
 # cost a fraction of a cent), BigQuery writes and queries, Cloud Build
